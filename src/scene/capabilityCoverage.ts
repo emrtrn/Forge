@@ -25,6 +25,7 @@ import {
   PARTICLE_EMITTER_COMPONENT,
   SPLINE_PATH_FOLLOWER_COMPONENT,
   VEHICLE_AI_DRIVER_COMPONENT,
+  FRACTURABLE_COMPONENT,
   readBehaviorComponent,
 } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
@@ -71,6 +72,7 @@ const COVERAGE_RULES: readonly CoverageRule[] = [
   componentRule("moving-platform", MOVING_PLATFORM_COMPONENT),
   componentRule("spline-follower", SPLINE_PATH_FOLLOWER_COMPONENT),
   componentRule("vehicle-ai", VEHICLE_AI_DRIVER_COMPONENT),
+  componentRule("fracture", FRACTURABLE_COMPONENT),
   behaviorRule("dialogue", "conversation trigger", ["begin-conversation"]),
   behaviorRule("save-game", "checkpoint trigger", ["checkpoint"]),
   {

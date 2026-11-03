@@ -1,0 +1,51 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Script_BreakableCrate",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "collider",
+      "component": "Collider",
+      "props": {
+        "shape": "box",
+        "size": [1, 1, 1],
+        "center": [0, 0.5, 0],
+        "isStatic": false,
+        "isSensor": false,
+        "simulatePhysics": true,
+        "massKg": 40,
+        "hideInGame": true
+      },
+      "parent": "root"
+    },
+    {
+      "id": "mesh",
+      "component": "StaticMeshComponent",
+      "props": {
+        "assetId": "sm-breakable-crate"
+      },
+      "parent": "collider"
+    },
+    {
+      "id": "fracturable",
+      "component": "Fracturable",
+      "props": {
+        "breakImpulse": 300
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

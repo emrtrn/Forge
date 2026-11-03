@@ -33,6 +33,8 @@ export const SMART_OBJECT_COMPONENT = "SmartObject";
 export const VEHICLE_COMPONENT = "Vehicle";
 /** A simple AI driver steering a `Vehicle` along a Generic Spline (vehicle plan Faz 4). */
 export const VEHICLE_AI_DRIVER_COMPONENT = "VehicleAiDriver";
+/** Breaks the actor's mesh with its `.fracture.json` (DEFORMABLE_FRACTURABLE Faz 4b). */
+export const FRACTURABLE_COMPONENT = "Fracturable";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape =
@@ -976,6 +978,29 @@ export function readVehicleAiDriverComponent(entity: Entity): VehicleAiDriverCom
     targetSpeed: Math.min(100, Math.max(0, readFiniteNumber(data.targetSpeed, 12, undefined))),
     lookAheadDistance: Math.min(50, Math.max(1, readFiniteNumber(data.lookAheadDistance, 5, undefined))),
     enabled: data.enabled !== false,
+  };
+}
+
+/**
+ * An actor that breaks like a fracturable static mesh: its mesh asset's
+ * `.fracture.json` is the definition, and the component is the actor's
+ * override on it — the same shape as a placement's `fracture` (it can switch
+ * the actor off or move the break impulse, N·s). Without an enabled sidecar on
+ * the mesh it does nothing.
+ */
+export interface FracturableComponent {
+  enabled: boolean;
+  breakImpulse?: number;
+}
+
+/** Reads a Fracturable component; a malformed impulse falls back to the asset's. */
+export function readFracturableComponent(entity: Entity): FracturableComponent | undefined {
+  const data = entity.components[FRACTURABLE_COMPONENT];
+  if (!data) return undefined;
+  const impulse = data.breakImpulse;
+  return {
+    enabled: data.enabled !== false,
+    ...(typeof impulse === "number" && Number.isFinite(impulse) && impulse >= 0 ? { breakImpulse: impulse } : {}),
   };
 }
 

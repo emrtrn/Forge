@@ -14,6 +14,7 @@
  * Editor-only: lives behind the dynamic `?editor` import so it never ships in the
  * game build.
  */
+import { FRACTURE_LIMITS } from "@engine/physics/fracture/fractureTypes";
 import {
   ACTOR_COMPONENT_KINDS,
   ACTOR_EVENT_DESCRIPTIONS,
@@ -132,6 +133,7 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   AIController: "🧠",
   Vehicle: "🚗",
   VehicleAiDriver: "AI🚗",
+  Fracturable: "✶",
 };
 
 function escapeHtml(value: string): string {
@@ -940,6 +942,7 @@ export class ActorScriptEditor {
     const aiControllerField = node.component === "AIController" ? this.aiControllerFields(node) : "";
     const vehicleField = node.component === "Vehicle" ? this.vehicleFields(node) : "";
     const vehicleAiField = node.component === "VehicleAiDriver" ? vehicleAiDriverFields(node.props) : "";
+    const fracturableField = node.component === "Fracturable" ? fracturableFields(node.props) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -976,6 +979,7 @@ export class ActorScriptEditor {
       ${aiControllerField}
       ${vehicleField}
       ${vehicleAiField}
+      ${fracturableField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${transformRows}
       <details class="as-advanced">
@@ -1514,6 +1518,7 @@ export class ActorScriptEditor {
     this.bindCameraDetails(node);
     this.bindAIControllerDetails(node);
     this.bindVehicleDetails(node);
+    this.bindFracturableDetails(node);
     this.bindNumberProps(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
@@ -1981,6 +1986,35 @@ export class ActorScriptEditor {
     enabled?.addEventListener("change", () => {
       if (enabled.checked) delete node.props.enabled;
       else node.props.enabled = false;
+      commit();
+    });
+  }
+
+  /**
+   * Wires the Fracturable form (no-op without one). Both fields are overrides on
+   * the mesh's `.fracture.json`: unchecked stores `enabled: false`, a blank
+   * impulse removes the key so the asset's threshold applies.
+   */
+  private bindFracturableDetails(node: ComponentTemplateNode): void {
+    const commit = (): void => {
+      this.markDirty();
+      this.renderDetails();
+    };
+    const enabled = this.detailsHost.querySelector<HTMLInputElement>("[data-as-fracturable-enabled]");
+    enabled?.addEventListener("change", () => {
+      if (enabled.checked) delete node.props.enabled;
+      else node.props.enabled = false;
+      commit();
+    });
+    const impulse = this.detailsHost.querySelector<HTMLInputElement>("[data-as-fracturable-impulse]");
+    impulse?.addEventListener("change", () => {
+      const raw = impulse.value.trim();
+      const value = Number(raw);
+      if (raw === "") delete node.props.breakImpulse;
+      else if (Number.isFinite(value)) {
+        const [min, max] = FRACTURE_LIMITS.breakImpulse;
+        node.props.breakImpulse = Math.max(min, Math.min(max, value));
+      } else return;
       commit();
     });
   }
@@ -2861,6 +2895,27 @@ function cameraFields(node: ComponentTemplateNode): string {
       <span>Enable Sprint Camera Shake</span>
     </label>
   `;
+}
+
+/**
+ * The Fracturable Details form: the actor's override on its mesh's
+ * `.fracture.json` (the same fields as a placement's Fracture section).
+ */
+function fracturableFields(props: Record<string, SceneJsonValue>): string {
+  const [min, max] = FRACTURE_LIMITS.breakImpulse;
+  const impulse = typeof props.breakImpulse === "number" ? String(props.breakImpulse) : "";
+  return `
+    <div class="as-section-label">Fracturable</div>
+    <p class="as-empty">Aktörün mesh'ini kendi .fracture.json dosyasıyla kırar (Static Mesh Editor → Fracture). Aktörün bir Collider'ı olmalı.</p>
+    <label class="as-field as-check" title="Kapalıysa aktör, mesh'i kırılabilir olsa da bütün kalır.">
+      <input type="checkbox" data-as-fracturable-enabled ${props.enabled === false ? "" : "checked"} />
+      <span>Breakable</span>
+    </label>
+    <label class="as-field" title="Aktörü kıran çarpma impulsu (N·s). Boş bırakılırsa mesh'in fracture değeri kullanılır.">
+      <span>Break Impulse</span>
+      <input type="number" data-as-fracturable-impulse step="10" min="${min}" max="${max}"
+        value="${impulse}" placeholder="Asset" />
+    </label>`;
 }
 
 function defaultComponentProps(kind: ActorComponentKind): Record<string, SceneJsonValue> {

@@ -20241,6 +20241,29 @@
       "license": "Unknown"
     },
     {
+      "id": "script-breakablecrate-actor",
+      "name": "Script Breakable Crate.Actor",
+      "assetType": "prefab",
+      "category": "Gameplay",
+      "path": "assets/starter-content/Gameplay/Script_BreakableCrate.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Gameplay",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1009
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "script-parityprop-actor",
       "name": "Script Parity Prop.Actor",
       "assetType": "prefab",

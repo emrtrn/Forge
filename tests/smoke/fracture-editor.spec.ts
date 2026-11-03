@@ -159,3 +159,44 @@ test("fracture editor: a placement's Details override opts out and moves the bre
   expect(saved.placements[0]!.fracture).toBeUndefined();
   expect(errors).toEqual([]);
 });
+
+test("fracture editor: the Actor Script Fracturable form writes its override", async ({ page }) => {
+  // Faz 4b-2: the Fracturable component carries the actor's override on its
+  // mesh's sidecar. The save is answered in flight; its payload is checked.
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  const saves: Array<{ path: string; actor: { components: Array<{ id: string; component: string; props: Record<string, unknown> }> } }> = [];
+  await page.route("**/__save-actor", async (route) => {
+    const payload = JSON.parse(route.request().postData() ?? "{}");
+    saves.push(payload);
+    await route.fulfill({ json: { ok: true, path: payload.path, changed: true } });
+  });
+  await page.setViewportSize({ width: 1600, height: 950 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
+  await page.locator("[data-content-toggle]").click();
+  const drawer = page.locator("[data-content-drawer]");
+  await drawer.locator('button.folder-row[title="assets/starter-content/Gameplay"]').click();
+  await drawer.getByRole("button", { name: /Script Breakable Crate.Actor/ }).first().dblclick();
+  const editor = page.locator(".as-editor-overlay");
+  await expect(editor).toBeVisible({ timeout: 20_000 });
+
+  await editor.locator('[data-as-node="fracturable"]').click();
+  const details = editor.locator("[data-as-details]");
+  const breakable = details.locator("[data-as-fracturable-enabled]");
+  const impulse = details.locator("[data-as-fracturable-impulse]");
+  await expect(breakable).toBeChecked();
+  await expect(impulse).toHaveValue("300");
+  await breakable.uncheck();
+  await details.locator("[data-as-fracturable-impulse]").fill("");
+  await details.locator("[data-as-fracturable-impulse]").press("Tab");
+  await expect(details.locator("[data-as-fracturable-impulse]")).toHaveValue("");
+
+  await editor.locator("[data-as-save]").click();
+  await expect.poll(() => saves.length, { timeout: 15_000 }).toBe(1);
+  expect(saves[0]!.path).toBe("assets/starter-content/Gameplay/Script_BreakableCrate.actor.json");
+  const node = saves[0]!.actor.components.find((entry) => entry.id === "fracturable")!;
+  expect(node.component).toBe("Fracturable");
+  expect(node.props).toEqual({ enabled: false });
+  expect(errors).toEqual([]);
+});

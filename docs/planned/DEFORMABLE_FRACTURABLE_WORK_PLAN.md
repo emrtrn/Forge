@@ -462,12 +462,16 @@ vermez. Kullanıcı görsel kabulü ayrı.
       fractureChunkBudget` (192/128/64/32), en eski önce silinir; ömür
       `chunkLifetime × (0.5 + 0.5·min(1, hacim/ortalama))`. Uyutma Rapier'a
       bırakıldı.
-- [~] Ömür sonunda geometri/materyal/collider dispose edilir. Hücre unload ve
+- [x] Ömür sonunda geometri/materyal/collider dispose edilir. Hücre unload ve
       level değişiminde de temizlik yapılır. Collider + mesh ömürde ve level
       değişiminde kaldırılır; parça geometrisi asset başına paylaşılır ve
-      level kapanınca dispose edilir. Açık: World Partition'da kaynağın
-      hücresi boşalınca parçaları kaldırmak (v1 yalnız statik placement'lar
-      kırılır, onlar akmaz).
+      level kapanınca dispose edilir. World Partition (4b-2): kırılan kaynağın
+      hücresi (`FractureHost.cellOf`, akan aktörler + akan statik
+      placement'lar) kırılma anında kaydedilir; `onCellUnloaded` gelince o
+      hücrenin parçaları `budget.removeOwner` ile kalkar. Kaynak hücre
+      dönünce bütün gelir (shell onu layout'tan yeniden kurar; placement
+      hemen yeniden kaydolur, aktör yeniden doğunca). Kırık durumun hücre
+      dönüşünde korunması Faz 5'tir.
 - [~] Actor olayı `Fracture.Broken` (instigator, impulse) + VFX/ses kancası
       (veri ile bağlanır, kod sabit değil). `Fracture.Broken` script mesajı
       yayınlanır (`entityId`, `instigator`, `impulse`); VFX/ses sidecar
@@ -500,8 +504,23 @@ vermez. Kullanıcı görsel kabulü ayrı.
       kaydırıcı 0–5000), geri alınabilir. Testler: `fractureAsset.test.ts` (3
       yeni), drift fixture'ı; smoke'lar: editör override + undo/redo + Save
       payload, runtime opt-out (7 → 6 nesne).
-- [ ] Actor Script aktörleri için `Fracturable` component (aynı sidecar'ı
-      referanslar). v1 yalnız static placement'lar.
+- [x] Actor Script aktörleri için `Fracturable` component (4b-2): aktörün
+      mesh component'inin asset'indeki sidecar'ı kullanır; props
+      placement override'ıyla aynı (`enabled`, `breakImpulse`, boş = asset).
+      `readFracturableComponent` (`engine/scene/components.ts`),
+      `ACTOR_COMPONENT_KINDS`, capability coverage kuralı, Actor Script
+      editöründe form (Breakable, Break Impulse; TR ipucu). Modül aktörleri
+      level başında sahne belgesinden, sonra entity sink'ten (`addEntity` /
+      `removeEntity`: spawn ve hücre akışı) izler. Kırılma pozu canlıdır:
+      `FractureHost.sourcePose` aktörün render nesnesini (mesh ölçeği dahil)
+      ya da simüle placement'ın gövdesini verir. Kırılan kaynağın script'leri
+      EndPlay(`destroyed`) alır (`BehaviorSubsystem.retireEntity`). Asset
+      bake'i level başına bir kez ve gerektiğinde (akan aktörün modeli
+      yüklenmemişse bir sonraki doğuşta tekrar denenir). Test:
+      `Script_BreakableCrate.actor.json` (simüle, 300 N·s) test level'ında;
+      smoke 8 m'den düşen aktörün yere çarpınca yerde kırıldığını doğrular
+      (parça y 0.2–0.8 m). `tests/engine/fractureModule.test.ts`: sahte host'la
+      placement override, aktör takibi, canlı poz, hücre temizliği, teardown.
 
 Kabul: `build:verify` yeşil, smoke yeşil; kullanıcı görsel/oynanış kabulü
 ayrı raporlanır. **Çekirdek kapandı (2026-11-03)**; açık maddeler (actor
@@ -761,3 +780,6 @@ kullanıcı kararı).
 - 2026-11-03: Faz 4b-1: placement `fracture` override (allowlist,
   editör Details bölümü, runtime). Sırada 4b-2 actor `Fracturable` + hücre
   temizliği, 4b-3 kırılma VFX/ses alanları.
+- 2026-11-03: Faz 4b-2: actor `Fracturable` component, canlı kırılma pozu,
+  World Partition hücre temizliği, kırılan kaynağa EndPlay. Sırada 4b-3
+  (kırılma VFX/ses alanları).

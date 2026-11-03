@@ -323,6 +323,21 @@ export interface FractureHost {
   exteriorMaterial(assetId: string): Material | null;
   /** Retires the intact object: removes its body and hides or frees its render object. */
   destroySource(entityId: string): void;
+  /**
+   * The live world pose of a source that moves (an actor's render object, its
+   * mesh scale included; a simulated placement's body); null = it stands where
+   * it was authored.
+   */
+  sourcePose(entityId: string): {
+    readonly position: readonly [number, number, number];
+    /** Euler degrees, three XYZ order. */
+    readonly rotation: readonly [number, number, number];
+    readonly scale: readonly [number, number, number];
+  } | null;
+  /** The World Partition cell that streams this source; null = persistent or no partition. */
+  cellOf(entityId: string): string | null;
+  /** Calls `listener` after a World Partition cell unloads; returns the unsubscribe. */
+  onCellUnloaded(listener: (key: string) => void): () => void;
   /** Renders `object` at the entity's interpolated physics pose (null detaches). */
   attachDynamicObject(entityId: string, object: Object3D | null): void;
   /** A manifest material, cached by the shell; null when it cannot load. */

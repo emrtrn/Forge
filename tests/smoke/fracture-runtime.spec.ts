@@ -51,8 +51,8 @@ test("fracture runtime: driving into breakable crates breaks them within budget"
   const stats = page.locator("#debug-stats");
   await expect(stats).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
 
-  // 4 crates + 1 wall + 2 panels, all intact.
-  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 7, broken: 0, chunks: 0 });
+  // 4 crates + 1 wall + 2 panels + 1 Fracturable crate actor, all intact.
+  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 8, broken: 0, chunks: 0 });
 
   // Drive forward into the crate row 12 m ahead.
   await page.locator("#game-canvas").click();
@@ -98,5 +98,63 @@ test("fracture runtime: a placement override opts a breakable out", async ({ pag
   });
   await page.goto(`/?debug&fractureOverride=${Date.now()}`);
   await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
-  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 6, broken: 0 });
+  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 7, broken: 0 });
+});
+
+test("fracture runtime: a Fracturable actor breaks where it is, not where it was placed", async ({ page }) => {
+  // Faz 4b: an Actor Script crate dropped from 8 m breaks on landing; its
+  // chunks spawn at the actor's live pose (near the ground), not at its
+  // authored height. Chunk meshes are found through three's devtools hook.
+  const errors: string[] = [];
+  const messages: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    messages.push(message.text());
+    if (message.type() === "error") errors.push(message.text());
+  });
+  await page.context().addInitScript(() => {
+    localStorage.clear();
+    const w = window as unknown as { __THREE_DEVTOOLS__: EventTarget; __fractureScenes: unknown[] };
+    w.__fractureScenes = [];
+    w.__THREE_DEVTOOLS__ = new EventTarget();
+    w.__THREE_DEVTOOLS__.addEventListener("observe", (event) => {
+      const object = (event as CustomEvent).detail as { isScene?: boolean };
+      if (object?.isScene) w.__fractureScenes.push(object);
+    });
+  });
+  await page.route(`**/${LEVEL}`, async (route) => {
+    const response = await route.fetch();
+    const level = await response.json();
+    level.actors.push({
+      classRef: "assets/starter-content/Gameplay/Script_BreakableCrate.actor.json",
+      position: [6, 8, 4], name: "Falling Crate Actor", rotation: [0, 0, 0],
+    });
+    await route.fulfill({ response, json: level });
+  });
+  await page.route("**/project.3dgame.json", async (route) => {
+    const response = await route.fetch();
+    const project = await response.json();
+    project.editor.defaultScene = LEVEL;
+    await route.fulfill({ response, json: project });
+  });
+  await page.goto(`/?debug&fractureActor=${Date.now()}`);
+  await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
+  // The falling actor breaks on landing; the resting one stays whole.
+  await expect.poll(async () => (await readFracture(page))?.broken ?? 0, { timeout: 30_000 }).toBe(1);
+  const line = (await readFracture(page))!;
+  expect(line.objects).toBe(9);
+  expect(line.chunks).toBeGreaterThan(0);
+  expect(line.chunks).toBeLessThanOrEqual(12);
+  const heights = await page.evaluate(() => {
+    const w = window as unknown as { __fractureScenes: Array<{ traverse(fn: (node: { name: string; position: { y: number } }) => void): void }> };
+    const ys: number[] = [];
+    for (const scene of w.__fractureScenes) scene.traverse((node) => {
+      if (node.name.startsWith("fracture:actor:")) ys.push(node.position.y);
+    });
+    return ys;
+  });
+  console.log(`[fracture smoke] actor chunk heights ${heights.map((y) => y.toFixed(2)).join(" ")}`);
+  expect(heights.length).toBe(line.chunks);
+  for (const y of heights) expect(y).toBeLessThan(3);
+  expect(errors).toEqual([]);
 });

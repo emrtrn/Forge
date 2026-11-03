@@ -662,6 +662,21 @@ export class BehaviorSubsystem implements Subsystem {
   }
 
   /**
+   * Retires a live entity the host is destroying on its own (a fracture break
+   * replaces the object with chunks): EndPlay fires with reason `destroyed` and
+   * the entity stops ticking and receiving messages. Unlike `actor.destroy()`
+   * this never issues a host destroy command — the caller tears down
+   * render/physics. Returns false when the entity is already non-live.
+   */
+  retireEntity(entityId: EntityId): boolean {
+    if (!this.runtimeEntities.has(entityId)) return false;
+    this.dispatchEndPlayEvents(entityId, "destroyed");
+    this.detachEntity(entityId);
+    this.commandQueue = this.commandQueue.filter((command) => command.entityId !== entityId);
+    return true;
+  }
+
+  /**
    * Whether save-game/runtime state marks this actor as persistently destroyed,
    * including when its cell is unloaded. Hosts should skip constructing such an
    * actor before calling {@link addEntity}. Level rebuilds (`setEntities`/`clear`)

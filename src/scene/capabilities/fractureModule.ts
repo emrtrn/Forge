@@ -1,35 +1,46 @@
 /**
- * Pre-baked fracture at runtime (DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 4).
+ * Pre-baked fracture at runtime (DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 4/4b).
  *
- * Every static-mesh placement whose model has an enabled `<Model>.fracture.json`
- * becomes fracturable unless its `fracture` override opts out (which can also
- * move the break impulse) — read from the layout, so placements in World Partition
- * cells that stream in later are covered too: its chunks are baked once per asset at level load (the
- * same pure bake the Static Mesh Editor previews), its collider opts into
- * impact events at the asset's break impulse, and the module listens for
- * `Damage.Apply` / `Fracture.Break` script messages. A break retires the intact
- * object through the shell, spawns the chunks as dynamic convex bodies with an
- * outward kick, and broadcasts `Fracture.Broken`. Chunks live for the asset's
- * lifetime inside a level-wide budget (oldest first).
+ * Two kinds of source break with their mesh's enabled `<Model>.fracture.json`:
+ * - every static-mesh placement, unless its `fracture` override opts out (which
+ *   can also move the break impulse) — read from the layout, so placements in
+ *   World Partition cells that stream in later are covered too;
+ * - every Actor Script actor with a `Fracturable` component (the same override
+ *   shape), tracked through the entity sink as it spawns or streams in.
+ * Chunks are baked once per asset (the same pure bake the Static Mesh Editor
+ * previews), the source's collider opts into impact events at its break
+ * impulse, and the module listens for `Damage.Apply` / `Fracture.Break` script
+ * messages. A break retires the source through the shell, spawns the chunks at
+ * its live pose as dynamic convex bodies with an outward kick, and broadcasts
+ * `Fracture.Broken`. Chunks live for the asset's lifetime inside a level-wide
+ * budget (oldest first) and leave with the World Partition cell of their
+ * source; that source then comes back whole when the cell returns (persisting
+ * the broken state is Faz 5).
  *
- * Off (module not registered, or no shell host), every placement keeps its
- * ordinary static behaviour.
+ * Off (module not registered, or no shell host), every source keeps its
+ * ordinary behaviour.
  */
 import { Mesh, MeshStandardMaterial, type BufferGeometry, type Material } from "three";
 
-import { assetPath, assetRecordById, assetType, isModelAssetType } from "@engine/assets/manifest";
+import { assetPath, assetRecordById, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import { bakeFracture, type FractureBakeResult } from "@engine/physics/fracture/fractureBake";
 import {
   ChunkBudget,
   FractureRegistry,
   planChunkSpawns,
   type FractureImpactInfo,
+  type FractureOverride,
   type FracturePlacement,
 } from "@engine/physics/fracture/fractureRuntime";
 import type { AssetFractureDef } from "@engine/physics/fracture/fractureTypes";
 import { polyhedronFromMesh, polyhedronVolume } from "@engine/physics/fracture/voronoiFracture";
 import { fractureChunkGeometry, fractureSourceFromObject } from "@engine/render-three/fractureGeometry";
 import { applyEulerDegrees } from "@engine/render-three/transforms";
+import {
+  readFracturableComponent,
+  readRenderableMeshComponent,
+  readTransformComponent,
+} from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
 import { instanceEntityId } from "@engine/scene/legacyRoomLayoutAdapter";
 import { readRotation, readScale } from "@engine/scene/transform";
@@ -69,24 +80,37 @@ interface BakedAsset {
   readonly interior: Material | null;
 }
 
+/** A registered fracturable source. */
+interface FractureSource {
+  readonly assetId: string;
+  readonly override: FractureOverride | undefined;
+  /** The pose it was authored or spawned at; the shell's live pose wins when it has one. */
+  readonly authored: FracturePlacement;
+  /** Actors leave with their entity; placements stay registered from the layout. */
+  readonly actor: boolean;
+}
+
 interface LiveChunkObject {
   readonly mesh: Mesh;
 }
-
 
 export function createFractureModule(): CapabilityModule {
   let services: RuntimeServices | null = null;
   let context: RuntimeContext | null = null;
   let host: FractureHost | null = null;
+  let manifest: AssetManifest | null = null;
   const registry = new FractureRegistry();
   const budget = new ChunkBudget();
-  const baked = new Map<string, BakedAsset>();
-  /** Fracturable entity → its asset id. */
-  const sourceAsset = new Map<string, string>();
-  /** Fracturable entity → where its placement stands (static placements never move). */
-  const sourcePlacement = new Map<string, FracturePlacement>();
+  /** Bakes per asset id; null = the asset does not break (no/disabled sidecar, no mesh). */
+  const baked = new Map<string, Promise<BakedAsset | null>>();
+  const ready = new Map<string, BakedAsset>();
+  const sources = new Map<string, FractureSource>();
+  /** Broken source → the World Partition cell its chunks leave with. */
+  const brokenCells = new Map<string, string>();
   const chunks = new Map<string, LiveChunkObject>();
   const unsubscribes: Array<() => void> = [];
+  /** Bumped by every teardown so a bake finishing for an old level is dropped. */
+  let generation = 0;
   let clock = 0;
   let breaks = 0;
   let lastSpawnMs = 0;
@@ -105,13 +129,16 @@ export function createFractureModule(): CapabilityModule {
   };
 
   const breakEntity = (entityId: string, impact: FractureImpactInfo | null, instigator: string | null): void => {
-    const assetId = sourceAsset.get(entityId);
-    const asset = assetId ? baked.get(assetId) : undefined;
-    const placement = sourcePlacement.get(entityId);
-    if (!host || !context || !asset || !placement) return;
+    const source = sources.get(entityId);
+    const asset = source ? ready.get(source.assetId) : undefined;
+    if (!host || !context || !source || !asset) return;
     const started = performance.now();
+    // Actors and simulated placements move: break where the object is now.
+    const pose = host.sourcePose(entityId) ?? source.authored;
     const velocity = host.physics.velocityOf(entityId) ?? [0, 0, 0];
-    const specs = planChunkSpawns(asset.bake, asset.def, placement, velocity, impact);
+    const specs = planChunkSpawns(asset.bake, asset.def, pose, velocity, impact);
+    const cell = host.cellOf(entityId);
+    if (cell) brokenCells.set(entityId, cell);
     host.physics.setImpactEventThreshold(entityId, null);
     host.destroySource(entityId);
 
@@ -194,16 +221,83 @@ export function createFractureModule(): CapabilityModule {
     };
   };
 
+  /** The asset's bake, started once per level; null when the asset cannot break. */
+  const ensureAsset = (assetId: string): Promise<BakedAsset | null> => {
+    const existing = baked.get(assetId);
+    if (existing) return existing;
+    const record = manifest ? assetRecordById(manifest, assetId) : undefined;
+    // A model that is not loaded yet (a streamed actor's cell model) is not
+    // cached as unbreakable: the next spawn of it tries again.
+    if (!host || !record || !isModelAssetType(assetType(record)) || !host.model(assetId)) return Promise.resolve(null);
+    const level = generation;
+    const pending = bakeAsset(assetId, assetPath(record), host).then((asset) => {
+      if (asset && level === generation) ready.set(assetId, asset);
+      return level === generation ? asset : null;
+    });
+    baked.set(assetId, pending);
+    return pending;
+  };
+
+  const register = (entityId: string, source: FractureSource): void => {
+    const asset = ready.get(source.assetId);
+    if (!host || !asset || !registry.register(entityId, asset.def, source.override)) return;
+    sources.set(entityId, source);
+    host.physics.setImpactEventThreshold(entityId, registry.breakImpulse(entityId));
+  };
+
+  /** Starts tracking an actor with a `Fracturable` component (spawned, streamed or at level start). */
+  const trackActor = async (entity: Entity): Promise<void> => {
+    const component = readFracturableComponent(entity);
+    const mesh = readRenderableMeshComponent(entity);
+    const transform = readTransformComponent(entity);
+    if (!component || !mesh || !transform) return;
+    const level = generation;
+    const asset = await ensureAsset(mesh.assetId);
+    if (!asset || level !== generation) return;
+    const meshScale = mesh.scale ?? [1, 1, 1];
+    register(entity.id, {
+      assetId: mesh.assetId,
+      override: { enabled: component.enabled, ...(component.breakImpulse !== undefined ? { breakImpulse: component.breakImpulse } : {}) },
+      authored: {
+        position: [...transform.position],
+        rotation: [...transform.rotation],
+        scale: [transform.scale[0] * meshScale[0], transform.scale[1] * meshScale[1], transform.scale[2] * meshScale[2]],
+      },
+      actor: true,
+    });
+  };
+
+  /**
+   * A World Partition cell unloaded: the chunks of sources it owned go with it,
+   * and those sources are whole again when it returns — placements re-register
+   * now (the shell rebuilds them from the layout), actors when they respawn.
+   */
+  const cellUnloaded = (key: string): void => {
+    for (const [entityId, cell] of [...brokenCells]) {
+      if (cell !== key) continue;
+      brokenCells.delete(entityId);
+      removeChunks(budget.removeOwner(entityId));
+      const source = sources.get(entityId);
+      if (!source) continue;
+      sources.delete(entityId);
+      registry.unregister(entityId);
+      if (!source.actor) register(entityId, source);
+    }
+  };
+
   const teardown = (): void => {
+    generation += 1;
     removeChunks(budget.clear());
-    for (const id of sourceAsset.keys()) host?.physics.setImpactEventThreshold(id, null);
+    for (const id of sources.keys()) host?.physics.setImpactEventThreshold(id, null);
     for (const unsubscribe of unsubscribes.splice(0)) unsubscribe();
-    for (const asset of baked.values()) for (const geometry of asset.geometries) geometry.dispose();
+    for (const asset of ready.values()) for (const geometry of asset.geometries) geometry.dispose();
     baked.clear();
-    sourceAsset.clear();
-    sourcePlacement.clear();
+    ready.clear();
+    sources.clear();
+    brokenCells.clear();
     registry.clear();
     chunks.clear();
+    manifest = null;
     clock = 0;
   };
 
@@ -227,6 +321,22 @@ export function createFractureModule(): CapabilityModule {
           breaks,
         }),
       });
+      // Level-start actors are read from the scene document in onLevelLoaded;
+      // the sink follows actors that spawn or stream in and out afterwards.
+      runtimeServices.addEntitySink({
+        setEntities: () => {},
+        addEntity: (entity) => {
+          if (host) void trackActor(entity);
+        },
+        removeEntity: (entityId) => {
+          const source = sources.get(entityId);
+          // A broken source is removed by its own break; its chunks stay.
+          if (!source?.actor || registry.state(entityId) === "fractured") return;
+          sources.delete(entityId);
+          registry.unregister(entityId);
+          host?.physics.setImpactEventThreshold(entityId, null);
+        },
+      });
     },
 
     async onLevelLoaded(levelContext) {
@@ -236,31 +346,34 @@ export function createFractureModule(): CapabilityModule {
       if (!hostRef) return;
       context = levelContext;
       host = hostRef;
-      const manifest = await levelContext.resolve(assetManifestService)?.();
-      if (!manifest) return;
+      const level = generation;
+      manifest = (await levelContext.resolve(assetManifestService)?.()) ?? null;
+      if (!manifest || level !== generation) return;
+      unsubscribes.push(hostRef.onCellUnloaded(cellUnloaded));
       // Every placement of the layout, built or not: a partitioned level merges
       // its cells into `layout.instances` but builds a cell's bodies only when it
       // streams in. The impact opt-in is kept by entity id, so it applies then.
       for (const group of levelContext.layout.instances) {
-        const record = assetRecordById(manifest, group.assetId);
-        if (!record || !isModelAssetType(assetType(record)) || group.placements.length === 0) continue;
-        const asset = baked.get(group.assetId) ?? await bakeAsset(group.assetId, assetPath(record), hostRef);
-        if (!asset || context !== levelContext) continue;
-        baked.set(group.assetId, asset);
+        if (group.placements.length === 0) continue;
+        const asset = await ensureAsset(group.assetId);
+        if (!asset || level !== generation) continue;
         group.placements.forEach((placement, index) => {
           if (placement.hidden) return;
-          const entityId = instanceEntityId(group.assetId, index);
           // The placement may opt out or move the threshold (plan §4, K-04).
-          if (!registry.register(entityId, asset.def, placement.fracture)) return;
-          sourceAsset.set(entityId, group.assetId);
-          sourcePlacement.set(entityId, {
-            position: [placement.position[0], placement.position[1], placement.position[2]],
-            rotation: readRotation(placement),
-            scale: readScale(placement),
+          register(instanceEntityId(group.assetId, index), {
+            assetId: group.assetId,
+            override: placement.fracture,
+            authored: {
+              position: [placement.position[0], placement.position[1], placement.position[2]],
+              rotation: readRotation(placement),
+              scale: readScale(placement),
+            },
+            actor: false,
           });
-          hostRef.physics.setImpactEventThreshold(entityId, registry.breakImpulse(entityId));
         });
       }
+      await Promise.all(levelContext.sceneDocument.entities.map((entity) => trackActor(entity)));
+      if (level !== generation) return;
       const bus = levelContext.resolve(scriptMessageBusService);
       if (!bus) return;
       unsubscribes.push(bus.subscribe(DAMAGE_APPLY_MESSAGE, (envelope) => {

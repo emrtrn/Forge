@@ -186,6 +186,20 @@
         0,
         0
       ]
+    },
+    {
+      "classRef": "assets/starter-content/Gameplay/Script_BreakableCrate.actor.json",
+      "position": [
+        -6,
+        0,
+        4
+      ],
+      "name": "Breakable Crate Actor",
+      "rotation": [
+        0,
+        30,
+        0
+      ]
     }
   ]
 }

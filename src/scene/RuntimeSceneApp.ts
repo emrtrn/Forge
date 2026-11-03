@@ -1026,6 +1026,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private worldPartitionLive = false;
   /** Entity id -> layout actor index of every cell-streamed actor in this level. */
   private partitionActorIndexById = new Map<string, number>();
+  /**
+   * World Partition cell of each streamed source entity (actors and static
+   * placements), so a module can tie what it spawned to the cell that owns it.
+   */
+  private partitionCellByEntityId = new Map<string, string>();
+  /** Fracture host listeners told when a partition cell unloads. */
+  private readonly cellUnloadedListeners = new Set<(key: string) => void>();
   /** Where moved bodies/cars were left when their cell unloaded (in memory + save). */
   private readonly streamedActorStates = new StreamedActorStateCache();
   /**
@@ -1547,7 +1554,30 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         const materialId = this.resolveAssetMaterialSlots(assetId)?.slots[0];
         return materialId ? this.materialCache.get(materialId) ?? null : null;
       },
-      destroySource: (entityId) => this.destroyActorEntity(entityId),
+      destroySource: (entityId) => {
+        // Its scripts see EndPlay (`destroyed`) before the body and object go.
+        this.behaviorSubsystem.retireEntity(entityId);
+        this.destroyActorEntity(entityId);
+      },
+      sourcePose: (entityId) => {
+        const actor = this.actorObjects.get(entityId);
+        if (actor) {
+          return {
+            position: [actor.position.x, actor.position.y, actor.position.z],
+            rotation: [actor.rotation.x, actor.rotation.y, actor.rotation.z].map((radians) => radians * 180 / Math.PI) as [number, number, number],
+            scale: [actor.scale.x, actor.scale.y, actor.scale.z],
+          };
+        }
+        const simulated = this.physicsSubsystem.simulatedTransform(entityId);
+        return simulated
+          ? { position: [...simulated.position], rotation: [...simulated.rotation], scale: [...simulated.scale] }
+          : null;
+      },
+      cellOf: (entityId) => this.partitionCellByEntityId.get(entityId) ?? null,
+      onCellUnloaded: (listener) => {
+        this.cellUnloadedListeners.add(listener);
+        return () => this.cellUnloadedListeners.delete(listener);
+      },
       attachDynamicObject: (entityId, object) => {
         if (object) this.dynamicRenderObjects.set(entityId, object);
         else this.dynamicRenderObjects.delete(entityId);
@@ -4505,6 +4535,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.placedActorModelEntities = [];
     this.worldPartitionLive = false;
     this.partitionActorIndexById = new Map();
+    this.partitionCellByEntityId = new Map();
     this.streamedActorStates.clear();
     this.partitionStaticCells = new Map();
     this.partitionSplineSegmentCells = new Map();
@@ -4546,6 +4577,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       for (const index of content.actors) {
         actorCells.set(index, key);
         this.partitionActorIndexById.set(actorInstanceEntityId(index), index);
+        this.partitionCellByEntityId.set(actorInstanceEntityId(index), key);
         const indices = cells.get(key) ?? [];
         indices.push(index);
         cells.set(key, indices);
@@ -4567,6 +4599,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.partitionStaticCells.set(key, content.instances);
       for (const { group, placement } of content.instances) {
         const assetId = this.layout.instances[group]!.assetId;
+        this.partitionCellByEntityId.set(instanceEntityId(assetId, placement), key);
         this.streamedPlacementKeys.add(overrideObjectKey(assetId, placement));
         this.streamedStaticAssetIds.add(assetId);
         if (loadable.has(assetId)) addCellModel(key, assetId);
@@ -4583,7 +4616,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       isLive: (index) => this.actorEntityById.has(actorInstanceEntityId(index)),
       cellChanged: (key, active) => {
         if (active) this.activateStaticCell(key);
-        else this.deactivateStaticCell(key);
+        else {
+          this.deactivateStaticCell(key);
+          for (const listener of this.cellUnloadedListeners) listener(key);
+        }
       },
       prefetch: (key, wanted) => {
         if (wanted) this.modelResidency.setOwner(partitionCellOwner(key), this.partitionCellModelIds.get(key) ?? []);

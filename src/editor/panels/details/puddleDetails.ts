@@ -1,5 +1,6 @@
 import type { SceneApp } from "@/scene/SceneApp";
 import { PUDDLE_APPEARANCE } from "@engine/scene/puddleWater";
+import { renderPuddleReflectionDetails } from "./puddleReflectionDetails";
 
 const escape = (text: string) => text.replace(/[&<>"']/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
 export function renderPuddleDetails(body: HTMLElement, app: SceneApp): void {
@@ -15,7 +16,7 @@ export function renderPuddleDetails(body: HTMLElement, app: SceneApp): void {
     <label class="detail-row"><span>Water Level (World Y)</span><input type="number" step="0.01" data-puddle-saved-number="level" value="${puddle.surfaceLevel}" ${locked}></label>
     <label class="detail-row"><span>Working Area (m)</span><input type="number" step="1" min="0.01" max="128" data-puddle-saved-number="size" value="${puddle.bounds.max[0] - puddle.bounds.min[0]}" ${locked}></label>
     <label class="detail-row"><span>Color</span><input type="color" data-puddle-color value="${a.color}" ${locked}></label>
-    ${([['opacity', 'Opacity', 0, 1], ['roughness', 'Roughness', .04, 1], ['reflectionStrength', 'Environment Reflection', 0, 3]] as const).map(([key, label, min, max]) =>
+    ${([['opacity', 'Opacity', 0, 1], ['roughness', 'Roughness', .04, 1]] as const).map(([key, label, min, max]) =>
       `<label class="detail-row"><span>${label}</span><input type="number" step="0.01" min="${min}" max="${max}" data-puddle-appearance="${key}" value="${a[key]}" ${locked}></label>`).join("")}
     <div class="detail-hint" data-puddle-saved-status data-puddle-result="${puddle.hidden ? 'hidden' : result?.status ?? 'loading'}">${escape(puddle.hidden ? "Hidden" : result?.message ?? "Preparing water…")}</div>
     <button type="button" class="detail-action-button" data-puddle-delete ${locked}>Delete Puddle</button>
@@ -32,4 +33,6 @@ export function renderPuddleDetails(body: HTMLElement, app: SceneApp): void {
     if (Number.isFinite(input.valueAsNumber)) app.editPuddle({ appearance: { ...puddle.appearance, [input.dataset.puddleAppearance!]: input.valueAsNumber } });
   }));
   body.querySelector("[data-puddle-delete]")?.addEventListener("click", () => app.deletePuddle());
+  renderPuddleReflectionDetails(body, puddle.appearance ?? {}, !!puddle.locked,
+    patch => app.editPuddle({ appearance: { ...puddle.appearance, ...patch } }));
 }

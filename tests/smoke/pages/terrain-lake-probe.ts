@@ -1,7 +1,9 @@
 import { terrainCausticsResources } from "@engine/render-three/terrain/terrainCaustics";
 import { riverFoamSurfaceFingerprint } from "@engine/render-three/lakeFoamBake";
 import type { RiverWaterObject } from "@engine/render-three/riverWater";
-import { Vector2, Vector3, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer, type Scene, type Group } from "three";
+import { BoxGeometry, Mesh, MeshBasicMaterial, Vector2, Vector3, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer, type Scene, type Group } from "three";
+import type { TerrainPuddleSurface } from "@engine/render-three/terrain/terrainPuddleSurface";
+import type { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
 import type { LakeWaterController } from "@/scene/lakeWaterController";
 import type { PuddleWaterController } from "@/scene/puddleWaterController";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
@@ -22,6 +24,8 @@ export function installLakeProbe(app: unknown) {
     selection: { kind: string; index?: number } | null;
     renderer: WebGLRenderer; scene: Scene; frameHandle: number; landscapeObjects: Group[];
     puddles?: PuddleWaterController | null;
+    puddlePreview?: { surface: TerrainPuddleSurface } | null;
+    waterReflections?: WaterReflectionRegistry;
     postProcessPipeline: { render(dt: number): void; underwaterStats?: unknown } | null;
     worldTerrainStreams?: Map<WorldTerrainDocument, TerrainEditorStreaming>;
     getLakeEditorState?: SceneApp["getLakeEditorState"];
@@ -31,6 +35,27 @@ export function installLakeProbe(app: unknown) {
     layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    puddlePlanarFrame(draft = false, offset = 0) {
+      cancelAnimationFrame(a.frameHandle);
+      let marker = a.scene.getObjectByName("puddle-planar-marker") as Mesh | undefined;
+      if (!marker) {
+        marker = new Mesh(new BoxGeometry(.45, 1.2, .45), new MeshBasicMaterial({ color: "#ff0055", toneMapped: false }));
+        marker.name = "puddle-planar-marker"; a.scene.add(marker);
+      }
+      marker.position.set(30 + offset, 11.3, -.6);
+      a.camera.position.set(31.6, 12.1, 2.5); a.camera.lookAt(30, 10.6, 0); a.camera.updateMatrixWorld(true);
+      for (const object of a.landscapeObjects) updateLandscapeLod(object, a.camera);
+      const target = new WebGLRenderTarget(256, 256), previous = a.renderer.getRenderTarget();
+      const pixels = new Uint8Array(256 * 256 * 4);
+      try { a.renderer.setRenderTarget(target); a.renderer.render(a.scene, a.camera); a.renderer.readRenderTargetPixels(target, 0, 0, 256, 256, pixels); }
+      finally { a.renderer.setRenderTarget(previous); target.dispose(); }
+      a.renderer.render(a.scene, a.camera);
+      const surface = draft ? a.puddlePreview?.surface : [...(a.puddles?.objects.values() ?? [])][0];
+      const source = surface?.reflectionSource;
+      return { samples: Array.from(pixels), capture: source?.hasCapture ?? false,
+        resolution: (source?.binding.texture.image as { width?: number } | undefined)?.width ?? 0,
+        registry: a.waterReflections?.size ?? 0, glError: a.renderer.getContext().getError() };
+    },
     puddleSavedFrame(reposition = false) {
       cancelAnimationFrame(a.frameHandle);
       // The fixture's outer bank reaches Y=16; keep the camera above that bed.

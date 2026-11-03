@@ -1,7 +1,8 @@
 import { Box3, Box3Helper, Group, Vector3, type Scene } from "three";
 import type { TerrainPuddleGeometry, TerrainPuddleRegion } from "@engine/terrain/terrainPuddle";
 import { preparePuddleWater, puddleRegionAroundSeed } from "@engine/terrain/terrainPuddlePreparation";
-import { validatePuddleWater, type PuddleWaterBody } from "@engine/scene/puddleWater";
+import { NEW_PUDDLE_APPEARANCE, validatePuddleWater, type PuddleWaterBody } from "@engine/scene/puddleWater";
+import { PuddlePlanarReflections } from "@engine/render-three/puddlePlanarReflections";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { type TerrainTileData } from "@engine/terrain/terrainTypes";
 import { TerrainPuddleSurface } from "@engine/render-three/terrain/terrainPuddleSurface";
@@ -15,12 +16,14 @@ export interface PuddlePreviewState {
   area: number;
   status: "idle" | "loading" | "error" | TerrainPuddleGeometry["status"];
   message: string;
+  appearance: NonNullable<PuddleWaterBody["appearance"]>;
 }
 interface PreviewHost {
   scene: Scene;
   document(id: string): WorldTerrainDocument | undefined;
   load(id: string, key: string, signal: AbortSignal): Promise<TerrainTileData>;
   changed(): void;
+  reflections?: PuddlePlanarReflections;
 }
 
 /** Editor-only, transient tool. Never adds a layout actor, terrain mutation or
@@ -33,9 +36,11 @@ export class PuddlePreview {
   private abort = new AbortController();
   private revision = 0;
   private region: TerrainPuddleRegion | null = null;
-  private state: PuddlePreviewState = { terrainRef: null, seed: null, level: 0, size: 12, spacing: 1, area: 0, status: "idle", message: "" };
+  private state: PuddlePreviewState = { terrainRef: null, seed: null, level: 0, size: 12, spacing: 1, area: 0, status: "idle", message: "", appearance: { ...NEW_PUDDLE_APPEARANCE } };
+  private readonly reflections: PuddlePlanarReflections;
 
   constructor(private readonly host: PreviewHost) {
+    this.reflections = host.reflections ?? new PuddlePlanarReflections();
     this.group.name = "puddle-editor-preview";
     this.group.userData.waterSceneTransmission = true;
     this.group.add(this.surface, this.bounds);
@@ -43,7 +48,17 @@ export class PuddlePreview {
     host.scene.add(this.group);
   }
 
-  snapshot(): PuddlePreviewState { return { ...this.state, seed: this.state.seed ? [...this.state.seed] : null }; }
+  snapshot(): PuddlePreviewState { return { ...this.state, appearance: { ...this.state.appearance }, seed: this.state.seed ? [...this.state.seed] : null }; }
+
+  editAppearance(patch: NonNullable<PuddleWaterBody["appearance"]>): void {
+    const body = this.toBody("preview", "Preview");
+    if (!body) return;
+    const next = validatePuddleWater({ ...body, appearance: { ...this.state.appearance, ...patch } });
+    this.state.appearance = next.appearance!;
+    this.surface.material.envMapIntensity = this.state.appearance.reflectionStrength ?? NEW_PUDDLE_APPEARANCE.reflectionStrength;
+    this.reflections.set(this.surface, body.surfaceLevel, this.state.appearance);
+    this.host.changed();
+  }
 
   async begin(terrainRef: string, seed: readonly [number, number], level: number): Promise<void> {
     this.state = { ...this.state, terrainRef, seed: [...seed], level };
@@ -77,6 +92,8 @@ export class PuddlePreview {
       if (signal.aborted || revision !== this.revision) return;
       if (data.status === "ready") this.region = region;
       if (this.surface.rebuild(data)) this.state.area = data.area;
+      if (data.status === "ready") this.reflections.set(this.surface, level, this.state.appearance);
+      else if (data.status === "dry") this.reflections.remove(this.surface);
       // Failed results keep the old valid surface; the outline shows the new request.
       this.bounds.box.set(new Vector3(region.minX, level, region.minZ), new Vector3(region.minX + region.size, level, region.minZ + region.size));
       this.group.visible = true;
@@ -98,12 +115,14 @@ export class PuddlePreview {
     if (this.state.status !== "ready" || !region || !this.state.terrainRef) return null;
     return validatePuddleWater({ schema: 1, kind: "puddle", coordinateSpace: "world", id, name,
       terrainRef: this.state.terrainRef, seed: [...region.seed], surfaceLevel: region.level,
+      appearance: { ...this.state.appearance },
       bounds: { min: [region.minX, region.minZ], max: [region.minX + region.size, region.minZ + region.size] } });
   }
 
   private fail(message: string): void { this.state = { ...this.state, status: "error", message }; this.host.changed(); }
 
   clear(): void {
+    this.reflections.remove(this.surface);
     this.abort.abort(); this.revision++; this.region = null;
     this.surface.rebuild({ status: "dry", positions: new Float32Array(), depths: new Float32Array(), area: 0 });
     this.group.visible = false;
@@ -111,6 +130,7 @@ export class PuddlePreview {
   }
   dispose(): void {
     this.clear(); this.group.removeFromParent(); this.surface.dispose(); this.bounds.geometry.dispose();
+    if (!this.host.reflections) this.reflections.dispose();
     const material = this.bounds.material;
     if (Array.isArray(material)) material.forEach(entry => entry.dispose()); else material.dispose();
   }

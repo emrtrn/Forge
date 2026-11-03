@@ -1,6 +1,6 @@
 import { BufferGeometry, Float32BufferAttribute, Matrix4, Mesh, MeshPhysicalMaterial, Vector4 } from "three";
 import type { TerrainPuddleGeometry } from "@engine/terrain/terrainPuddle";
-import type { PlanarReflectionBinding } from "../planarReflectionSource";
+import type { PlanarReflectionBinding, PlanarReflectionSource } from "../planarReflectionSource";
 
 /** Separate horizontal water over a changing bed. Prototype: environment
  * reflections, shallow edge fade and bounded analytic contact ripples. Optional
@@ -14,6 +14,9 @@ export class TerrainPuddleSurface extends Mesh<BufferGeometry, MeshPhysicalMater
   private readonly planar = { value: null as PlanarReflectionBinding["texture"] | null };
   private readonly planarMatrix = { value: new Matrix4() };
   private readonly planarReady = { value: 0 };
+  private readonly planarStrength = { value: 1 };
+  private readonly planarTexel = { value: 1 / 256 };
+  reflectionSource: PlanarReflectionSource | null = null;
 
   constructor() {
     super(new BufferGeometry(), new MeshPhysicalMaterial({ color: "#504a35", roughness: .13,
@@ -27,13 +30,15 @@ export class TerrainPuddleSurface extends Mesh<BufferGeometry, MeshPhysicalMater
       shader.uniforms.puddlePlanar = this.planar;
       shader.uniforms.puddlePlanarMatrix = this.planarMatrix;
       shader.uniforms.puddlePlanarReady = this.planarReady;
+      shader.uniforms.puddlePlanarStrength = this.planarStrength;
+      shader.uniforms.puddlePlanarTexel = this.planarTexel;
       shader.vertexShader = `attribute float puddleDepth; varying float vPuddleDepth; varying vec2 vPuddleWorld;
 uniform mat4 puddlePlanarMatrix; varying vec4 vPuddleProjected;\n${shader.vertexShader}`
         .replace("#include <begin_vertex>", `#include <begin_vertex>
 vPuddleDepth = puddleDepth; vPuddleWorld = (modelMatrix * vec4(position, 1.0)).xz;
 vPuddleProjected = puddlePlanarMatrix * modelMatrix * vec4(position, 1.0);`);
       shader.fragmentShader = `varying float vPuddleDepth; varying vec2 vPuddleWorld;
-uniform sampler2D puddlePlanar; uniform float puddlePlanarReady; varying vec4 vPuddleProjected;
+uniform sampler2D puddlePlanar; uniform float puddlePlanarReady; uniform float puddlePlanarStrength; uniform float puddlePlanarTexel; varying vec4 vPuddleProjected;
 uniform float puddleTime; uniform int puddleRingCount; uniform vec4 puddleRings[12];\n${shader.fragmentShader}`
         .replace("#include <normal_fragment_maps>", `#include <normal_fragment_maps>
 vec2 gradient = vec2(0.0);
@@ -53,21 +58,40 @@ normal = normalize(normal + mat3(viewMatrix) * vec3(-gradient.x, 0.0, -gradient.
 if (puddlePlanarReady > .5 && vPuddleProjected.w > 0.0) {
   vec2 projected = vPuddleProjected.xy / vPuddleProjected.w + gradient * .015;
   if (all(greaterThanEqual(projected, vec2(0.0))) && all(lessThanEqual(projected, vec2(1.0)))) {
-    vec4 reflected = texture2D(puddlePlanar, projected);
+    // Small roughness-aware footprint in linear HDR, retaining premultiplied geometry coverage.
+    vec2 footprint = vec2(puddlePlanarTexel * roughnessFactor * 3.0, 0.0);
+    vec4 reflected = texture2D(puddlePlanar, projected) * .4
+      + (texture2D(puddlePlanar, projected + footprint) + texture2D(puddlePlanar, projected - footprint)
+      + texture2D(puddlePlanar, projected + footprint.yx) + texture2D(puddlePlanar, projected - footprint.yx)) * .15;
     float fresnel = .02 + .98 * pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 5.0);
-    outgoingLight = mix(outgoingLight, reflected.rgb / max(reflected.a, .0001), clamp(reflected.a, 0.0, 1.0) * (.18 + .78 * fresnel));
+    vec2 border = min(projected, vec2(1.0) - projected);
+    float edge = smoothstep(0.0, .025, min(border.x, border.y));
+    outgoingLight = mix(outgoingLight, reflected.rgb / max(reflected.a, .0001), clamp(reflected.a, 0.0, 1.0) * edge * (.18 + .78 * fresnel) * puddlePlanarStrength);
   }
 }
 #include <opaque_fragment>`)
         .replace("#include <alphatest_fragment>", "diffuseColor.a *= smoothstep(0.0, .012, vPuddleDepth);\n#include <alphatest_fragment>");
     };
-    this.material.customProgramCacheKey = () => "terrain-puddle-prototype-v1";
+    this.material.customProgramCacheKey = () => "terrain-puddle-planar-v2";
   }
 
   setPlanarReflectionBinding(binding: PlanarReflectionBinding | null): void {
     this.planar.value = binding?.texture ?? null;
     this.planarReady.value = binding ? 1 : 0;
     if (binding) this.planarMatrix.value = binding.textureMatrix;
+    if (binding) this.planarTexel.value = 1 / ((binding.texture.image as { width?: number } | undefined)?.width ?? 256);
+  }
+
+  setPlanarStrength(value: number): void { this.planarStrength.value = value; }
+  /** Managed consumers wait for a real capture; prototype bindings retain their existing API. */
+  useReflectionSource(source: PlanarReflectionSource | null): void {
+    if (source !== this.reflectionSource) {
+      this.reflectionSource?.removeConsumer(this);
+      this.reflectionSource = source;
+      this.setPlanarReflectionBinding(null);
+      source?.addConsumer(this);
+    }
+    this.planarReady.value = source?.hasCapture ? 1 : 0;
   }
 
   /** Reject failed rebuilds, retaining the last valid surface. dry clears it. */
@@ -97,5 +121,5 @@ if (puddlePlanarReady > .5 && vPuddleProjected.w > 0.0) {
     this.history.forEach((r, i) => this.rings.value[i]!.set(r.x, r.z, r.born, r.strength));
   }
   clearRipples(): void { this.history.length = 0; this.ringCount.value = 0; }
-  dispose(): void { this.setPlanarReflectionBinding(null); this.clearRipples(); this.geometry.dispose(); this.material.dispose(); }
+  dispose(): void { this.useReflectionSource(null); this.setPlanarReflectionBinding(null); this.clearRipples(); this.geometry.dispose(); this.material.dispose(); }
 }

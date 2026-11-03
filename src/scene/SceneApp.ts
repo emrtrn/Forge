@@ -15,6 +15,7 @@ import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainD
 import { LakeWaterController } from "./lakeWaterController";
 import { lakeQuality } from "@engine/perf/lakeQuality";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
+import { PuddlePlanarReflections } from "@engine/render-three/puddlePlanarReflections";
 import { createLakeAppearance, validateWaterBody, LAKE_LIMITS } from "@engine/scene/waterBody";
 import type { LayoutLakeWaterBody } from "@engine/scene/layout";
 import { compareWorldCellKeys, normalizeWorldPartitionSettings, type WorldPartitionSettings } from "@engine/world/worldPartition";
@@ -1418,6 +1419,7 @@ export class SceneApp {
   private riverWaterBuild = 0;
   private lakes: LakeWaterController | null = null;
   private readonly waterReflections = new WaterReflectionRegistry();
+  private readonly puddleReflections = new PuddlePlanarReflections(this.waterReflections);
   private lakeDraft: LayoutLakeWaterBody | null = null;
   private lakePendingSelection: (() => void) | null = null;
   private lakePick: { terrainRef: string; reseed: string | null; puddle?: boolean } | null = null;
@@ -3366,6 +3368,7 @@ export class SceneApp {
     setTerrainSelfShadow(quality.terrainSelfShadow);
     setTerrainFarTiling(quality.terrainFarTiling);
     void this.lakes?.setQuality(lakeQuality(quality)).catch(error => console.warn("[lake-quality]", error));
+    this.puddleReflections.setQuality(lakeQuality(quality).reflectionQuality);
     if (!quality.lakeFoamAllowed) this.riverFoam.clearLoaded();
     for(const river of this.riverWaterObjects) {
       void river.applyQuality(lakeQuality(quality));
@@ -8002,7 +8005,7 @@ export class SceneApp {
 
   private rebuildPuddles(force = false): void {
     if (!this.layout?.puddleWaters?.length && !this.puddles) return;
-    this.puddles ??= new PuddleWaterController({ scene: this.scene,
+    this.puddles ??= new PuddleWaterController({ scene: this.scene, reflections: this.puddleReflections,
       document: id => this.layout?.landscapes?.some(actor => actor.id === id) ? this.lakeDocument(id) : undefined,
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);
@@ -8077,6 +8080,11 @@ export class SceneApp {
     if (this.getPuddlePreviewState().available) void this.puddlePreview?.edit(patch);
   }
 
+  editPuddlePreviewAppearance(patch: NonNullable<PuddleWaterBody["appearance"]>): void {
+    try { if (this.getPuddlePreviewState().available) this.puddlePreview?.editAppearance(patch); }
+    catch (error) { this.onStatus?.(String(error), "warning"); }
+  }
+
   cancelPuddlePreview(): void { this.clearPuddlePreview(); this.completeLakeSelection(); this.emitSelectionChanged(); }
 
   finishPuddlePicking(): void {
@@ -8090,7 +8098,7 @@ export class SceneApp {
   }
 
   private puddleController(): PuddlePreview {
-    return this.puddlePreview ??= new PuddlePreview({ scene: this.scene,
+    return this.puddlePreview ??= new PuddlePreview({ scene: this.scene, reflections: this.puddleReflections,
       document: id => this.lakeDocument(id),
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);

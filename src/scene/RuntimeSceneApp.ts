@@ -7,6 +7,7 @@ import { LakeWaterController } from "./lakeWaterController";
 import { PuddleWaterController } from "./puddleWaterController";
 import { lakeQuality } from "@engine/perf/lakeQuality";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
+import { PuddlePlanarReflections } from "@engine/render-three/puddlePlanarReflections";
 import {
   normalizeWorldPartitionSettings,
   streamedLightPeaks,
@@ -1008,6 +1009,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private readonly riverFoam = new LakeFoamStore();
   private riverFoamAborter = new AbortController();
   private readonly waterReflections = new WaterReflectionRegistry();
+  private readonly puddleReflections = new PuddlePlanarReflections(this.waterReflections);
   private readonly riverWaterTextures = new Map<string, Texture>();
   /** Base-color textures loaded for landscape paint-layer splatting; disposed on scene rebuild. */
   private landscapeLayerTextures: Texture[] = [];
@@ -2379,6 +2381,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     setTerrainFarTiling(settings.terrainFarTiling);
     setTerrainWaterQuality(settings.terrainWaterQuality);
     void this.lakes?.setQuality(lakeQuality(settings)).catch(error => console.warn("[lake-quality]", error));
+    this.puddleReflections.setQuality(lakeQuality(settings).reflectionQuality);
     if (!settings.lakeFoamAllowed) this.riverFoam.clearLoaded();
     for(const river of this.riverWaterObjects) {
       void river.applyQuality(lakeQuality(settings));
@@ -6091,7 +6094,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
       }, normal: (id) => this.loadRuntimeRiverWaterTexture(id, "normal"),
     });
-    this.puddles ??= new PuddleWaterController({ scene: this.scene, document: terrain,
+    this.puddles ??= new PuddleWaterController({ scene: this.scene, document: terrain, reflections: this.puddleReflections,
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = terrain(id);
         if (!actor || !document) throw new Error("Missing Puddle terrain");

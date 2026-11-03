@@ -6,10 +6,11 @@ Canlı deformasyon/araç bağlantısı ve genel W3 performans kabulü açık. Ka
 [Water Body / W3](WORLD_TERRAIN_WATER_BODY_PLAN.md),
 [Terrain Deformasyonu](TERRAIN_DEFORMATION_PLAN.md).
 
-**3 Kasım 2026 ek plan:** Planar yansıma, canlı çamur deformasyonu ile suyun
-birleşimi ve Wheel Ripples aşağıdaki **Faz 1–3** kapsamında planlandı.
-Bu fazlar henüz uygulanmadı. Kullanıcı bu adımda planın dokümana kaydedilmesini
-istedi; kod/sahne değişikliği veya commit/push bu adımın kapsamında değildir.
+**3 Kasım 2026 güncellemesi:** Planar yansıma **Faz 1** kapsamında uygulandı;
+canlı çamur deformasyonu ile suyun birleşimi ve Wheel Ripples **Faz 2–3** olarak
+açık. Kullanıcı fazların sırayla uygulanıp ayrı ayrı main'e push edilmesini istedi.
+Faz 1 donanım performansı ve kullanıcı görsel kabulü, teknik doğrulamadan ayrıdır.
+Teslim ayrıntıları: [Puddle planar yansıma](../reports/PUDDLE_PLANAR_2026-11-03.md).
 
 ## Kullanıcı hedefi ve yaklaşım
 
@@ -120,7 +121,7 @@ capture tahsis edilmez. Önizleme Create yapılmadan kaydedilmez. Kalıcı gövd
 canlı araç/deformasyon bağlantısı sonraki dilimdir. Teknik kayıt:
 [Landscape Puddle önizlemesi](../reports/PUDDLE_EDITOR_PREVIEW_2026-11-03.md).
 
-## Onay bekleyen uygulama fazları — 3 Kasım 2026
+## Sıralı uygulama fazları — 3 Kasım 2026
 
 Üç kullanıcı isteği sırayla uygulanır. Her fazın teknik kontrolleri ve görsel
 kabulü ayrı kaydedilir; bir fazın geçmesi diğerlerini tamamlanmış saydırmaz.
@@ -130,8 +131,8 @@ Ripples bu temeli Faz 3'te kullanır. Mevcut kaynak/kabul dilimleri de geçerlid
 ### Mevcut durum ve görüntüdeki sorun
 
 - `TerrainPuddleSurface` harici planar binding ve en fazla 12 analitik ripple
-  destekler. Avlu prototipi bunları kullanır; kalıcı Puddle controller'ına gerçek
-  araç teması ve planar kaynak bağlantısı kurulmuş değildir.
+  destekler. Faz 1 ile kalıcı Puddle ve taslak aynı planar kaynak yöneticisine
+  bağlandı. Gerçek araç teması/ripple bağlantısı Faz 3'te açık kalır.
 - `terrainPuddlePreparation.ts` suyu authored terrain yüksekliğinden hazırlar;
   kalıcı yüzey canlı `DeformationField` değişiklikleriyle yeniden kırpılmaz.
 - Terrain renderer kendi tekerlek oyuklarını, yükselen çamur kenarını ve yerel
@@ -148,34 +149,37 @@ Ripples bu temeli Faz 3'te kullanır. Mevcut kaynak/kabul dilimleri de geçerlid
 
 ### Faz 1 — Göldeki gibi planar yansıma
 
+Durum: **Uygulandı.** Teknik testler ve sınırlar teslim raporunda; hedef GPU'da
+eşlenik süre/bellek ölçümü ve kullanıcı görsel kabulü henüz tamamlanmadı.
+
 **Amaç:** sahnedeki araç, ağaç ve yapıların Puddle üzerinde doğru düzlemden
 yansıması; Draft Preview, oluşturulan gövde ve Play arasında tutarlı görünüm.
 
-- [ ] Puddle görünümüne `reflectionMode`, `reflectionQuality` ve ayrı
+- [x] Puddle görünümüne `reflectionMode`, `reflectionQuality` ve ayrı
   `planarReflectionStrength` alanları ekle. Mevcut `reflectionStrength` ortam
   yansıması anlamını korusun. Eski kayıtlarda alanların yokluğu mevcut görünümü
   korusun; yeni gövdeler için önerilen başlangıç Planar / Medium olsun.
-- [ ] Reflection paneli: Mode (Environment / Planar Reflection), Quality
+- [x] Reflection paneli: Mode (Environment / Planar Reflection), Quality
   (Low / Medium / High), Planar Strength ve mevcut Environment Reflection.
   Low ek planar capture açmasın; genel grafik kalitesi etkin kaliteye tavan koysun.
-- [ ] `SceneApp` ve `RuntimeSceneApp` içindeki mevcut `WaterReflectionRegistry`
+- [x] `SceneApp` ve `RuntimeSceneApp` içindeki mevcut `WaterReflectionRegistry`
   kalıcı Puddle controller'ına ve taslak önizlemesine bağlansın. Aynı düzlem,
   grup ve etkin kalitedeki Lake/River/Puddle aynı kaynağı paylaşabilsin; farklı
   kotlar yanlışlıkla tek yansıma kamerasına bağlanmasın.
-- [ ] `TerrainPuddleSurface` mevcut capture'ı render sırasında güncellesin;
+- [x] `TerrainPuddleSurface` mevcut capture'ı render sırasında güncellesin;
   ilk geçerli capture'dan önce ortam yansımasını kullansın. Fresnel, roughness,
   renk uzayı/HDR ve premultiplied alpha birleşimi Lake yaklaşımıyla doğrulansın.
   Planar şiddeti ortam yansımasını iki kez ekleyerek parlama üretmesin.
-- [ ] Su yüzeyleri/editör yardımcıları capture dışında kalsın. Var olan ekran
+- [x] Su yüzeyleri/editör yardımcıları capture dışında kalsın. Var olan ekran
   kaplama, görünürlük ve güncelleme aralığı kontrolleri kullanılsın.
-- [ ] İlk bütçe önerisi: Puddle nedeniyle eklenen en fazla **iki bağımsız planar
+- [x] Uygulanan bütçe: Puddle nedeniyle eklenen en fazla **iki bağımsız planar
   kaynak**. Zaten paylaşılan kaynak ikinci kez sayılmasın. Fazla gruplar kararlı
   görünürlük/öncelik seçimi ve ortam yansımasına dönüş kullansın; hızlı kamera
   hareketinde kaynak aç/kapat titreşimi önlensin. Bu tavan Lake/River'ın mevcut
   toplam maliyetini sınırladığı iddiası değildir; hedef GPU ölçümüyle kabul edilir.
-- [ ] Hide/Delete/Discard, kot-kalite değişimi, undo/redo, level ve Edit/Play
+- [x] Hide/Delete/Discard, kot-kalite değişimi, undo/redo, level ve Edit/Play
   geçişlerinde consumer ve kaynak payları bırakılıp doğru yeniden edinilsin.
-- [ ] Alanlar `validatePuddleWater` üzerinden read/save yoluna alınsın;
+- [x] Alanlar `validatePuddleWater` üzerinden read/save yoluna alınsın;
   `tools/saveValidator.ts` bu ortak doğrulamayı kullandığı için alanların gerçekten
   korunması round-trip testiyle doğrulansın. Yeni endpoint gerekmez.
 

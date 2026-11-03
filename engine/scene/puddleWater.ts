@@ -4,10 +4,14 @@ export interface PuddleWaterBody {
   id: string; terrainRef: string; name?: string; hidden?: boolean; locked?: boolean;
   seed: [number, number]; bounds: { min: [number, number]; max: [number, number] };
   surfaceLevel: number;
-  appearance?: { color?: string; opacity?: number; roughness?: number; reflectionStrength?: number };
+  appearance?: { color?: string; opacity?: number; roughness?: number; reflectionStrength?: number;
+    reflectionMode?: "environment" | "sharedPlanar"; reflectionQuality?: "low" | "medium" | "high"; planarReflectionStrength?: number };
 }
 export const PUDDLE_LIMITS = { bodies: 16, cells: 128 * 128, totalCells: 65536, tiles: 16, extent: 128 } as const;
-export const PUDDLE_APPEARANCE = { color: "#504a35", opacity: .82, roughness: .13, reflectionStrength: 1.4 };
+export const PUDDLE_APPEARANCE = { color: "#504a35", opacity: .82, roughness: .13, reflectionStrength: 1.4,
+  reflectionMode: "environment" as "environment" | "sharedPlanar", reflectionQuality: "medium" as "low" | "medium" | "high", planarReflectionStrength: 1 };
+/** Only new authored bodies opt into an extra render; old files retain environment reflection. */
+export const NEW_PUDDLE_APPEARANCE = { ...PUDDLE_APPEARANCE, reflectionMode: "sharedPlanar" as const };
 
 export function validatePuddleWater(value: unknown): PuddleWaterBody {
   const record = (v: unknown): Record<string, unknown> => {
@@ -50,6 +54,15 @@ export function validatePuddleWater(value: unknown): PuddleWaterBody {
     if (source.opacity !== undefined) appearance.opacity = number(source.opacity, 0, 1);
     if (source.roughness !== undefined) appearance.roughness = number(source.roughness, .04, 1);
     if (source.reflectionStrength !== undefined) appearance.reflectionStrength = number(source.reflectionStrength, 0, 3);
+    if (source.planarReflectionStrength !== undefined) appearance.planarReflectionStrength = number(source.planarReflectionStrength, 0, 1);
+    if (source.reflectionMode !== undefined) {
+      if (source.reflectionMode !== "environment" && source.reflectionMode !== "sharedPlanar") throw new Error("Invalid Puddle reflection mode");
+      appearance.reflectionMode = source.reflectionMode;
+    }
+    if (source.reflectionQuality !== undefined) {
+      if (source.reflectionQuality !== "low" && source.reflectionQuality !== "medium" && source.reflectionQuality !== "high") throw new Error("Invalid Puddle reflection quality");
+      appearance.reflectionQuality = source.reflectionQuality;
+    }
     out.appearance = appearance;
   }
   return out;

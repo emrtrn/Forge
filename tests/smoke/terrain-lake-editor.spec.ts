@@ -255,6 +255,61 @@ test("Puddle persists creation appearance edits undo delete Save Reload and Play
   await info.attach("puddle-persistence", { body: JSON.stringify({ created, edited, reloaded, runtime }), contentType: "application/json" });
 });
 
+test("Puddle planar draft and saved water reflect scene geometry with quality ceilings and Save Reload Play", async ({ page, request }, info) => {
+  test.setTimeout(300_000);
+  const defaults = defaultUserSettings();
+  await page.addInitScript(value => localStorage.setItem("forge.userSettings", value), JSON.stringify({ schema: 1,
+    updatedAt: new Date().toISOString(), payload: { ...defaults, graphics: { ...defaults.graphics,
+      selectedQualityLevel: "high", manuallySelected: true, adaptiveOptimizationEnabled: false } } }));
+  await servePuddleFixtureBinaries(page);
+  const { errors } = await setup(page, request), hash = await terrainHash();
+  await page.evaluate(() => (window as any).__lakeQA.puddleFrame());
+  await page.locator("[data-puddle-begin]").click(); await clickWorld(page, [30, 10, 0]);
+  await expect(page.locator("[data-puddle-create]")).toBeEnabled();
+  await page.locator('[data-puddle-number="level"]').fill("10.6"); await page.locator('[data-puddle-number="level"]').press("Tab");
+  await expect(page.locator("[data-puddle-create]")).toBeEnabled();
+  const mode = page.locator('[data-puddle-reflection="reflectionMode"]'), quality = page.locator('[data-puddle-reflection="reflectionQuality"]');
+  await expect(mode).toHaveValue("sharedPlanar"); await expect(quality).toHaveValue("medium");
+  const frame = (draft = false, offset = 0) => page.evaluate(({ draft, offset }) => (window as any).__lakeQA.puddlePlanarFrame(draft, offset), { draft, offset });
+  const preview = await frame(true); expect(preview.capture).toBe(true); expect(preview.resolution).toBe(256); expect(preview.glError).toBe(0);
+  await page.locator('[data-detail-section="puddle-reflection"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("puddle-planar-draft.png") });
+  await page.locator("[data-puddle-create]").click();
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  const on = await frame(); expect(on.capture).toBe(true); expect(on.registry).toBe(1);
+  await mode.selectOption("environment");
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  const off = await frame(); expect(off.capture).toBe(false); expect(off.registry).toBe(0);
+  const changed = on.samples.filter((v: number, i: number) => Math.abs(v - off.samples[i]) > 3).length;
+  expect(changed, "planar scene geometry changes real GPU pixels").toBeGreaterThan(40);
+  await page.screenshot({ path: info.outputPath("puddle-planar-environment.png") });
+  await page.getByTestId("editor-undo").click(); await expect(mode).toHaveValue("sharedPlanar");
+  await quality.selectOption("low"); await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  expect((await frame()).registry).toBe(0);
+  await quality.selectOption("high"); await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  // The global High profile caps authored High reflection at Medium.
+  const capped = await frame(); expect(capped.resolution).toBe(256);
+  const strength = page.locator("[data-puddle-planar-strength]"); await strength.fill("0.6"); await strength.press("Tab");
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  const savedFrame = await frame(); expect(savedFrame.capture).toBe(true);
+  await page.locator('[data-detail-section="puddle-reflection"]').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: info.outputPath("puddle-planar-created.png") });
+  await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.puddleWaters[0].appearance).toMatchObject({ reflectionMode: "sharedPlanar", reflectionQuality: "high", planarReflectionStrength: .6 });
+  await page.reload({ waitUntil: "domcontentloaded" }); await page.waitForFunction(() => !!(window as any).__lakeQA);
+  await expect.poll(async () => (await page.evaluate(() => (window as any).__lakeQA.puddleSavedFrame())).results[0]?.status, { timeout: 90_000 }).toBe("ready");
+  await page.locator('[data-object-id="puddle:0"]').click(); await expect(strength).toHaveValue("0.6");
+  expect((await frame()).capture).toBe(true);
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!(window as any).__lakeQA);
+  await expect.poll(async () => (await page.evaluate(() => (window as any).__lakeQA.puddleSavedFrame())).results[0]?.status, { timeout: 90_000 }).toBe("ready");
+  const runtime = await frame(); expect(runtime.capture).toBe(true); expect(runtime.registry).toBe(1); expect(runtime.glError).toBe(0);
+  await page.screenshot({ path: info.outputPath("puddle-planar-runtime.png") });
+  expect(await terrainHash()).toBe(hash); expect(errors).toEqual([]);
+  await info.attach("puddle-planar", { body: JSON.stringify({ changed, preview: { ...preview, samples: undefined }, runtime: { ...runtime, samples: undefined } }), contentType: "application/json" });
+});
+
 test("Lake crest foam controls survive undo Save Reload and runtime", async ({ page, request }, info) => {
   test.setTimeout(240_000);
   const { errors } = await setup(page, request, true);

@@ -1,6 +1,7 @@
 import type { EditorWorldSettings } from "@editor/core/editableScene";
 import { normalizeWorldPartitionSettings } from "@engine/world/worldPartition";
 import { VIEW_DISTANCE_MAX, VIEW_DISTANCE_MIN } from "@engine/world/viewDistance";
+import { WIND_DEFAULTS, type LayoutWind } from "@engine/environment/wind";
 import {
   getGameEditorCatalog,
   type EditorGameModeOption,
@@ -113,6 +114,11 @@ function renderWorldSettingsHtml(
         </label>
       </div>
       <div class="detail-section">
+        <div class="detail-section-title">Wind</div>
+        ${windRows("data-world-wind", settings.wind ?? {}, WIND_DEFAULTS)}
+        <div class="detail-hint">Foliage salınımının rüzgârı (yalnızca görsel). Level'da World Environment varsa onun Wind ayarları ve havası bunun yerine geçer.</div>
+      </div>
+      <div class="detail-section">
         <div class="detail-section-title">Ambient Light</div>
         <label class="detail-row">
           <span>Color</span>
@@ -217,11 +223,39 @@ function bindWorldSettingsInputs(options: WorldSettingsPanelOptions): void {
       });
     });
 
+  options.body.querySelectorAll<HTMLInputElement>("[data-world-wind]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const key = input.dataset.worldWind as keyof LayoutWind;
+      const value = Number(input.value);
+      if (!Number.isFinite(value)) return;
+      options.setWorldSettings({ wind: { ...(options.settings.wind ?? {}), [key]: value } });
+    });
+  });
+
   options.body
     .querySelector<HTMLSelectElement>("[data-world-game-mode]")
     ?.addEventListener("change", (event) => {
       options.setWorldSettings({ gameMode: (event.currentTarget as HTMLSelectElement).value });
     });
+}
+
+/**
+ * Direction / strength / gust rows for a wind group (shared with the World
+ * Environment details). `attr` is the data attribute holding the field key;
+ * unset fields show `fallback`.
+ */
+export function windRows(attr: string, wind: LayoutWind, fallback: Required<LayoutWind>): string {
+  const row = (key: keyof LayoutWind, label: string, min: number, max: number, step: number, title: string): string => `
+        <label class="detail-row" title="${title}">
+          <span>${label}</span>
+          <input type="number" ${attr}="${key}" min="${min}" max="${max}" step="${step}"
+            value="${wind[key] ?? fallback[key]}" />
+        </label>`;
+  return [
+    row("directionDeg", "Direction", 0, 359.9, 1, "Rüzgârın estiği pusula yönü (0 = +Z, 90 = +X)"),
+    row("strength", "Strength", 0, 1, 0.05, "Salınım gücü; 0 sakin hava"),
+    row("gust", "Gust", 0, 1, 0.05, "Gücün dalgalar hâlinde gelen payı"),
+  ].join("");
 }
 
 function escapeHtml(value: string): string {

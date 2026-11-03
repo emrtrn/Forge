@@ -3,6 +3,8 @@ import type { EditableSelection, WorldEnvironmentPreview } from "@/scene/SceneAp
 import type { WorldEnvironmentState } from "@engine/environment/environmentResolve";
 import { weatherPresetRequirements } from "@engine/environment/weatherPresets";
 import { SEASONS, WEATHER_PRESETS, type Season, type WeatherPreset } from "@engine/environment/worldEnvironment";
+import type { LayoutWind } from "@engine/environment/wind";
+import { windRows } from "@/editor/panels/world/worldSettingsPanel";
 
 /**
  * Details panel of the singleton World Environment (WES) actor: the level
@@ -23,6 +25,8 @@ export interface WorldEnvironmentDetailsOptions {
   ) => void;
   /** The preview strip's state; null when the actor is hidden (no preview). */
   preview: WorldEnvironmentPreview | null;
+  /** What unset wind fields read: World Settings' wind over the defaults. */
+  fallbackWind: Required<LayoutWind>;
   /** Which environment actors the level has, for the "preset needs" warning (§7.2). */
   presentActors: ReadonlySet<"cloudLayer" | "heightFog" | "skyAtmosphere">;
   setPreview: (
@@ -162,6 +166,11 @@ export function renderWorldEnvironmentDetails(options: WorldEnvironmentDetailsOp
         <div class="detail-hint">Summer + Clear level'daki görünümü korur; saat yalnızca güneşi hareket ettirir.</div>
       </div>
       ${sections.join("")}
+      <div class="detail-section">
+        <div class="detail-section-title">Wind</div>
+        ${windRows("data-wes-wind", options.authored.wind ?? {}, options.fallbackWind)}
+        <div class="detail-hint">Foliage salınımının rüzgârı (yalnızca görsel). Hava ve mevsim gücü ölçekler: yağmur artırır, sis azaltır. Ayarlanmamış alanlar World Settings rüzgârını kullanır.</div>
+      </div>
     `;
 
   const label = "Edit World Environment";
@@ -174,6 +183,14 @@ export function renderWorldEnvironmentDetails(options: WorldEnvironmentDetailsOp
       label,
     );
   };
+
+  body.querySelectorAll<HTMLInputElement>("[data-wes-wind]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const value = Number(input.value);
+      if (!Number.isFinite(value)) return;
+      options.setWorldEnvironment({ wind: { ...(options.authored.wind ?? {}), [input.dataset.wesWind as keyof LayoutWind]: value } }, label);
+    });
+  });
 
   const nameInput = body.querySelector<HTMLInputElement>("[data-wes-name]");
   nameInput?.addEventListener("change", () => {

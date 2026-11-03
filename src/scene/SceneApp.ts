@@ -235,7 +235,7 @@ import { resolveCloudLayer } from "@engine/render-three/cloudLayer";
 import { normalizeWorldEnvironment, resolveWorldEnvironment } from "@engine/environment/worldEnvironment";
 import { stateFromDefaults, type WorldEnvironmentState } from "@engine/environment/environmentResolve";
 import { wrapHour } from "@engine/environment/worldClock";
-import { resolveLevelWind } from "@engine/environment/wind";
+import { normalizeLayoutWind, resolveLevelWind } from "@engine/environment/wind";
 import { updateWindSwayUniforms } from "@engine/render-three/windSway";
 
 /** The editor's World Environment preview, as the Details preview strip shows it. */
@@ -2911,6 +2911,7 @@ export class SceneApp {
       ...(this.layout?.worldSettings?.partition
         ? { partition: normalizeWorldPartitionSettings(this.layout.worldSettings.partition) }
         : {}),
+      ...(this.layout?.worldSettings?.wind ? { wind: { ...this.layout.worldSettings.wind } } : {}),
     };
   }
 
@@ -2927,6 +2928,7 @@ export class SceneApp {
         | "gameMode"
         | "partition"
         | "viewDistance"
+        | "wind"
       >
     >,
   ): void {
@@ -13157,6 +13159,10 @@ export class SceneApp {
     } else {
       delete worldSettings.partition;
     }
+
+    const wind = normalizeLayoutWind(settings.wind, "worldSettings.wind", []);
+    if (wind && Object.keys(wind).length > 0) worldSettings.wind = wind;
+    else delete worldSettings.wind;
 
     if (Object.keys(worldSettings).length === 0) delete this.layout.worldSettings;
     else this.layout.worldSettings = worldSettings;

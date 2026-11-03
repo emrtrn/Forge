@@ -1,3 +1,4 @@
+import type { LayoutWind } from "@engine/environment/wind";
 import type { ResolvedWorldEnvironment } from "@engine/environment/worldEnvironment";
 import type {
   BrushShape,
@@ -356,6 +357,8 @@ export interface EditorWorldSettings {
   partition?: WorldPartitionSettings;
   /** Authored view distance in metres (camera far plane); absent keeps each camera's own far clip. */
   viewDistance?: number | undefined;
+  /** Sway wind for levels without a World Environment (Faz 6); absent reads the defaults. */
+  wind?: LayoutWind | undefined;
 }
 
 export interface EditorProjectInfo {
@@ -404,6 +407,9 @@ export function worldSettingsEqual(
     left.viewDistance === right.viewDistance &&
     left.partition?.enabled === right.partition?.enabled &&
     left.partition?.grids.main.cellSize === right.partition?.grids.main.cellSize &&
-    left.partition?.grids.main.loadRange === right.partition?.grids.main.loadRange
+    left.partition?.grids.main.loadRange === right.partition?.grids.main.loadRange &&
+    left.wind?.directionDeg === right.wind?.directionDeg &&
+    left.wind?.strength === right.wind?.strength &&
+    left.wind?.gust === right.wind?.gust
   );
 }

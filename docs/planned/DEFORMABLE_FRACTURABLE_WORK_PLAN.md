@@ -3,9 +3,10 @@
 > Durum: **Faz 0 tamam** (2026-11-02): spike'lar ve açık kararlar kapandı.
 > **Faz 1 kod tarafı tamam** (2026-11-03): saf `impactEvents.ts`, Rapier
 > bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
-> olayı. **Faz 6 sürüyor** (2026-11-03): rüzgâr verisi, `windSway.ts` ve
-> foliage type opt-in'i tamam; static mesh, etkileşim alanı, kalite ve editör
-> alanları açık. Faz 2 (Voronoi bake) başlamadı.
+> olayı. **Faz 6 sürüyor** (2026-11-03): rüzgâr verisi, `windSway.ts`,
+> foliage type opt-in'i ve editör alanları (World Settings / WES Wind, Foliage
+> Type "Wind Sway") tamam; static mesh materyali, etkileşim alanı, kalite ve
+> GPU ölçümü açık. Faz 2 (Voronoi bake) başlamadı.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -442,8 +443,14 @@ Faz 1–5'ten bağımsız, Faz 2 ile paralel yürür.
       yeniden kullanıyor). `FoliageRenderBinding` sway'li grupları paylaşılan
       GLTF materyalinin klonuna geçirir (fade ile tek program), shell'ler her
       karede `windSwayUniforms`'u yazar (runtime simülasyon saati → pause'da
-      durur; editör kendi saati). Açık: static mesh materyali, Foliage Type
-      Details / materyal editörü alanları.
+      durur; editör kendi saati).
+      Editör: Foliage Type Details'te "Wind Sway" anahtarı + Amplitude /
+      Height / Frequency (sınırlar `WIND_SWAY_LIMITS`); World Settings ve
+      World Environment Details'te "Wind" bölümü (Direction / Strength /
+      Gust; WES'te boş alan World Settings değerini gösterir).
+      `tests/smoke/wind-editor.spec.ts` World Settings + WES kayıt/undo'yu
+      doğrular; Foliage Type anahtarı smoke'suz (mevcut `updateType` yolu).
+      Açık: static mesh materyali ve materyal editörü alanı.
 - [ ] Etkileşim alanı: yakındaki araç/pawn konumları (küçük sabit dizi
       uniform) → yönlü eğilme ve kademeli geri dönüş.
 - [ ] Kalite profili: uzak mesafede salınımı kapat.

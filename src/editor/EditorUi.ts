@@ -1,5 +1,6 @@
 // Editor-only styles. Importing here (rather than statically in index.html)
 // keeps them in the dev-only editor chunk, out of the production game build.
+import { WIND_DEFAULTS } from "@engine/environment/wind";
 import type { QualityLevel } from "@engine/perf/qualityProfiles";
 import "./editorUi.css";
 import { renderWaterSystemDetails } from "./panels/details/waterSystemDetails";
@@ -4676,6 +4677,7 @@ export class EditorUi {
           this.detailsScale = scale;
         },
         authored: this.app.getWorldEnvironmentDefaults() ?? {},
+        fallbackWind: { ...WIND_DEFAULTS, ...this.app.getWorldSettings().wind },
         setWorldEnvironment: (patch, label) => this.app.setWorldEnvironment(patch, label),
         preview: this.app.getWorldEnvironmentPreview(),
         presentActors: this.app.getEnvironmentActorPresence(),

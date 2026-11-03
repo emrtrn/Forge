@@ -1,3 +1,4 @@
+import { WIND_SWAY_DEFAULTS, WIND_SWAY_LIMITS, type WindSwaySettings } from "@engine/environment/wind";
 import type { FoliageResourceUsage, ForgeFoliageTypeDef, LandscapeFoliageRule } from "@engine/scene/foliage";
 import type {
   FoliageTargetFilters,
@@ -107,6 +108,27 @@ function scaleRow(label: string, attr: string, vec: readonly number[]): string {
     </label>`;
 }
 
+/** Wind Sway toggle and, while on, its response rows (limits from the engine normalizer). */
+function renderSwayFields(type: ForgeFoliageTypeDef): string {
+  const sway = type.sway;
+  const row = (key: keyof WindSwaySettings, label: string, step: number, title: string): string => {
+    const [min, max] = WIND_SWAY_LIMITS[key];
+    return `
+    <label class="detail-row" title="${title}">
+      <span>${label}</span>
+      <input type="number" data-foliage-type-sway="${key}" min="${min}" max="${max}" step="${step}" value="${sway?.[key] ?? WIND_SWAY_DEFAULTS[key]}" />
+    </label>`;
+  };
+  return `
+      <label class="detail-row detail-toggle" title="Rüzgârda salınım (yalnızca görsel; gölge de salınır)">
+        <span>Wind Sway</span>
+        <input type="checkbox" ${sway ? "checked" : ""} data-foliage-type-sway-enabled />
+      </label>${sway ? `
+      ${row("amplitude", "Sway Amplitude", 0.01, "Rüzgâr gücü 1 iken tepenin metre cinsinden kayması")}
+      ${row("height", "Sway Height", 0.05, "Salınımın tam güce ulaştığı, pivotun üstündeki yükseklik (metre, ölçek 1); taban sabit kalır")}
+      ${row("frequency", "Sway Frequency", 0.05, "Titreşim sıklığı (Hz)")}` : ""}`;
+}
+
 // Persisted across the panel's frequent innerHTML re-renders (a native <details>
 // would otherwise collapse every time an edit re-renders the panel).
 let foliageAdvancedOpen = false;
@@ -149,6 +171,7 @@ function renderTypeDetails(
       ${boolField("Cast Shadow", "data-foliage-type-bool=\"castShadow\"", type.castShadow)}
       ${boolField("Receive Shadow", "data-foliage-type-bool=\"receiveShadow\"", type.receiveShadow)}
       ${boolField("Collision", "data-foliage-type-bool=\"collision\"", type.collision)}
+      ${renderSwayFields(type)}
       <details class="foliage-advanced" ${foliageAdvancedOpen ? "open" : ""}>
         <summary>Advanced — placement filters</summary>
         ${numField("Z Offset Min", "data-foliage-type-num=\"zOffsetMin\"", type.zOffsetMin, "0.05")}
@@ -530,6 +553,19 @@ function bindTypeDetails(options: FoliagePanelOptions): void {
       const key = input.dataset.foliageTypeNum as keyof ForgeFoliageTypeDef;
       const value = Number(input.value);
       if (Number.isFinite(value)) options.updateType({ [key]: value } as Partial<ForgeFoliageTypeDef>);
+    });
+  });
+
+  body.querySelector<HTMLInputElement>("[data-foliage-type-sway-enabled]")?.addEventListener("change", (event) => {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    options.updateType({ sway: checked ? { ...WIND_SWAY_DEFAULTS } : undefined } as Partial<ForgeFoliageTypeDef>);
+  });
+  body.querySelectorAll<HTMLInputElement>("[data-foliage-type-sway]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const current = options.activeType?.sway;
+      const value = Number(input.value);
+      if (!current || !Number.isFinite(value)) return;
+      options.updateType({ sway: { ...current, [input.dataset.foliageTypeSway as keyof WindSwaySettings]: value } });
     });
   });
 

@@ -1132,6 +1132,8 @@ import { registerDeformationFieldTests } from "../tests/engine/deformationField.
 import { registerDeformationPersistenceTests } from "../tests/engine/deformationPersistence.test";
 import { registerImpactEventTests } from "../tests/engine/impactEvents.test";
 import { registerFractureTests } from "../tests/engine/fracture.test";
+import { registerFractureAssetTests } from "../tests/engine/fractureAsset.test";
+import { registerFractureGeometryTests } from "../tests/engine/fractureGeometry.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
 import { registerTerrainRenderTests } from "../tests/engine/terrainRender.test";
 import { registerTerrainLayerArrayTests } from "../tests/engine/terrainLayerArray.test";
@@ -1312,6 +1314,8 @@ registerDeformationFieldTests(check);
 registerDeformationPersistenceTests(check);
 registerImpactEventTests(check);
 registerFractureTests(check);
+registerFractureAssetTests(check);
+registerFractureGeometryTests(check);
 registerTerrainLodTests(check);
 registerTerrainRenderTests(check);
 registerTerrainLayerArrayTests(check);

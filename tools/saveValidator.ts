@@ -67,6 +67,7 @@ import { compareWorldCellKeys, normalizeWorldCellDocument, normalizeWorldPartiti
 import { parseWorldCellKey } from "../engine/world/worldGrid";
 import { VIEW_DISTANCE_MIN, VIEW_DISTANCE_MAX } from "../engine/world/viewDistance";
 import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
+import { normalizeAssetFracture } from "../engine/physics/fracture/fractureTypes";
 import {
   normalizeVehicleAsset,
   normalizeVehicleAssetPath,
@@ -3545,6 +3546,26 @@ export function validateSaveVehiclePayload(value: unknown): {
   const vehicle = normalizeVehicleAsset(input.vehicle);
   if (!vehicle) throw new Error('vehicle must be an object with schema: 1 and type: "vehicle"');
   return { path, vehicle: vehicle as unknown as Record<string, unknown> };
+}
+
+/** Fracture saves reuse the runtime normalizer as their field allowlist. */
+export function validateSaveFracturePayload(value: unknown): {
+  path: string;
+  fracture: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("fracture payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const path = input.path;
+  if (typeof path !== "string" || path.startsWith("/") || path.includes("\\") ||
+      path.includes(":") || path.includes("\0") || path.split("/").includes("..") ||
+      !path.endsWith(".fracture.json")) {
+    throw new Error("fracture path must be public-root-relative and end with .fracture.json");
+  }
+  const fracture = normalizeAssetFracture(input.fracture);
+  if (!fracture) throw new Error('fracture must be an object with version 1 and source "voronoi"');
+  return { path, fracture: fracture as unknown as Record<string, unknown> };
 }
 
 export function validateSaveEffectPayload(value: unknown): {

@@ -5,8 +5,8 @@
 > bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
 > olayı. **Faz 6 kod tarafı ve GPU ölçümü tamam** (2026-11-03), görsel
 > kabul bekliyor. Etkileşim alanı ve static mesh sway Faz 6b'ye ayrıldı.
-> **Faz 2 tamam** (2026-11-03): Voronoi bake çekirdeği. Sıradaki: Faz 3
-> (fracture asset ve editör yüzeyi).
+> **Faz 2 tamam** (2026-11-03): Voronoi bake çekirdeği. **Faz 3 sürüyor:**
+> veri yüzeyi + three köprüsü tamam, Static Mesh Editor bölümü sırada.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -363,23 +363,47 @@ hedef değil). **Kapandı:** filtre yeşil, medyan 2.9–3.5 ms.
 
 ### Faz 3 — Fracture asset ve editör yüzeyi
 
-- [ ] `AssetFractureDef` + `normalizeAssetFracture` (`fractureTypes.ts`).
-- [ ] Yükleyici: `<Model>.fracture.json`, `assetCollisionLoader` desenini
-      izler.
-- [ ] `/__save-fracture` endpoint'i + `validateSaveFracturePayload`
+- [x] `AssetFractureDef` + `normalizeAssetFracture` (`fractureTypes.ts`).
+      Sidecar yalnız parametre tutar: `version`, `source`, `enabled`, `seed`,
+      `cellCount` (2–64), `density` (kg/m³; kütle = hacim × yoğunluk,
+      placement ölçeği³ runtime'da), `interiorMaterialId` (§4'teki slot adı
+      yerine manifest materyal id'si; null = dış materyal), `interiorUvScale`,
+      `breakImpulse`, `damageToBreak`, `chunkLifetime`, `maxActiveChunks`,
+      `sourceHash`. Sınırlar `FRACTURE_LIMITS` (editör kaydırıcılarının da
+      kaynağı). §4'teki `chunks` dizisi yok (K-02).
+- [x] Yükleyici: `<Model>.fracture.json`, `assetCollisionLoader` desenini
+      izler. `src/scene/assetFractureLoader.ts`: sidecar yok = kırılmaz
+      (null, uyarısız); bozuk = bir kez uyarı + null.
+- [x] `/__save-fracture` endpoint'i + `validateSaveFracturePayload`
       (normalizer'ı yeniden kullanır; 7. allowlist yüzeyi). `CLAUDE.md` kaydı.
-- [ ] Parça geometrisinin saklanması (K-02): önerilen v1, geometriyi
+      Yol: public-kök göreli, `..`/`\`/`:`/NUL yok, `.fracture.json` ile biter.
+      Editör: `src/editor/assetFractureStore.ts`.
+- [x] Parça geometrisinin saklanması (K-02): önerilen v1, geometriyi
       kaydetmeyip yüklemede `seed + kaynak mesh`'ten deterministik yeniden
       bake etmek ve `sourceHash` ile bayatlığı yakalamak.
+      Three köprüsü `engine/render-three/fractureGeometry.ts`:
+      `fractureSourceFromObject(gltf.scene)` modeli kök uzayında birleştirir
+      (düğüm dönüşümü + normal matrisi, aynalı düğümde sarım düzeltmesi,
+      materyal listesi), `fractureChunkGeometry` gruplu BufferGeometry kurar.
+      `fractureSourceHash` FNV-1a; editör modeli ile runtime `clone(true)`
+      aynı hash'i verir. Hash UVW eşlemesi uygulandıktan sonraki modelden
+      alınır (runtime da UVW'yi `gltf.scene`'e uygular) — Faz 4 bu sırayı
+      korumalı.
 - [ ] Static Mesh Editor'da "Fracture" bölümü: etkin, hücre sayısı, seed, iç
       yüz slotu, eşik, ömür, en fazla aktif parça. Parametre UI kurallarına
       uyar (kaydırıcı + kutu, TR ipucu / EN ad).
 - [ ] "Bake" düğmesi, patlatılmış önizleme kaydırıcısı, parça hull wire'ı
       (`collisionView` genişletmesi).
-- [ ] Doğrulama uyarıları: bayat bake, dışbükey olmayan mesh (v1'de
-      desteklenmez), aşırı parça sayısı.
-- [ ] droppedFields / serializationDrift testleri, maksimal sidecar
-      round-trip.
+- [~] Doğrulama uyarıları: bayat bake, dışbükey olmayan mesh (v1'de
+      desteklenmez), aşırı parça sayısı. `fractureWarnings` hazır (sıra:
+      not-baked/stale-bake, not-closed, not-convex, many-chunks >32,
+      self-weight `breakImpulse < 4·m·g·dt`, multi-material); editör
+      gösterimi açık.
+- [x] droppedFields / serializationDrift testleri, maksimal sidecar
+      round-trip. `tests/engine/fractureAsset.test.ts` (23): maksimal def
+      kendine normalize olur, kayıttan `dropped[]` boş geçer, bilinmeyen
+      alan raporlanır; hash sabitlenmiş değerle kilitli.
+      `tests/engine/fractureGeometry.test.ts` (4).
 
 Kabul: kaydet → yeniden aç round-trip, `dropped[]` boş, editör smoke'u
 (5273) bake + önizleme.
@@ -656,3 +680,7 @@ kullanıcı kararı).
   ve static mesh sway Faz 6b'ye ayrıldı; Faz 6 görsel kabul bekliyor.
 - 2026-11-03: **Faz 2 kapandı.** Voronoi bake çekirdeği Codex'e yaptırıldı
   (tasarım + inceleme Claude); 16 hücreli kutu ~3 ms.
+- 2026-11-03: Faz 3 veri yüzeyi (3a, Codex) + three köprüsü (3b, Claude):
+  sidecar tipleri/normalizer/uyarılar/hash, `/__save-fracture` (7. allowlist
+  yüzeyi), yükleyici + editör store'u, `fractureGeometry.ts`. Sırada editör
+  bölümü (3c).

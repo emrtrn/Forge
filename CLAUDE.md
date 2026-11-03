@@ -192,6 +192,18 @@ engine/editor.
   `engine/worldbuilder/regionProfile.ts`) are fork data with no save surface
   yet; one added later must reuse that normalizer.
 
+- **Seventh allowlist surface — `<Model>.fracture.json` fracture asset
+  (version 1):** `/__save-fracture` takes `{ path, fracture }` and validates
+  through `validateSaveFracturePayload`, reusing `normalizeAssetFracture`
+  (`engine/physics/fracture/fractureTypes.ts`) as the field allowlist; new
+  fields go in that normalizer (and its maximal test in
+  `tests/engine/fractureAsset.test.ts`) or saving drops them (reported in
+  `dropped[]`). The sidecar holds parameters only: chunks are re-baked
+  deterministically from `seed` + the source mesh on load, and `sourceHash`
+  (`fractureSourceHash` over `fractureSourceFromObject(gltf.scene)`, after the
+  asset UVW mapping) only tells the editor the bake is stale. A missing
+  sidecar means the asset never breaks.
+
 - **World Partition cell files:** with `worldSettings.partition.enabled`, the
   editor saves a level as a persistent level (`worldCells` index) plus
   `<Level>.cells/main/<x_z>.cell.json` (`engine/world/worldPartition.ts`).
@@ -274,6 +286,7 @@ engine/editor.
   `/__save-terrain`, `/__save-terrain-tile`, `/__save-terrain-global`,
   `/__save-world-cells`, `/__save-foliage-cells`,
   `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
+  `/__save-fracture`,
   `/__save-worldrecipe`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,

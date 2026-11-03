@@ -5,8 +5,8 @@
 > bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
 > olayı. **Faz 6 sürüyor** (2026-11-03): rüzgâr verisi, `windSway.ts`,
 > foliage type opt-in'i ve editör alanları (World Settings / WES Wind, Foliage
-> Type "Wind Sway") tamam; static mesh materyali, etkileşim alanı, kalite ve
-> GPU ölçümü açık. Faz 2 (Voronoi bake) başlamadı.
+> Type "Wind Sway") ve kalite mesafesi tamam; static mesh materyali,
+> etkileşim alanı ve GPU ölçümü açık. Faz 2 (Voronoi bake) başlamadı.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -453,7 +453,11 @@ Faz 1–5'ten bağımsız, Faz 2 ile paralel yürür.
       Açık: static mesh materyali ve materyal editörü alanı.
 - [ ] Etkileşim alanı: yakındaki araç/pawn konumları (küçük sabit dizi
       uniform) → yönlü eğilme ve kademeli geri dönüş.
-- [ ] Kalite profili: uzak mesafede salınımı kapat.
+- [x] Kalite profili: uzak mesafede salınımı kapat.
+      `QualitySettings.windSwayDistance` (ultra 150, high 100, medium 60,
+      low 30 m; `0` = sınırsız): son çeyrekte söner, ötesinde shader dalı
+      hesabı instance başına atlar (rüzgâr 0 iken de). Editör
+      `editorQuality` değerini kullanır.
 - [~] Test: shader enjeksiyonu derlenir, kapalıyken çıktı değişmez; GPU
       ölçümü (`gpuSweep`).
       `tests/engine/wind.test.ts` (5), `windSway.test.ts` (9): sway'siz type

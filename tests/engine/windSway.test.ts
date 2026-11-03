@@ -6,6 +6,7 @@ import { normalizeWindSwaySettings, resolveLevelWind, resolveWind, WIND_SWAY_DEF
 import { FoliageRenderBinding } from "../../engine/render-three/foliage";
 import { normalizeFoliageData, normalizeFoliageType } from "../../engine/scene/foliage";
 import { validateFoliageTypeAsset } from "../../tools/saveValidator";
+import { QUALITY_PROFILES } from "../../engine/perf/qualityProfiles";
 import {
   createWindSwayGlobalUniforms,
   createWindSwayMaterialUniforms,
@@ -173,5 +174,14 @@ export function registerWindSwayTests(check: Check): void {
     }
     binding.updateCulling(new Vector3(30, 0, 0), 1);
     assert.deepEqual((lit.uniforms.uFoliageFadeRange as { value: { toArray(): number[] } }).value.toArray(), [20, 40], "culling still drives the fade window");
+  });
+
+  check("wind sway: quality sets a sway distance per profile and the shader skips calm or far instances", () => {
+    const distances = (["ultra", "high", "medium", "low"] as const).map((level) => QUALITY_PROFILES[level].windSwayDistance);
+    assert.deepEqual(distances, [150, 100, 60, 30]);
+    const shader = shaderOf("physical");
+    patchWindSwayShader(shader, createWindSwayGlobalUniforms(), createWindSwayMaterialUniforms(settings));
+    const branch = shader.vertexShader.indexOf("if (uWindStrength > 0.0 && swayFade > 0.0) {");
+    assert.ok(branch > 0 && branch < shader.vertexShader.indexOf("float swayMask"), "the distance test runs before the sway maths");
   });
 }

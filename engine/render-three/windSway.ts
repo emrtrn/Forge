@@ -108,13 +108,15 @@ const VERTEX_MAIN = [
   "  mat4 swayModel = modelMatrix;",
   "#endif",
   "  vec3 swayOrigin = swayModel[3].xyz;",
+  "  float swayFade = uWindSwayFadeRange.y > 0.0",
+  "    ? 1.0 - smoothstep(uWindSwayFadeRange.x, uWindSwayFadeRange.y, distance(swayOrigin, uWindViewOrigin))",
+  "    : 1.0;",
+  // Uniform per instance, so calm air or a far instance really skips the work.
+  "  if (uWindStrength > 0.0 && swayFade > 0.0) {",
   // Height in metres at instance scale 1: modelMatrix carries the asset's own
   // node scale (a mesh authored in centimetres), the instance matrix does not.
   "  float swayMask = clamp(transformed.y * length(modelMatrix[1].xyz) / max(uSwayHeight, 1e-4), 0.0, 1.0);",
   "  swayMask *= swayMask;",
-  "  float swayFade = uWindSwayFadeRange.y > 0.0",
-  "    ? 1.0 - smoothstep(uWindSwayFadeRange.x, uWindSwayFadeRange.y, distance(swayOrigin, uWindViewOrigin))",
-  "    : 1.0;",
   "  float swayPhase = dot(swayOrigin.xz, vec2(0.37, 0.23));",
   "  float swayGustWave = 0.5 + 0.5 * sin(dot(swayOrigin.xz, uWindDirection) * 0.08 - uWindTime * 1.3);",
   "  float swayGust = uWindGust * swayGustWave * swayGustWave;",
@@ -125,6 +127,7 @@ const VERTEX_MAIN = [
   // World offset → mesh-local: transpose ÷ scale² inverts a rotation × uniform scale.
   "  mat3 swayBasis = mat3(swayModel);",
   "  transformed += (transpose(swayBasis) * swayWorld) / max(dot(swayBasis[0], swayBasis[0]), 1e-8);",
+  "  }",
   "}",
 ].join("\n");
 

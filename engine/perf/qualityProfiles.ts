@@ -76,6 +76,11 @@ export interface QualitySettings {
   /** Foliage cull-distance multiplier (smaller = cull nearer). */
   foliageCullDistanceScale: number;
   /**
+   * Wind sway fades out over the last quarter of this distance in metres and
+   * is skipped beyond it (Faz 6); `0` sways at every distance.
+   */
+  windSwayDistance: number;
+  /**
    * Procedural grass/foliage ring density (`0..1` keep fraction of each rule's
    * candidates, OPEN_WORLD_PLAN Faz 6). Painted foliage is unaffected.
    */
@@ -144,6 +149,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowCascadeStagger: true,
     particleDensity: 1.0,
     foliageCullDistanceScale: 1.0,
+    windSwayDistance: 150,
     grassDensity: 1.0,
     terrainTrackDetailLevels: 2,
     terrainSelfShadow: true,
@@ -170,6 +176,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowCascadeStagger: false,
     particleDensity: 0.8,
     foliageCullDistanceScale: 0.85,
+    windSwayDistance: 100,
     grassDensity: 0.8,
     terrainTrackDetailLevels: 2,
     terrainSelfShadow: true,
@@ -196,6 +203,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowCascadeStagger: false,
     particleDensity: 0.55,
     foliageCullDistanceScale: 0.65,
+    windSwayDistance: 60,
     grassDensity: 0.55,
     terrainTrackDetailLevels: 1,
     terrainSelfShadow: false,
@@ -222,6 +230,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     shadowCascadeStagger: false,
     particleDensity: 0.3,
     foliageCullDistanceScale: 0.45,
+    windSwayDistance: 30,
     grassDensity: 0.3,
     terrainTrackDetailLevels: 0,
     terrainSelfShadow: false,
@@ -371,6 +380,7 @@ function normalizeCustomSettings(value: unknown): Partial<QualitySettings> | nul
   bool("shadowCascadeStagger");
   num("particleDensity");
   num("foliageCullDistanceScale");
+  num("windSwayDistance");
   num("grassDensity");
   num("terrainTrackDetailLevels");
   bool("terrainSelfShadow");

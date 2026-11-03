@@ -13589,7 +13589,7 @@ export class SceneApp {
     if (!binding) return;
     this.windSwaySeconds += deltaSeconds;
     const wind = resolveLevelWind(this.layout, this.worldEnvironmentState());
-    updateWindSwayUniforms(binding.windSwayUniforms, wind, this.windSwaySeconds, viewOrigin);
+    updateWindSwayUniforms(binding.windSwayUniforms, wind, this.windSwaySeconds, viewOrigin, this.editorQuality.windSwayDistance);
   }
 
   /** The level's World Environment defaults, or null when there is none (or it is hidden). */

@@ -6611,7 +6611,13 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     const binding = this.foliageBinding;
     if (!binding) return;
     const wind = resolveLevelWind(this.layout, this.worldEnvironmentState());
-    updateWindSwayUniforms(binding.windSwayUniforms, wind, this.simulationClockMs / 1000, this.camera.position);
+    updateWindSwayUniforms(
+      binding.windSwayUniforms,
+      wind,
+      this.simulationClockMs / 1000,
+      this.camera.position,
+      this.qualitySettings.windSwayDistance,
+    );
   }
 
   /** The live World Environment state from the Play clock; null (authored look) when its module is off. */

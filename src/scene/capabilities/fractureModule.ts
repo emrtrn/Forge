@@ -117,6 +117,8 @@ interface DamagedSource {
   readonly present: boolean[];
   /** Chunk index → its static body id while standing. */
   readonly staticIds: (string | null)[];
+  /** Module clock of the last release; standing chunks ignore hits until the episode is over. */
+  lastHitAt: number;
 }
 
 interface StaticChunk {
@@ -124,6 +126,11 @@ interface StaticChunk {
   readonly chunkIndex: number;
   readonly mesh: Mesh;
 }
+
+/** Every chunk body id (falling or standing) starts with this. */
+const FRACTURE_CHUNK_PREFIX = "fracture:";
+/** Seconds after a release during which a partly broken source takes no further hit. */
+const HIT_EPISODE_SECONDS = 0.25;
 
 /** Crumble effects one break may spawn; the rest of the small chunks just vanish. */
 const MAX_CRUMBLE_EFFECTS = 6;
@@ -418,6 +425,7 @@ export function createFractureModule(): CapabilityModule {
       anchored,
       present: specs.map(() => true),
       staticIds: specs.map(() => null),
+      lastHitAt: clock,
     };
     const hit = impact.point ?? meanPosition(specs) ?? pose.position;
     const released = releaseAround(state, specs, hit, impact.impulse);
@@ -669,8 +677,13 @@ export function createFractureModule(): CapabilityModule {
           const standing = staticChunks.get(entityId);
           if (standing) {
             // A standing chunk of a partly broken source: the same rule, from this hit.
+            // Debris does not bring the structure down (it lands on it at full
+            // weight, often wedged against it), and the frames that follow a
+            // hit are the same collision going on, not a new one.
             const state = damaged.get(standing.sourceId);
-            if (!state || impact.impulse < state.threshold) continue;
+            if (!state || impact.impulse < state.threshold || other.startsWith(FRACTURE_CHUNK_PREFIX)) continue;
+            if (clock - state.lastHitAt < HIT_EPISODE_SECONDS) continue;
+            state.lastHitAt = clock;
             hitDamaged(standing.sourceId, impact.point ?? null, impact.impulse);
           } else {
             if (!registry.has(entityId) || !registry.applyImpact(entityId, impact.impulse)) continue;

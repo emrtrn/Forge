@@ -416,7 +416,9 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
       hitSource(shell, module, standing, [0, 0.5, 0.5], 100);
       assert.equal(commands.snapshot().staticChunks, statics.length);
 
-      // A second hard hit low on the side frees more, and what it cut off falls with it.
+      // A second hard hit low on the side, once the first collision is over,
+      // frees more, and what it cut off falls with it.
+      for (let frame = 0; frame < 20; frame += 1) module.update!(0.016);
       const before = shell.added.length;
       hitSource(shell, module, standing, [0.5, 0.35, 0], 1000);
       const freed = shell.removed.filter((id) => id.includes(":static:"));
@@ -429,6 +431,29 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
       assert.equal(commands.breakEntity(SOURCE), true);
       assert.equal(commands.snapshot().staticChunks, 0);
       assert.equal(commands.breakEntity(SOURCE), false, "nothing left to break");
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
+  });
+
+  await check("fracture module: standing chunks ignore debris and the frames of the same collision", async () => {
+    await withLevel(async ({ commands, shell, module }) => {
+      hitSource(shell, module, SOURCE, [0, 0.95, 0.5], 1000);
+      const standing = commands.snapshot().staticChunks;
+      const target = shell.added.filter(isStatic).at(-1)!.id;
+      // The same collision a frame later: still one hit.
+      hitSource(shell, module, target, [0.5, 0.35, 0], 1000);
+      assert.equal(commands.snapshot().staticChunks, standing);
+      // Falling chunks land on the structure hard, but debris never breaks it.
+      for (let frame = 0; frame < 20; frame += 1) module.update!(0.016);
+      const debris = shell.added.find((entity) => !isStatic(entity))!.id;
+      const stillStanding = () => shell.added.filter(isStatic).map((entity) => entity.id)
+        .filter((id) => !shell.removed.includes(id));
+      const victim = stillStanding()[0]!;
+      shell.impacts.push({ a: debris, b: victim, point: [0, 0.2, 0], normal: [0, 0, 1], impulse: 100000, relativeSpeed: 8 });
+      module.update!(0.016);
+      assert.equal(commands.snapshot().staticChunks, standing, "debris alone breaks nothing");
+      // A new hit from a real body, after the episode, does break more.
+      hitSource(shell, module, victim, [0, 0.2, 0], 100000);
+      assert.ok(commands.snapshot().staticChunks < standing);
     }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
   });
 

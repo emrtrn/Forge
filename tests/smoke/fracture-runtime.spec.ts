@@ -161,11 +161,7 @@ test("fracture runtime: a Fracturable actor breaks where it is, not where it was
   expect(errors).toEqual([]);
 });
 
-// OPEN (2026-11-03, Faz 4c-3): World Support anchors 11 of the wall's 24
-// chunks, yet all 24 fall — suspected: the car keeps driving into the standing
-// chunks (every hit opens a new radius) or falling chunks chain-break them.
-// Fixme until 4c-3 settles it; see DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 4c-3.
-test.fixme("fracture runtime: an anchored wall breaks around the hit and the rest stands", async ({ page }) => {
+test("fracture runtime: an anchored wall breaks around the hit and the rest stands", async ({ page }) => {
   // Faz 4c: the test wall's sidecar is `support.mode: "anchored"` with World
   // Support. The crates and posts are taken off the car's path, so it drives
   // straight into the wall: chunks around the hit fall, the chunks still

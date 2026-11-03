@@ -628,14 +628,14 @@ Dilimler:
       alanlar `FRACTURE_LIMITS`'e girmez: o tablo üst düzey alan sayılıyor).
       Testler: `fractureSupport.test.ts` (8; iç yüz alanı = bağ alanları
       toplamı), `fractureAsset.test.ts` (maksimal + support normalizer).
-- [ ] 4c-3 runtime: `support.mode: "anchored"` nesne ilk darbeye kadar bugünkü
+- [x] 4c-3 runtime: `support.mode: "anchored"` nesne ilk darbeye kadar bugünkü
       gibi tek gövde; ilk darbede kaynak, parçalarından statik convex
       gövdelere (render: parça mesh'leri) dönüşür; yarıçap içindekiler +
       desteksiz adalar dinamik doğar. Sonraki darbeler kalan statik parçalara
       aynı kuralı uygular. World Support yükleme anında fizik sorgusuyla.
       Durum: `intact → damaged (bit maskesi) → fractured`; Faz 5'in durum
       modeliyle aynı.
-      **4c-3 durumu (2026-11-03, YARIM — buradan devam):** kod + birim testleri
+      **4c-3 kapandı (2026-11-03):** kod + birim testleri
       main'de. `fractureModule`: `support.mode: "anchored"` ve bir çarpma
       (script değil) → `breakAnchored`: bütün parçalar `planAll` ile pozlanır,
       anchor = sidecar kutuları (`anchoredChunks`) + World Support
@@ -653,15 +653,14 @@ Dilimler:
       (anchored 5 kontrol), `physicsImpacts.test.ts` "physics world support".
       Test verisi: `SM_BreakableWall.fracture.json` anchored + worldSupport,
       yarıçap 0.8 + 0.0001·J, en çok 2 m.
-      **AÇIK SORUN:** smoke `fracture-runtime.spec.ts` "anchored wall"
-      (`test.fixme`): World Support 24 parçanın 11'ini anchor buluyor ama
-      araç çarpınca 24'ü de düşüyor. Şüphe: araç ilk kırılmadan sonra ayakta
-      kalan parçalara art arda çarpıyor (her `hitDamaged` yeni yarıçap
-      açar) ya da düşen parçalar ayaktakileri zincirleme kırıyor. Sıradaki
-      adım: `hitDamaged`'i kaynak başına kısa bir bekleme süresiyle sınırla
-      ve/veya yalnız ilk çarpanın darbesi saysın (düşen parça
-      `fracture:` id'li çarpanları yok say); smoke'ta kaç vuruş olduğunu
-      `breaks`/log ile say; sonra `fixme`'yi kaldır.
+      **Smoke'un bulduğu (ölçüldü):** ilk darbe 20 431 N·s → 12 düştü / 12
+      ayakta; araç aynı çarpışmanın sonraki karelerinde tekrar vurdu (10 371)
+      ve düşen ~500 kg'lık bir parça ayaktakilere 26 410 N·s ile çarptı →
+      hepsi düştü. Çözüm: ayakta parçaya `fracture:` id'li (enkaz) çarpma
+      sayılmaz; kaynak başına `HIT_EPISODE_SECONDS` (0.25 s) içinde ikinci
+      vuruş yok sayılır. Smoke artık: 12 düşer, 12 ayakta, 3 s sonra da
+      ayakta. Sadeleştirme: enkaz yapıyı yıkmaz (ağır enkazın üstteki
+      parçaları ezmesi istenirse ayrı bir eşik gerekir).
 - [ ] 4c-4 editör: Static Mesh Editor'da Support bölümü (mode, anchor kutuları
       + "alttan %N" kısayolu, World Support, yarıçap), önizlemede anchor
       parçaları farklı renk, grafik kenarları tel; "Simulate hit" düğmesi
@@ -963,3 +962,7 @@ kullanıcı kararı).
 - 2026-11-03: Faz 4c-3 YARIM bırakıldı (kullanıcı başka oturumu bitirmek
   istedi): runtime + birim testleri main'de, duvar smoke'u `fixme` — açık
   sorun ve sıradaki adım Faz 4c-3 notunda.
+- 2026-11-03: **Faz 4c-3 kapandı**: tüm düşüş, aracın aynı çarpışmadaki
+  tekrar vuruşu ve enkazın ayaktaki parçalara çarpmasıydı; enkaz sayılmıyor,
+  kaynak başına 0.25 s vuruş penceresi. Anchored duvar smoke'u açıldı.
+  Sırada 4c-4 (editör Support bölümü).

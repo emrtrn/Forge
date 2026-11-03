@@ -10,6 +10,7 @@ export interface TerrainPuddleGeometry {
   positions: Float32Array;
   depths: Float32Array;
   area: number;
+  coverage?: { region: TerrainPuddleRegion; bed: Float32Array; triangles: Uint8Array; cells: number };
 }
 type Vertex = { x: number; z: number; h: number };
 const empty = (status: TerrainPuddleGeometry["status"]): TerrainPuddleGeometry =>
@@ -20,6 +21,12 @@ const empty = (status: TerrainPuddleGeometry["status"]): TerrainPuddleGeometry =
  * An open boundary or unknown neighbour is reported, never silently flooded.
  * Call only after bed/paint/level revisions, not once per animation frame. */
 export function buildTerrainPuddle(region: TerrainPuddleRegion, heightAt: (x: number, z: number) => number | null): TerrainPuddleGeometry {
+  const job = terrainPuddleSteps(region, heightAt);
+  let step = job.next(); while (!step.done) step = job.next(); return step.value;
+}
+
+/** Batches sampling, adjacency and flood work for a cooperative runtime owner. */
+export function* terrainPuddleSteps(region: TerrainPuddleRegion, heightAt: (x: number, z: number) => number | null): Generator<void, TerrainPuddleGeometry> {
   const { minX, minZ, size, cellSize, level, seed } = region;
   const n = Math.round(size / cellSize);
   if (![minX, minZ, size, cellSize, level, ...seed].every(Number.isFinite)
@@ -33,12 +40,14 @@ export function buildTerrainPuddle(region: TerrainPuddleRegion, heightAt: (x: nu
     const wx = minX + x * cellSize, wz = minZ + z * cellSize;
     const h = heightAt(wx, wz);
     vertices.push({ x: wx, z: wz, h: h === null || !Number.isFinite(h) ? NaN : h });
+    if (x === n) yield;
   }
   // Diagonal b--c, same topology the prototype bed renders. Winding faces +Y.
   const triangles: number[][] = [];
   for (let z = 0; z < n; z++) for (let x = 0; x < n; x++) {
     const a = z * (n + 1) + x, b = a + 1, c = a + n + 1, d = c + 1;
     triangles.push([a, c, b], [b, c, d]);
+    if (x === n - 1) yield;
   }
   const start = (Math.floor(sz) * n + Math.floor(sx)) * 2 + ((sx % 1) + (sz % 1) > 1 ? 1 : 0);
   const first = triangles[start]!.map(i => vertices[i]!);
@@ -50,16 +59,19 @@ export function buildTerrainPuddle(region: TerrainPuddleRegion, heightAt: (x: nu
   if (seedBed >= level) return empty("dry");
   const edges = new Map<string, number[]>();
   const key = (a: number, b: number) => a < b ? `${a}:${b}` : `${b}:${a}`;
-  triangles.forEach((t, index) => {
+  for (let index = 0; index < triangles.length; index++) {
+    const t = triangles[index]!;
     for (let i = 0; i < 3; i++) {
       const k = key(t[i]!, t[(i + 1) % 3]!);
       const list = edges.get(k);
       if (list) list.push(index); else edges.set(k, [index]);
     }
-  });
+    if (index % 128 === 0) yield;
+  }
   const queue = [start], visited = new Set(queue);
   const positions: number[] = [], depths: number[] = [];
   let area = 0;
+  const faces = new Uint8Array(n * n);
   for (let cursor = 0; cursor < queue.length; cursor++) {
     const t = triangles[queue[cursor]!]!;
     if (t.some(i => !Number.isFinite(vertices[i]!.h))) return empty("missing-terrain");
@@ -71,6 +83,8 @@ export function buildTerrainPuddle(region: TerrainPuddleRegion, heightAt: (x: nu
       for (const next of neighbours) if (!visited.has(next)) { visited.add(next); queue.push(next); }
     }
     const polygon: Vertex[] = [];
+    const face = queue[cursor]!;
+    faces[Math.floor(face / 2)]! |= 1 << (face % 2);
     for (let i = 0; i < 3; i++) {
       const a = vertices[t[i]!]!, b = vertices[t[(i + 1) % 3]!]!;
       if (a.h < level) polygon.push(a);
@@ -86,6 +100,22 @@ export function buildTerrainPuddle(region: TerrainPuddleRegion, heightAt: (x: nu
       area += triangleArea;
       for (const v of [a, b, c]) { positions.push(v.x, level, v.z); depths.push(Math.max(0, level - v.h)); }
     }
+    if (cursor % 128 === 0) yield;
   }
-  return { status: "ready", positions: new Float32Array(positions), depths: new Float32Array(depths), area };
+  return { status: "ready", positions: new Float32Array(positions), depths: new Float32Array(depths), area,
+    coverage: { region, bed: Float32Array.from(vertices, v => v.h), triangles: faces, cells: n } };
+}
+
+/** Exact triangle query against the published connected surface, for water contacts. */
+export function samplePuddleWater(data: TerrainPuddleGeometry, x: number, z: number): { level: number; bed: number; depth: number } | null {
+  const c = data.coverage; if (!c) return null;
+  const { region: r, cells: n, bed } = c;
+  const gx = (x - r.minX) / r.cellSize, gz = (z - r.minZ) / r.cellSize;
+  if (!(gx >= 0 && gz >= 0 && gx < n && gz < n)) return null;
+  const ix = Math.floor(gx), iz = Math.floor(gz), fx = gx - ix, fz = gz - iz;
+  const face = fx + fz <= 1 ? 1 : 2;
+  if (!(c.triangles[iz * n + ix]! & face)) return null;
+  const a = iz * (n + 1) + ix, h = face === 1 ? bed[a]! * (1 - fx - fz) + bed[a + 1]! * fx + bed[a + n + 1]! * fz
+    : bed[a + n + 2]! * (fx + fz - 1) + bed[a + n + 1]! * (1 - fx) + bed[a + 1]! * (1 - fz);
+  return h < r.level ? { level: r.level, bed: h, depth: r.level - h } : null;
 }

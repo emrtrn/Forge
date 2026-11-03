@@ -2105,6 +2105,7 @@ export class SceneApp {
       const shadowLights = !this.renderer.shadowMap.enabled ? []
         : this.sunCascades?.isActive ? this.sunCascades.cascadeLights
           : this.sun?.castShadow ? [this.sun] : [];
+      this.puddles?.update();
       for (const object of this.landscapeObjects) updateLandscapeLod(object, this.editorViewportCamera(), shadowLights);
       advanceForgeMaterialAnimations(now / 1000);
 

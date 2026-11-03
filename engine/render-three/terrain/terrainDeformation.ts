@@ -69,6 +69,13 @@ export interface TerrainDeformationStats {
   readonly packMs: number;
 }
 
+export interface TerrainBedBounds { minX: number; minZ: number; maxX: number; maxZ: number }
+/** A coherent copy of exactly the filtered/quantized depth the GPU samples. */
+export interface TerrainRenderedBed {
+  revision: number; window: TerrainDeformationWindow | null; cellSize: number;
+  offsetAt(x: number, z: number): number;
+}
+
 export class TerrainDeformationTexture {
   readonly water = new TerrainWater();
   readonly uniforms: TerrainUniforms = {
@@ -85,6 +92,43 @@ export class TerrainDeformationTexture {
   private trail: TerrainWetTrail | null = null;
   private lastStats: TerrainDeformationStats = { uploadedTexels: 0, packMs: 0 };
   private windowRevision = 0;
+  private depthRevision = 0;
+  private readonly bedChanges: { revision: number; bounds: TerrainBedBounds | null }[] = [];
+  private packedBedBounds: TerrainBedBounds | null = null;
+
+  get bedRevision(): number { return this.depthRevision; }
+  /** undefined: unchanged; null: reset/window change or history no longer held. No dirty queue is consumed. */
+  bedChangesSince(revision: number): TerrainBedBounds | null | undefined {
+    if (revision === this.depthRevision) return undefined;
+    if (!this.bedChanges.length || revision < this.bedChanges[0]!.revision - 1) return null;
+    let result: TerrainBedBounds | undefined;
+    for (const change of this.bedChanges) if (change.revision > revision) {
+      if (!change.bounds) return null;
+      const b = change.bounds;
+      result = result ? { minX: Math.min(result.minX, b.minX), minZ: Math.min(result.minZ, b.minZ), maxX: Math.max(result.maxX, b.maxX), maxZ: Math.max(result.maxZ, b.maxZ) } : { ...b };
+    }
+    return result;
+  }
+  captureBed(): TerrainRenderedBed {
+    const window = this.trackWindow(), texture = this.texture, revision = this.depthRevision;
+    if (!window || !texture || !this.field) return { revision, window: null, cellSize: 1, offsetAt: () => 0 };
+    const size = this.field.cellsPerSide, cellSize = this.field.cellSize;
+    if (size > 1024) throw new Error("Puddle deformation snapshot exceeds 1024 squared cells");
+    const bytes = texture.image.data as Uint8Array, depth = new Uint8Array(size * size);
+    for (let i = 0; i < depth.length; i++) depth[i] = bytes[i * 4]!;
+    const mod = (v: number) => ((v % size) + size) % size;
+    const at = (x: number, z: number) => depth[mod(z) * size + mod(x)]! * TERRAIN_DEFORMATION_DEPTH_RANGE / 255;
+    const sample = (x: number, z: number) => {
+      const gx = x / cellSize - .5, gz = z / cellSize - .5, ix = Math.floor(gx), iz = Math.floor(gz), fx = gx - ix, fz = gz - iz;
+      return (at(ix, iz) * (1 - fx) + at(ix + 1, iz) * fx) * (1 - fz) + (at(ix, iz + 1) * (1 - fx) + at(ix + 1, iz + 1) * fx) * fz;
+    };
+    return { revision, window, cellSize, offsetAt: (x, z) => terrainDeformationDisplacement(sample, window, x, z).offset };
+  }
+  private recordBed(bounds: TerrainBedBounds | null): void {
+    this.bedChanges.push({ revision: ++this.depthRevision, bounds });
+    if (this.bedChanges.length > 32) this.bedChanges.shift();
+    this.packedBedBounds = null;
+  }
 
   /**
    * Bumps whenever {@link trackWindow} changes (attach, detach, recentre), so
@@ -129,6 +173,7 @@ export class TerrainDeformationTexture {
     this.texture.needsUpdate = true;
     this.syncWindow();
     this.uniforms.uDeformActive!.value = 1;
+    this.recordBed(null);
   }
 
   /** Copies changed cells (the field's and the trail's `takeDirty()` rectangles) and the window position. */
@@ -152,7 +197,10 @@ export class TerrainDeformationTexture {
         texels += width * height;
       }
     }
+    const oldWindow = this.windowRevision;
     this.syncWindow();
+    if (oldWindow !== this.windowRevision) this.recordBed(null);
+    else if (this.packedBedBounds) this.recordBed(this.packedBedBounds);
     this.lastStats = { uploadedTexels: texels, packMs: performance.now() - started };
   }
 
@@ -168,6 +216,7 @@ export class TerrainDeformationTexture {
     this.trail = null;
     this.uniforms.uDeformActive!.value = 0;
     this.water.reset();
+    this.recordBed(null);
   }
 
   stats(): TerrainDeformationStats {
@@ -199,7 +248,17 @@ export class TerrainDeformationTexture {
           disturbance += field.disturbance[neighbour]! * weight;
           if (wet) wetness += wet[neighbour]! * weight;
         }
-        data[index * 4] = Math.min(255, Math.round(depth * scale / 16));
+        const nextDepth = Math.min(255, Math.round(depth * scale / 16));
+        if (data[index * 4] !== nextDepth) {
+          const [ox, oz] = field.originCell;
+          const wx = (ox + ((x - ox) % size + size) % size) * field.cellSize;
+          const wz = (oz + ((y - oz) % size + size) % size) * field.cellSize;
+          const margin = TERRAIN_DEFORMATION_BERM_RADIUS + field.cellSize * 2;
+          const b = this.packedBedBounds ??= { minX: wx - margin, minZ: wz - margin, maxX: wx + margin, maxZ: wz + margin };
+          b.minX = Math.min(b.minX, wx - margin); b.minZ = Math.min(b.minZ, wz - margin);
+          b.maxX = Math.max(b.maxX, wx + margin); b.maxZ = Math.max(b.maxZ, wz + margin);
+        }
+        data[index * 4] = nextDepth;
         data[index * 4 + 1] = Math.round(disturbance / 16);
         data[index * 4 + 2] = Math.round(wetness / 16);
       }
@@ -435,6 +494,9 @@ export const TERRAIN_DEFORMATION_COLOR = /* glsl */ `
       * smoothstep(0.94, 0.995, forgeDeformedWorldNormal(forgeBaseWorld).y)
       * (1.0 - smoothstep(0.002, 0.012, vForgeDeformBerm));
     forgePuddle *= forgePuddlePatch(vForgeDeformWorld, forgeDeform.x) * forgeShorePuddleFade;
+    // Authored connected Puddles own their water surface; keep the muddy bed
+    // shading but do not draw a second reflective film underneath it.
+    forgePuddle *= 1.0 - forgeAuthoredPuddleSubmerged();
     forgeColor = mix(forgeColor, vec3(0.025, 0.029, 0.027), forgePuddle * 0.6);
   }
 `;

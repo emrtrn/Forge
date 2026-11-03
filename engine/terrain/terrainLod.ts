@@ -53,6 +53,8 @@ export interface TerrainLodDetail {
   readonly levels: number;
   /** Metres the drawn surface may move off the authored heights here (track depth, berm); widens node boxes. */
   readonly margin?: number;
+  /** Small water beds use a fixed topology so CPU clipping and the rendered mud agree. */
+  readonly fixed?: readonly { minX: number; minZ: number; maxX: number; maxZ: number; levels: number }[];
 }
 
 /** Deepest track refinement: 1 m tiles reach 0.125 m, the deformation field's cell. */
@@ -216,12 +218,19 @@ export class TerrainLodSelector {
     const inDetail = (box: TerrainLodBox): boolean => detailLevels > 0
       && box.minX < detail!.maxX && box.maxX > detail!.minX && box.minZ < detail!.maxZ && box.maxZ > detail!.minZ;
     const range = (level: number): number => level >= 0 ? this.ranges[level]! : range0 * 2 ** level;
+    const fixedDepth = (box: TerrainLodBox): number => {
+      let depth = -1;
+      for (const fixed of detail?.fixed ?? []) if (box.minX < fixed.maxX && box.maxX > fixed.minX && box.minZ < fixed.maxZ && box.maxZ > fixed.minZ) {
+        depth = Math.max(depth, Math.max(0, Math.min(TERRAIN_LOD_MAX_DETAIL_LEVELS, Math.floor(fixed.levels))));
+      }
+      return depth;
+    };
     const emit = (level: number, ix: number, iz: number, box: TerrainLodBox, inRange: boolean): void => {
-      const needsTileSlot = level <= tileLevel && (level < tileLevel || inRange);
+      const needsTileSlot = fixedDepth(box) >= 0 || level <= tileLevel && (level < tileLevel || inRange);
       const size = leafSize * 2 ** level;
       nodes.push({
         level, ix, iz, offsetX: box.minX, offsetZ: box.minZ, size, box,
-        morphRange: level >= 0 ? this.morphRanges[level]! : terrainLodDetailMorphRange(this.settings, level, detailLevels),
+        morphRange: fixedDepth(box) >= 0 ? [1e20, 2e20] : level >= 0 ? this.morphRanges[level]! : terrainLodDetailMorphRange(this.settings, level, detailLevels),
         inRange, needsTileSlot,
         tileKey: needsTileSlot ? tileKey(Math.floor(ix * size / tileSize), Math.floor(iz * size / tileSize)) : null,
       });
@@ -231,13 +240,14 @@ export class TerrainLodSelector {
       if (ix * size >= width || iz * size >= depth) return;
       let box = this.nodeBox(level, ix, iz);
       const refinable = inDetail(box);
-      if (refinable && margin > 0) box = { ...box, minY: box.minY - margin, maxY: box.maxY + margin };
+      const fixed = fixedDepth(box);
+      if ((refinable || fixed >= 0) && margin > 0) box = { ...box, minY: box.minY - margin, maxY: box.maxY + margin };
       if (!visible(box)) return;
       const distanceSquared = boxDistanceSquared(box, camera);
       const inRange = distanceSquared <= range(level) ** 2;
       // A detail child that misses the rectangle stops at its own level.
-      const finest = level <= (refinable ? -detailLevels : 0);
-      if (finest || distanceSquared > range(level - 1) ** 2) {
+      const finest = level <= -(fixed >= 0 ? fixed : refinable ? detailLevels : 0);
+      if (finest || (fixed < 0 && distanceSquared > range(level - 1) ** 2)) {
         // Roots always cover the horizon, even outside the finite top range.
         emit(level, ix, iz, box, level === levels - 1 || inRange);
         return;

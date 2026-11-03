@@ -15,6 +15,12 @@ import { PuddlePlanarReflections } from "../../engine/render-three/puddlePlanarR
 import { TerrainPuddleSurface } from "../../engine/render-three/terrain/terrainPuddleSurface";
 import { WaterReflectionRegistry } from "../../engine/render-three/waterReflectionRegistry";
 import { NEW_PUDDLE_APPEARANCE, PUDDLE_APPEARANCE } from "../../engine/scene/puddleWater";
+import { DeformationField } from "../../engine/scene/deformationField";
+import { TerrainDeformationTexture } from "../../engine/render-three/terrain/terrainDeformation";
+import { TerrainRenderer } from "../../engine/render-three/terrain/terrainRenderer";
+import { worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
+import { Vector3 } from "three";
+import { puddleTerrainDetails, puddleTerrainRevision } from "../../engine/render-three/terrain/terrainPuddleCoverage";
 
 const body = (): PuddleWaterBody => ({ schema: 1, kind: "puddle", coordinateSpace: "world", id: "puddle-1", name: "Courtyard",
   terrainRef: "terrain", seed: [30, 0], bounds: { min: [24, -6], max: [36, 6] }, surfaceLevel: 10.2,
@@ -149,5 +155,78 @@ export async function registerPuddlePersistenceTests(check: (label: string, fn: 
       assert.equal(registry.size, 0);
     } finally { preview.dispose(); reflections.dispose(); }
     assert.equal(registry.size, 0);
+  });
+  await check("puddle live bed: filtered immutable snapshots track only depth revisions without consuming wheel dirty rectangles", async () => {
+    const field = new DeformationField({ windowSize: 16, cellSize: .125 }), texture = new TerrainDeformationTexture();
+    texture.attach(field); field.takeDirty();
+    const before = texture.captureBed();
+    field.stampWheel({ from: [0, -1], to: [0, 1], width: .5, contactLength: .5, targetDepth: .2, compaction: 1, disturbance: 255 });
+    texture.captureBed(); const dirty = field.takeDirty(); assert.ok(dirty.length, "readers leave the upload queue intact");
+    texture.update(dirty); const after = texture.captureBed();
+    assert.equal(before.offsetAt(0, 0), 0); assert.ok(after.offsetAt(0, 0) < -.1);
+    const changes = texture.bedChangesSince(before.revision)!; assert.ok(changes && changes.minX < 0 && changes.maxX > 0);
+    const revision = texture.bedRevision; texture.update([]); assert.equal(texture.bedRevision, revision);
+    field.recenter(2, 0); texture.update(field.takeDirty()); assert.equal(texture.bedChangesSince(revision), null);
+    texture.detach(); assert.equal(texture.captureBed().offsetAt(0, 0), 0); texture.dispose();
+  });
+  await check("puddle live bed: the existing fill follows new wheel hollows at fixed water level, pins matching terrain detail and resets", async () => {
+    const doc = createLakeFixture(), field = new DeformationField({ windowSize: 16, cellSize: .125 }); field.recenter(30, 0);
+    const texture = new TerrainDeformationTexture(); texture.attach(field); field.takeDirty();
+    const scene = new Scene(), controller = new PuddleWaterController({ scene, deformation: texture, detailLevels: () => 2,
+      document: () => doc, load: async () => { throw new Error("deformation must reuse resident terrain"); } });
+    const terrain = new TerrainRenderer(worldTerrainRenderSource(doc.def, doc.tiles), { terrainRef: "terrain", origin: new Vector3(...doc.def.origin),
+      viewMode: "lit", activeLayer: 0, layers: [], deformation: texture, uploadsPerFrame: 4, slotCapacity: 4 });
+    scene.add(terrain.mesh);
+    try {
+      const source = body(); await controller.rebuild([source]);
+      const initial = controller.results.get(source.id)!; assert.equal(initial.spacing, .25);
+      const activeSamplers = terrain.litFragmentSamplers;
+      assert.equal(controller.sample("terrain", 30.5, 0), null);
+      const camera = new PerspectiveCamera(60, 1, .1, 500); camera.position.set(31, 14, 6); camera.lookAt(30, 10, 0); camera.updateMatrixWorld(true);
+      terrain.updateLod(camera);
+      const a = terrain.mesh.geometry.getAttribute("terrainNodeA"), b = terrain.mesh.geometry.getAttribute("terrainNodeB");
+      let fixed = 0;
+      for (let i = 0; i < terrain.mesh.geometry.instanceCount; i++) if (b.getZ(i) > 1e19) { fixed++; assert.equal(a.getZ(i) / 32, .25); }
+      assert.ok(fixed > 0, "the actual CDLOD bed uses the water's fixed grid");
+      const native = [...doc.tiles.values()].map(tile => tile.heights.slice());
+      field.stampWheel({ from: [30.5, -.8], to: [30.5, .8], width: .5, contactLength: .5, targetDepth: .28, compaction: 1, disturbance: 255 });
+      texture.update(field.takeDirty());
+      await new Promise(resolve => setTimeout(resolve, 110)); controller.update(); await controller.whenIdle();
+      const sample = controller.sample("terrain", 30.5, 0); assert.ok(sample); assert.equal(sample.level, source.surfaceLevel);
+      assert.ok(sample.depth > .05); assert.ok(controller.results.get(source.id)!.area > initial.area);
+      assert.equal(sample.stale, false); assert.equal(controller.sample("other-terrain", 30.5, 0), null);
+      [...doc.tiles.values()].forEach((tile, i) => assert.deepEqual(tile.heights, native[i]));
+      const object = controller.objects.get(source.id)!, geometry = object.geometry;
+      controller.update(); await controller.whenIdle(); assert.equal(object.geometry, geometry, "idle frames do not rebuild");
+      texture.detach(); await new Promise(resolve => setTimeout(resolve, 110)); controller.update(); await controller.whenIdle();
+      assert.equal(controller.results.get(source.id)!.spacing, 1); assert.equal(controller.sample("terrain", 30.5, 0), null);
+      assert.equal(terrain.litFragmentSamplers, activeSamplers - 1, "a static Puddle reserves no mask sampler while deformation is inactive");
+      assert.equal(puddleTerrainDetails(terrain.mesh, "terrain").length, 0);
+      await controller.rebuild([]); assert.equal(controller.objects.size, 0); assert.ok(puddleTerrainRevision(terrain.mesh) > 0);
+    } finally { controller.dispose(); terrain.dispose(); texture.dispose(); }
+  });
+  await check("puddle live bed: raised muddy berms cut water instead of bending its surface, and cancelled jobs cannot return", async () => {
+    const doc = createLakeFixture();
+    for (const tile of doc.tiles.values()) for (let z = 0; z < tile.size; z++) for (let x = 0; x < tile.size; x++) {
+      const wx = tile.x * 64 + x - 64, wz = tile.z * 64 + z - 64;
+      if (Math.abs(wx - 30) <= 3 && Math.abs(wz) <= 3) tile.heights[z * tile.size + x] = .19;
+    }
+    const field = new DeformationField({ windowSize: 16, cellSize: .125 }); field.recenter(30, 0);
+    const texture = new TerrainDeformationTexture(); texture.attach(field); field.takeDirty();
+    const scene = new Scene(), controller = new PuddleWaterController({ scene, deformation: texture, detailLevels: () => 2,
+      document: () => doc, load: async () => { throw new Error("unexpected load"); } });
+    try {
+      await controller.rebuild([body()]); const initial = controller.results.get("puddle-1")!.area;
+      field.stampWheel({ from: [30.5, -2], to: [30.5, 2], width: .5, contactLength: .5, targetDepth: .28, compaction: 1, disturbance: 255 });
+      texture.update(field.takeDirty());
+      await new Promise(resolve => setTimeout(resolve, 110)); controller.update(); await controller.whenIdle();
+      assert.ok(controller.results.get("puddle-1")!.area < initial, "rims above the horizontal water become dry islands");
+      let dryRim = false;
+      for (let x = 29.5; x < 31.5; x += .25) if (texture.captureBed().offsetAt(x, 0) > .011 && !controller.sample("terrain", x, 0)) dryRim = true;
+      assert.ok(dryRim);
+      field.stampDisc([30, 0], .4, .2); texture.update(field.takeDirty());
+      await new Promise(resolve => setTimeout(resolve, 110)); controller.update();
+      await controller.rebuild([]); await controller.whenIdle(); assert.equal(controller.objects.size, 0); assert.equal(scene.children.length, 0);
+    } finally { controller.dispose(); texture.dispose(); }
   });
 }

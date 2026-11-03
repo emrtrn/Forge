@@ -1,4 +1,5 @@
 import { updateTerrainShoreWetness } from "./terrainShoreWetness";
+import { puddleTerrainActive, puddleTerrainDetails, puddleTerrainRevision, updatePuddleTerrainCoverage } from "./terrainPuddleCoverage";
 import {
   Box3,
   BufferAttribute,
@@ -364,8 +365,11 @@ export class TerrainRenderer {
   /** {@link TerrainDeformationTexture.revision} the selection was made for. */
   private deformationRevision = -1;
   private detailNodes = 0;
+  private readonly terrainRef: string | undefined;
+  private puddleRevision = -1;
 
   constructor(private readonly source: TerrainRenderSource, options: TerrainRendererOptions) {
+    this.terrainRef = options.terrainRef;
     this.origin = options.origin.clone();
     this.extent = new Vector2(source.extent[0], source.extent[1]);
     this.tileVertices = source.tileQuads + 1;
@@ -446,8 +450,13 @@ export class TerrainRenderer {
     this.mesh.onBeforeRender = (renderer, scene, camera) => {
       updateTerrainCaustics(this.materials.uniforms, scene, options.terrainRef);
       updateTerrainShoreWetness(this.materials.uniforms, scene, options.terrainRef);
+      const puddleActive = !!this.deformation.trackWindow() && puddleTerrainActive(this.mesh, options.terrainRef);
+      if (puddleActive) updatePuddleTerrainCoverage(this.materials.uniforms, scene, options.terrainRef);
+      else { this.materials.uniforms.uPuddleTerrainCount!.value = 0; this.materials.uniforms.uPuddleTerrainMask!.value = null; }
       const bodies = this.materials.uniforms.uCausticCount!.value as number;
       const defines = this.materials.material.defines ??= {};
+      const puddles = puddleActive ? 1 : 0;
+      if (defines.FORGE_TERRAIN_PUDDLES !== puddles) { defines.FORGE_TERRAIN_PUDDLES = puddles; this.materials.material.needsUpdate = true; }
       if (defines.FORGE_TERRAIN_CAUSTIC_BODIES !== bodies) {
         defines.FORGE_TERRAIN_CAUSTIC_BODIES = bodies;
         this.materials.material.needsUpdate = true;
@@ -470,7 +479,7 @@ export class TerrainRenderer {
       // Nested reflection renders must precede three's modelView/normal-matrix
       // calculation for this mesh. A material callback runs too late and leaves
       // the outer terrain draw with the reflected camera's object matrices.
-      if (this.mesh.material === this.materials.material && this.materials.litFragmentSamplers + 3 <= (renderer.capabilities?.maxTextures ?? 16)) {
+      if (this.mesh.material === this.materials.material && this.litFragmentSamplers + 3 <= (renderer.capabilities?.maxTextures ?? 16)) {
         this.deformation.flush(renderer);
         try {
           this.deformation.water.render(renderer, scene, camera,
@@ -564,6 +573,8 @@ export class TerrainRenderer {
    * selected too, so a ridge off screen still shades the valley in view.
    */
   updateLod(camera: Camera, shadowLights: readonly DirectionalLight[] = []): void {
+    const puddleRevision = puddleTerrainRevision(this.mesh);
+    if (this.puddleRevision !== puddleRevision) { this.puddleRevision = puddleRevision; this.selectionDirty = true; }
     this.mesh.updateWorldMatrix(true, false);
     const local = this.mesh.worldToLocal(camera.getWorldPosition(this.cameraScratch)).sub(this.origin);
     const residencyChanged = this.allResident ? false : this.updateResidency(local);
@@ -655,16 +666,23 @@ export class TerrainRenderer {
   /** The track window in terrain-local X/Z, or null without tracks or detail levels. */
   private trackDetail(): TerrainLodDetail | null {
     const window = this.trackDetailLevels > 0 ? this.deformation.trackWindow() : null;
-    if (!window) return null;
+    const fixed = puddleTerrainDetails(this.mesh, this.terrainRef).filter(detail => detail.visible).map(detail => {
+      const a = this.mesh.worldToLocal(this.cornerScratch.set(detail.minX, 0, detail.minZ)).sub(this.origin).clone();
+      const b = this.mesh.worldToLocal(this.cornerScratch.set(detail.maxX, 0, detail.maxZ)).sub(this.origin);
+      return { minX: a.x, minZ: a.z, maxX: b.x, maxZ: b.z, levels: detail.levels };
+    });
+    if (!window && !fixed.length) return null;
     let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
-    for (const [x, z] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
+    if (window) for (const [x, z] of [[0, 0], [1, 0], [0, 1], [1, 1]] as const) {
       const corner = this.mesh.worldToLocal(this.cornerScratch.set(window.minX + x * window.size, 0, window.minZ + z * window.size))
         .sub(this.origin);
       minX = Math.min(minX, corner.x); maxX = Math.max(maxX, corner.x);
       minZ = Math.min(minZ, corner.z); maxZ = Math.max(maxZ, corner.z);
     }
     return {
-      minX, minZ, maxX, maxZ, levels: this.trackDetailLevels,
+      minX: window ? minX : fixed[0]!.minX, minZ: window ? minZ : fixed[0]!.minZ,
+      maxX: window ? maxX : fixed[0]!.maxX, maxZ: window ? maxZ : fixed[0]!.maxZ,
+      levels: window ? this.trackDetailLevels : 0, fixed,
       margin: TERRAIN_DEFORMATION_DEPTH_RANGE + TERRAIN_DEFORMATION_BERM_MAX,
     };
   }
@@ -737,7 +755,7 @@ export class TerrainRenderer {
 
   /** Texture units the lit terrain's fragment stage takes for itself (shadow cascades budget against it). */
   get litFragmentSamplers(): number {
-    return this.materials.litFragmentSamplers;
+    return this.materials.litFragmentSamplers + (this.deformation.trackWindow() && puddleTerrainActive(this.mesh, this.terrainRef) ? 1 : 0);
   }
 
   dispose(): void {

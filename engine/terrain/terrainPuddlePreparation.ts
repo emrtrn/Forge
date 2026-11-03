@@ -16,23 +16,32 @@ export function puddleRegionAroundSeed(def: WorldTerrainDef, seed: readonly [num
  * installs tiles in streaming or changes authored height/paint state. */
 export async function preparePuddleWater(body: PuddleWaterBody, document: WorldTerrainDocument,
   load: (key: string, signal: AbortSignal) => Promise<TerrainTileData>, signal: AbortSignal) {
+  const bed = await preparePuddleBed(body, document, load, signal);
+  return buildTerrainPuddle(bed.region, bed.heightAt);
+}
+
+/** Resident immutable tile ownership for repeated deformation-only rebuilds. */
+export async function preparePuddleBed(body: PuddleWaterBody, document: WorldTerrainDocument,
+  load: (key: string, signal: AbortSignal) => Promise<TerrainTileData>, signal: AbortSignal) {
   const { def } = document, s = def.spacing, size = body.bounds.max[0] - body.bounds.min[0], n = size / s;
   const aligned = (value: number) => Math.abs(value - Math.round(value)) < 1e-6;
   if (!(n >= 2 && n <= 128) || !aligned(n) || !aligned((body.bounds.min[0] - def.origin[0]) / s)
     || !aligned((body.bounds.min[1] - def.origin[2]) / s)) throw new Error("Puddle bounds must match the native terrain grid (2–128 cells)");
   const region: TerrainPuddleRegion = { minX: body.bounds.min[0], minZ: body.bounds.min[1], size,
     cellSize: s, level: body.surfaceLevel, seed: body.seed };
-  const tiles = new Map(document.tiles), known = new Set(def.tiles.map(tile => tile.key));
+  // Keep only this body's bounded footprint. A live water cache must not pin
+  // every streamed tile that happened to be resident when it was created.
+  const tiles = new Map<string, TerrainTileData>(), known = new Set(def.tiles.map(tile => tile.key));
   const span = def.tileQuads * s, keys: string[] = [];
   for (let z = Math.max(0, Math.floor((region.minZ - def.origin[2]) / span)); z <= Math.min(def.tilesZ - 1, Math.floor((region.minZ + size - def.origin[2]) / span)); z++) {
     for (let x = Math.max(0, Math.floor((region.minX - def.origin[0]) / span)); x <= Math.min(def.tilesX - 1, Math.floor((region.minX + size - def.origin[0]) / span)); x++) {
-      const key = tileKey(x, z); if (known.has(key) && !tiles.has(key)) keys.push(key);
+      const key = tileKey(x, z), resident = document.tiles.get(key);
+      if (resident) tiles.set(key, resident); else if (known.has(key)) keys.push(key);
     }
   }
   if (keys.length > PUDDLE_LIMITS.tiles) throw new Error("Puddle tile read budget exceeded");
   const cancelled = () => { if (signal.aborted) throw new DOMException("Cancelled", "AbortError"); };
   cancelled();
   for (const key of keys) { tiles.set(key, await load(key, signal)); cancelled(); }
-  const data = buildTerrainPuddle(region, (x, z) => terrainHeightAt(def, { tile: (tx, tz) => tiles.get(tileKey(tx, tz)) }, x, z));
-  cancelled(); return data;
+  cancelled(); return { region, heightAt: (x: number, z: number) => terrainHeightAt(def, { tile: (tx, tz) => tiles.get(tileKey(tx, tz)) }, x, z) };
 }

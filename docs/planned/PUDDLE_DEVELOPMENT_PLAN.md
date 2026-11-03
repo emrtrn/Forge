@@ -1,16 +1,18 @@
 # Puddle — çamurlu zemin ve gerçek tekerlek oyukları
 
 Tarih: 3 Kasım 2026. Durum: **İzole prototip, Landscape/Water önizlemesi ve
-kalıcı Puddle kaydı uygulandı.** Editör ve Play native terrain kurulumunu paylaşır.
-Canlı deformasyon/araç bağlantısı ve genel W3 performans kabulü açık. Kaynak planlar:
+kalıcı Puddle kaydı, planar yansıma ve canlı deforme yatak bağlantısı uygulandı.**
+Editör ve Play aynı terrain örnekleme/doldurma çekirdeğini paylaşır. Puddle Wheel
+Ripples ve genel W3 performans kabulü açık. Kaynak planlar:
 [Water Body / W3](WORLD_TERRAIN_WATER_BODY_PLAN.md),
 [Terrain Deformasyonu](TERRAIN_DEFORMATION_PLAN.md).
 
-**3 Kasım 2026 güncellemesi:** Planar yansıma **Faz 1** kapsamında uygulandı;
-canlı çamur deformasyonu ile suyun birleşimi ve Wheel Ripples **Faz 2–3** olarak
+**3 Kasım 2026 güncellemesi:** Planar yansıma **Faz 1**, canlı çamur deformasyonu
+ile suyun birleşimi **Faz 2** kapsamında uygulandı; Wheel Ripples **Faz 3** olarak
 açık. Kullanıcı fazların sırayla uygulanıp ayrı ayrı main'e push edilmesini istedi.
-Faz 1 donanım performansı ve kullanıcı görsel kabulü, teknik doğrulamadan ayrıdır.
+Donanım performansı ve kullanıcı görsel kabulü, teknik doğrulamadan ayrıdır.
 Teslim ayrıntıları: [Puddle planar yansıma](../reports/PUDDLE_PLANAR_2026-11-03.md).
+[Canlı Puddle yatağı](../reports/PUDDLE_LIVE_BED_2026-11-03.md).
 
 ## Kullanıcı hedefi ve yaklaşım
 
@@ -75,9 +77,10 @@ Sınırlar:
    terrain referansı, seed, sınır, kot, görünüm ve hidden/locked. Ortak read/save
    validator, Outliner/Water seçimi, oluştur/düzenle/sil undo/redo ve Save/Reload/Play
    desteği vardır. Geometri kaydedilmez. [Teslim raporu](../reports/PUDDLE_PERSISTENCE_2026-11-03.md).
-4. **World Terrain bağlantısı:** gerçek tile üçgenleri, Sculpt revizyonları,
+4. **World Terrain bağlantısı — sınırlı canlı yatak uygulandı:** gerçek tile üçgenleri, Sculpt revizyonları,
    deformasyonun render filtrelemesi, CDLOD detayı, dirty rect güncellemeleri,
-   eksik tile ve tile sınırları. Kaynak iptali, streaming ve travel temizliği.
+   eksik tile ve tile sınırları. Kaynak iptali ve travel temizliği. Sabit yerel
+   detay/iş bütçeleri Faz 2 raporundadır; büyük dünya streaming/GPU kabulü ayrıdır.
 5. **Araç entegrasyonu:** gerçek araç temas aboneliği; su derinliği, hareket ve
    patinaja bağlı dalga/çamur sıçraması. Kuru çukura su eklememe; basin ayrımı ve
    dalganın ada/kuru boşluk üzerinden atlamamasını doğrulama.
@@ -118,7 +121,8 @@ kilitlenir. Level değişimi geçici yüzeyi temizler. Esc panel alanında yazar
 iptal edilebilir; geç tamamlanan yükleme temizlenmiş yüzeyi geri getirmez.
 Tek önizleme ve en fazla 16 eksik tile okuması vardır; gövde başına ek planar
 capture tahsis edilmez. Önizleme Create yapılmadan kaydedilmez. Kalıcı gövdelerin
-canlı araç/deformasyon bağlantısı sonraki dilimdir. Teknik kayıt:
+gerçek araç izlerinden canlı yatak bağlantısı Faz 2'de eklendi; yüzeyde Wheel
+Ripples üretimi Faz 3'tedir. Teknik kayıt:
 [Landscape Puddle önizlemesi](../reports/PUDDLE_EDITOR_PREVIEW_2026-11-03.md).
 
 ## Sıralı uygulama fazları — 3 Kasım 2026
@@ -134,7 +138,8 @@ Ripples bu temeli Faz 3'te kullanır. Mevcut kaynak/kabul dilimleri de geçerlid
   destekler. Faz 1 ile kalıcı Puddle ve taslak aynı planar kaynak yöneticisine
   bağlandı. Gerçek araç teması/ripple bağlantısı Faz 3'te açık kalır.
 - `terrainPuddlePreparation.ts` suyu authored terrain yüksekliğinden hazırlar;
-  kalıcı yüzey canlı `DeformationField` değişiklikleriyle yeniden kırpılmaz.
+  Faz 2 ile doldurma çekirdeği `DeformationField`'ın renderer'a yüklenen
+  filtrelenmiş/quantize kopyasını da okuyarak yüzeyi yeniden kırpar.
 - Terrain renderer kendi tekerlek oyuklarını, yükselen çamur kenarını ve yerel
   ıslak iz/su filmi görünümünü üretir. Bu görünüm, authored Puddle yüzeyinden
   ayrıdır; Lake altında bastırılan yerel film için Puddle ilişkisi incelenmelidir.
@@ -191,37 +196,43 @@ planar açık/kapalı eşlenik CPU/GPU ölçümü ayrıca raporlanır.
 
 ### Faz 2 — Deforme çamur yatağı ve yatay su yüzeyinin birleşimi
 
+Durum: **Uygulandı ve teknik doğrulandı.** Gerçek Rapier tekerlekleriyle havza
+testi ve su açık/kapalı görüntüler rapordadır. Renderer ile aynı sabit yerel
+ızgara ve değişen alan bildirimleri kullanılır; bir gövde en fazla 10 Hz'de,
+tek cooperative iş kuyruğundan güncellenir. Hedef GPU/büyük dünya ve kullanıcının
+kendi sahnesindeki görsel kabul ayrıca açıktır.
+
 **Amaç:** Mud fiziksel materyalindeki gerçek tekerlek oyuklarının Puddle altında
 doğru okunması; yükselen kuru çamur kenarları üzerinde eski su örtüsünün kalmaması.
 
-- [ ] Gerçek araçla sorunu tekrar üret. Aynı kamera için Puddle açık/kapalı,
+- [x] Gerçek araçla sorunu tekrar üret. Aynı kamera için Puddle açık/kapalı,
   terrain yerel su filmi açık/kapalı ve deformasyon açık/kapalı görüntülerini al.
   Su seviyesi, terrain tabanı, deformasyon derinliği ve yükselen kenarı ölçerek
   geometri, yüzey filmi ve şeffaflık/depth kaynaklarını ayır.
-- [ ] Ortak deforme yatak sorgusu oluştur: authored yükseklik + mevcut
+- [x] Ortak deforme yatak sorgusu oluştur: authored yükseklik + mevcut
   `terrainDeformationDisplacement` hesabı. Derinlik kadar kenar kabarması, filtre,
   pencere kenarı sönümü ve terrain katmanının deformasyona uygunluğu da eşleşsin.
   Yalnız `sample().depth` çıkarmak yeterli kabul edilmesin.
-- [ ] Deformasyon servisinin mevcut `sample/snapshot` sözleşmesine gerekiyorsa
+- [x] Deformasyon servisinin mevcut `sample/snapshot` sözleşmesine gerekiyorsa
   salt okunur pencere/revizyon/değişen alan bildirimi ekle. Renderer'ın
   `takeDirty()` kuyruğunu ikinci tüketiciyle boşaltma; Puddle kendi revizyonunu izlesin.
-- [ ] Terrain tile/CDLOD üçgenleriyle uyumlu yakın detay seç. 1 m grid'in
+- [x] Terrain tile/CDLOD üçgenleriyle uyumlu yakın detay seç. 1 m grid'in
   12,5 cm teker izi ayrıntısını temsil ettiği varsayılmasın. Paylaşılan sorgu,
   yakın zemin geometrisi ve su kırpma çözünürlüğü birlikte doğrulansın; gerekirse
   sınırlı yerel detay kullanılsın. Terrain ile ayrı bir sahte taban üretme.
-- [ ] Sadece etkilenen görünür/etkin Puddle bölgelerinin derinlik ve sınırını
+- [x] Sadece etkilenen görünür/etkin Puddle bölgelerinin derinlik ve sınırını
   güncelle. Değişiklikler birleştirilsin, işler iptal edilebilir ve kare başına
   bütçeli olsun; tüm gövdelerin her kare yeniden taranması yapılmasın.
-- [ ] `surfaceLevel` sabit kalsın. Su altında açılan oyuk dolu görünürken kotun
+- [x] `surfaceLevel` sabit kalsın. Su altında açılan oyuk dolu görünürken kotun
   üstüne çıkan çamur kenarı kuru/ıslak zemin olarak görünür olsun. Ada, bağlı
   havza ve sınır aşımı kuralları deforme tabanda da uygulansın.
-- [ ] Puddle'ın gerçekten kapladığı su altı bölgesinde terrain'in yerel rut su
+- [x] Puddle'ın gerçekten kapladığı su altı bölgesinde terrain'in yerel rut su
   filmiyle çifte parlama/yüzey üretimi önlensin. Yerel filmi bütün Mud katmanında
   kapatma; Puddle dışında mevcut davranış korunsun. Opacity, derinlik fade'i ve
   render sırası yakın/eğik açıda birlikte ayarlansın.
-- [ ] Ortak bir su sorgusu hazırlansın: gövde kimliği, su kotu, deforme taban,
+- [x] Ortak bir su sorgusu hazırlansın: gövde kimliği, su kotu, deforme taban,
   su derinliği ve bağlı ıslak bölge. Faz 3 temas uygunluğu bunu kullansın.
-- [ ] Deformasyon penceresi kayması, recovery/reset, eksik tile, streaming ve
+- [x] Deformasyon penceresi kayması, recovery/reset, eksik tile, streaming ve
   level geçişinde statik/deforme veri tutarlılığı sağlansın. Son geçerli yüzey
   hata durumunda korunursa bunun güncelliği açık durum bilgisiyle belirtilsin.
 

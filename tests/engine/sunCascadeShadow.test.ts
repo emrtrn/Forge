@@ -97,6 +97,7 @@ export function registerSunCascadeShadowTests(check: Check): void {
     assert.equal(affordableSunCascades(4, 16, terrainLitFragmentSamplers(true)), 4, "textured terrain: Ultra fits");
     assert.equal(affordableSunCascades(4, 16, terrainLitFragmentSamplers(false)), 4, "untextured terrain");
     assert.equal(affordableSunCascades(3, 16, terrainLitFragmentSamplers(true)), 3, "never more than the profile asks");
+    assert.equal(affordableSunCascades(4, 16, terrainLitFragmentSamplers(true, false, true)), 3, "active Puddle coverage reserves one sampler on a 16-unit GPU");
     // A heavier material still caps the count (the budget itself is unchanged).
     assert.equal(affordableSunCascades(4, 16, 11), 3);
     assert.equal(affordableSunCascades(4, 16, 13), 1);

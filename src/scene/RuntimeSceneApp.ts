@@ -1952,6 +1952,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.updateFollowShadow();
       mark = this.perfMark();
       const shadowLights = this.terrainShadowLights();
+      this.puddles?.update();
       for (const object of this.landscapeObjects) updateLandscapeLod(object, this.camera, shadowLights);
       this.perfRegion(FRAME_REGION_TERRAIN, mark);
       mark = this.perfMark();

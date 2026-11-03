@@ -3,6 +3,7 @@ import type { TerrainPuddleGeometry, TerrainPuddleRegion } from "@engine/terrain
 import { preparePuddleWater, puddleRegionAroundSeed } from "@engine/terrain/terrainPuddlePreparation";
 import { NEW_PUDDLE_APPEARANCE, validatePuddleWater, type PuddleWaterBody } from "@engine/scene/puddleWater";
 import { PuddlePlanarReflections } from "@engine/render-three/puddlePlanarReflections";
+import { setPuddleTerrainCoverage, clearPuddleTerrainCoverage } from "@engine/render-three/terrain/terrainPuddleCoverage";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { type TerrainTileData } from "@engine/terrain/terrainTypes";
 import { TerrainPuddleSurface } from "@engine/render-three/terrain/terrainPuddleSurface";
@@ -92,6 +93,8 @@ export class PuddlePreview {
       if (signal.aborted || revision !== this.revision) return;
       if (data.status === "ready") this.region = region;
       if (this.surface.rebuild(data)) this.state.area = data.area;
+      if (data.coverage) setPuddleTerrainCoverage(this.host.scene, this.surface, terrainRef, data.coverage, null);
+      else if (data.status === "dry") clearPuddleTerrainCoverage(this.host.scene, this.surface);
       if (data.status === "ready") this.reflections.set(this.surface, level, this.state.appearance);
       else if (data.status === "dry") this.reflections.remove(this.surface);
       // Failed results keep the old valid surface; the outline shows the new request.
@@ -122,6 +125,7 @@ export class PuddlePreview {
   private fail(message: string): void { this.state = { ...this.state, status: "error", message }; this.host.changed(); }
 
   clear(): void {
+    clearPuddleTerrainCoverage(this.host.scene, this.surface);
     this.reflections.remove(this.surface);
     this.abort.abort(); this.revision++; this.region = null;
     this.surface.rebuild({ status: "dry", positions: new Float32Array(), depths: new Float32Array(), area: 0 });

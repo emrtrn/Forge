@@ -1,4 +1,5 @@
 import { createTerrainShoreWetnessUniforms, TERRAIN_SHORE_WETNESS_PARS } from "./terrainShoreWetness";
+import { createPuddleTerrainUniforms, TERRAIN_PUDDLE_COVERAGE_PARS } from "./terrainPuddleCoverage";
 import {
   Color,
   MeshDepthMaterial,
@@ -426,7 +427,7 @@ const SAMPLER_DECLARATION = /^uniform\s+(?:\w+\s+)?sampler\w*\s/gm;
  * Texture units the lit terrain's fragment shader takes for itself regardless
  * of its layers: normals, weights (tile + global each) and the track field.
  */
-export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(false), TERRAIN_DEFORMATION_FRAGMENT_PARS, TERRAIN_CAUSTICS_PARS, TERRAIN_SHORE_WETNESS_PARS]
+export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorPars(false), TERRAIN_DEFORMATION_FRAGMENT_PARS, TERRAIN_CAUSTICS_PARS, TERRAIN_SHORE_WETNESS_PARS, TERRAIN_PUDDLE_COVERAGE_PARS]
   .join("\n")
   .match(SAMPLER_DECLARATION)!.length;
 
@@ -438,8 +439,8 @@ export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorP
  * and the terrain is not drawn at all, so the sun's cascade count is budgeted
  * against it.
  */
-export function terrainLitFragmentSamplers(textured: boolean, normalMapped = false): number {
-  return TERRAIN_LIT_FIXED_SAMPLERS + (textured ? 1 : 0) + (normalMapped ? 1 : 0);
+export function terrainLitFragmentSamplers(textured: boolean, normalMapped = false, puddleCoverage = false): number {
+  return TERRAIN_LIT_FIXED_SAMPLERS - 1 + (puddleCoverage ? 1 : 0) + (textured ? 1 : 0) + (normalMapped ? 1 : 0);
 }
 
 function injectVertex(shader: WebGLProgramParametersWithUniforms, lit = false): void {
@@ -538,7 +539,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uniforms.uLayerDetailParams = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => new Vector4(detail(i)?.strength ?? 0,detail(i)?.coverage ?? 0,detail(i)?.patchSize ?? 6,detail(i)?.seed ?? 1)) };
     uniforms.uLayerDetailShape = { value: Array.from({ length: TERRAIN_RENDER_LAYERS }, (_, i) => new Vector4((detail(i)?.direction ?? 0)*Math.PI/180,(detail(i)?.directionVariation ?? 0)*Math.PI/180,detail(i)?.roughness ?? .4,detail(i)?.atlasSize ?? 1)) };
   }
-  Object.assign(uniforms, createTerrainCausticsUniforms(), createTerrainShoreWetnessUniforms());
+  Object.assign(uniforms, createTerrainCausticsUniforms(), createTerrainShoreWetnessUniforms(), createPuddleTerrainUniforms());
   const textured = layerArray !== null;
   const litFragmentSamplers = terrainLitFragmentSamplers(textured, normalMapped);
   // Runtime tracks (TERRAIN_DEFORMATION Faz 2/3): always compiled in; the
@@ -556,9 +557,10 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
   (material.defines ??= {}).FORGE_TERRAIN_CAUSTIC_BODIES = 0;
   material.defines.FORGE_TERRAIN_WET_SHORES = 0;
+  material.defines.FORGE_TERRAIN_PUDDLES = 0;
   patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}${normalMapped ? "-n1" : ""}${detailMapped ? "-d1" : ""}`, (shader) => {
     shader.fragmentShader = shader.fragmentShader.replace(
-      FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped, detailMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${TERRAIN_SHORE_WETNESS_PARS}\n${FRAGMENT_MAIN}`);
+      FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped, detailMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${TERRAIN_SHORE_WETNESS_PARS}\n${TERRAIN_PUDDLE_COVERAGE_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <color_fragment>", `forgeSampleDeformation();\n// Before the colour block: the track look reads it. Wet tyre prints wet the\n// ground the same way a Lake shore does (debug views show neither).\nforgeShoreWet = max(forgeShoreWetness(), uTerrainView < 0.5 ? forgeTrailWet : 0.0);\n${fragmentColor(textured, normalMapped, detailMapped)}\ndiffuseColor.rgb *= mix(1.,.62,forgeShoreWet);`)
@@ -580,7 +582,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   // a 16-unit GPU they do now that the layer textures share one sampler.
   const compile = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
-    const waterSupported = litFragmentSamplers + 3 <= (renderer?.capabilities?.maxTextures ?? 16);
+    const waterSupported = litFragmentSamplers + (material.defines?.FORGE_TERRAIN_PUDDLES ? 1 : 0) + 3 <= (renderer?.capabilities?.maxTextures ?? 16);
     if (waterSupported) (shader.defines ??= {}).FORGE_TERRAIN_WATER = 1;
     compile(shader, renderer);
   };

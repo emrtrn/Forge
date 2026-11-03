@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "source": "voronoi",
+  "enabled": true,
+  "seed": 1,
+  "cellCount": 45,
+  "pattern": "splinter",
+  "grainAxis": "y",
+  "grainStretch": 11,
+  "density": 600,
+  "interiorMaterialId": "m-wood-walnut-material",
+  "interiorUvScale": 1,
+  "breakImpulse": 400,
+  "damageToBreak": null,
+  "chunkLifetime": 8,
+  "maxActiveChunks": 16,
+  "sourceHash": "fnv1a:7304b3f7"
+}

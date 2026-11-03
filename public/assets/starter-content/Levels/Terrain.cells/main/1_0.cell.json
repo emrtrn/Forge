@@ -23,12 +23,32 @@
       "placements": [
         {
           "position": [
-            169.48,
+            170.73,
             -0.15,
-            102.97
+            104.77
           ],
           "rotationYDeg": 0,
           "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "shape:plane",
+      "placements": [
+        {
+          "position": [
+            182.39,
+            -0.08,
+            111.34
+          ],
+          "name": "Plane",
+          "materialSlot": "red-material",
+          "rotationYDeg": 0,
+          "scale": [
+            20.7,
+            1,
+            20.7
+          ]
         }
       ]
     }
@@ -37,9 +57,9 @@
     {
       "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
       "position": [
-        171.47,
-        0,
-        94.85
+        170.63,
+        -0.2,
+        86.08
       ],
       "rotationYDeg": 0,
       "rotation": [

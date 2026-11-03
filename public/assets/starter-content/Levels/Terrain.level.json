@@ -42,6 +42,14 @@
     {
       "assetId": "wall-400x200",
       "placements": []
+    },
+    {
+      "assetId": "pillar-50x500",
+      "placements": []
+    },
+    {
+      "assetId": "shape:plane",
+      "placements": []
     }
   ],
   "characters": [],
@@ -267,31 +275,6 @@
         "crestFoamStrength": 1,
         "crestFoamThreshold": 0.25
       }
-    }
-  ],
-  "puddleWaters": [
-    {
-      "schema": 1,
-      "kind": "puddle",
-      "coordinateSpace": "world",
-      "id": "puddle-1",
-      "terrainRef": "landscape-1",
-      "seed": [
-        177.28210196901873,
-        115.89034361846295
-      ],
-      "bounds": {
-        "min": [
-          153,
-          91
-        ],
-        "max": [
-          201,
-          139
-        ]
-      },
-      "surfaceLevel": -0.2,
-      "name": "Puddle 1"
     }
   ],
   "actors": []

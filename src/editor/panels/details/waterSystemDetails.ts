@@ -13,6 +13,8 @@ const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) =
 /** Keep the same water navigation when a Lake replaces the Landscape selection. */
 export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, options?: SpecialActorDetailsOptions): void {
   const context = app.getWaterSystemContext();
+  const puddle = app.getPuddlePreviewState();
+  const addingPuddle = puddle.picking || !!puddle.state?.seed;
   if (!context) {
     renderLakeDetails(body, app, true);
     return;
@@ -22,12 +24,12 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
       ${landscapeModeSelect({ ...app.getLandscapeSculptSettings(), editMode: "water" }, context.busy ? "disabled" : "", LANDSCAPE_EDIT_MODES)}
       ${options ? `<label class="detail-toggle"><input type="checkbox" data-detail-toggle="locked" ${context.locked ? "checked" : ""} /><span>Lock Movement</span></label>` : ""}
     </div>`;
-  if (options) renderRiverWaterDetails(options, app.getLakeEditorState().available && !context.busy, app);
+  if (options && !addingPuddle) renderRiverWaterDetails(options, app.getLakeEditorState().available && !context.busy, app);
   else body.insertAdjacentHTML("beforeend", `<div class="detail-section"><div class="detail-section-title">Water</div>
     <button type="button" class="detail-action-button" data-water-terrain ${context.busy ? "disabled" : ""}>Back to Water</button>
-    ${context.busy ? '<div class="detail-hint">Araç değiştirmeden önce nokta seçimini bitirin, ardından göl taslağını oluşturun ya da silin.</div>' : ""}
+    ${context.busy ? '<div class="detail-hint">Araç değiştirmeden önce nokta seçimini bitirin, ardından su taslağını oluşturun ya da silin.</div>' : ""}
     </div><div data-water-bodies-slot></div>`);
-  if (options) renderPuddlePreviewDetails(body, app);
+  if (addingPuddle) renderPuddlePreviewDetails(body, app);
   const slot = body.querySelector("[data-water-bodies-slot]");
   if (slot) slot.outerHTML = `<div class="detail-section" data-detail-section="water-bodies"><div class="detail-section-title">Water Bodies</div>
     <div class="landscape-layer-list">${context.bodies.map((water) => `<button type="button" data-water-body="${escapeHtml(water.id)}" data-water-kind="${water.kind}" class="${water.active ? "active" : ""}" aria-pressed="${water.active}" ${context.busy ? "disabled" : ""}>
@@ -38,6 +40,7 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
   });
   body.querySelector("[data-water-terrain]")?.addEventListener("click", () => app.selectWaterSystemTerrain());
   body.querySelector("[data-lake-begin]")?.addEventListener("click", () => app.beginLakeFill());
+  body.querySelector("[data-puddle-begin]")?.addEventListener("click", () => app.beginPuddlePreview());
   body.querySelector<HTMLInputElement>('[data-detail-toggle="locked"]')?.addEventListener("change", (event) => {
     options?.handleDetailToggle("locked", (event.currentTarget as HTMLInputElement).checked);
   });
@@ -47,7 +50,7 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
       if (kind === "river" || kind === "lake" || kind === "puddle") app.selectWaterSystemBody(kind, button.dataset.waterBody!);
     });
   });
-  if (!options) { if (app.getSelectedPuddle()) renderPuddleDetails(body, app); else renderLakeDetails(body, app); }
+  if (!options && !addingPuddle) { if (app.getSelectedPuddle()) renderPuddleDetails(body, app); else renderLakeDetails(body, app); }
 }
 
 function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake: boolean, app: SceneApp): void {
@@ -97,6 +100,7 @@ function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake
       <label class="detail-row"><span>Source Spline</span><select data-river-water-create-spline ${availableRiverSplines.length ? lockedAttr : "disabled"}>${availableRiverSplines.map((spline) => `<option value="${escapeHtml(spline.id)}" ${riverSourceSpline?.id === spline.id ? "selected" : ""}>${escapeHtml(spline.name)} (${spline.segmentCount} segments)</option>`).join("") || "<option value=\"\">No completed unbound spline</option>"}</select></label>
       <div class="landscape-heightmap-actions"><button type="button" class="detail-action-button" data-river-water-create ${availableRiverSplines.length ? lockedAttr : "disabled"}>Add River</button>
       <button type="button" class="detail-action-button" data-lake-begin ${canAddLake ? lockedAttr : "disabled"}>Add Lake</button></div>
+      <button type="button" class="detail-action-button" data-puddle-begin ${app.getPuddlePreviewState().available && !app.getWaterSystemContext()?.busy ? lockedAttr : "disabled"}>Add Puddle</button>
       ${availableRiverSplines.length ? "" : `<button type="button" class="detail-action-button" data-water-create-spline ${lockedAttr}>Create Spline</button>`}
     </div>`;
   body.insertAdjacentHTML("beforeend", riverWaterCreateMarkup + '<div data-water-bodies-slot></div>' + riverWaterMarkup);

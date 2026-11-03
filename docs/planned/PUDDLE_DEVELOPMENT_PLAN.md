@@ -86,10 +86,13 @@ Playwright: kontrollü tekerlek geçişi, değişen geometri/alan, sabit su sevi
 su seviyesi değişirken izlerin korunması, konsol/WebGL ve tekrar reset kaynakları.
 Nihai koşu sonuçları `docs/reports/PUDDLE_PROTOTYPE_2026-11-03.md` içindedir.
 
-## Landscape önizlemesinin kullanımı
+## Landscape / Water oluşturma akışı
 
-World Terrain seç → **Landscape Mode: Water** → **Puddle Preview** →
-**Preview Puddle** → çukura tıkla. **Water Level (World Y)** yatay su kotunu,
+World Terrain seç → **Landscape Mode: Water** → **Water / Add Puddle** →
+çukura tıkla → **Draft Preview** → **Create Puddle**.
+Add Puddle, Add River ve Add Lake ile aynı Water bölümündedir; bağımsız bir
+Puddle Preview giriş bölümü yoktur. Nokta seçiminde **Finish Picking** veya Esc
+seçimi bitirir. **Water Level (World Y)** yatay su kotunu,
 **Working Area (m)** başlangıç noktası çevresindeki kare bölgeyi ayarlar.
 Alan native terrain grid'ine hizalanır. İlk kot tıklanan tabanın 5 cm üzeridir;
 çukur sınıra kadar açık kalırsa alanı genişletmek veya kotu düşürmek gerekir.
@@ -99,8 +102,12 @@ Bodies listesinden seçilen Puddle'ın kotu, alanı ve görünümü düzenlenir;
 locked ve silme desteklenir. Create/Edit/Delete komutları undo/redo'ya katılır.
 Save gövdeyi level'e yazar; Reload ve Play aynı kaynaktan yüzeyi tekrar üretir.
 
-**Clear Preview**, Esc, başka seçim/mod veya level değişimi geçici yüzeyi
-temizler. Esc panel alanında yazarken de çalışır. Eksik tile yüklemeleri
+Taslak oluştuğunda Esc onu silmez; **Finish Editing** veya başka nesneye geçiş
+girişimi **Pending Draft** durumunu açar. **Create Puddle and Continue** oluşturup
+bekleyen seçime geçer, **Discard Draft** taslağı siler, **Resume Editing** geri
+döner. Taslak/nokta seçimi sürerken diğer Water araçları ve gövde listesi
+kilitlenir. Level değişimi geçici yüzeyi temizler. Esc panel alanında yazarken de
+çalışır. Eksik tile yüklemeleri
 iptal edilebilir; geç tamamlanan yükleme temizlenmiş yüzeyi geri getirmez.
 Tek önizleme ve en fazla 16 eksik tile okuması vardır; gövde başına ek planar
 capture tahsis edilmez. Önizleme Create yapılmadan kaydedilmez. Kalıcı gövdelerin

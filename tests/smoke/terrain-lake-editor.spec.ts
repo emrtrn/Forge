@@ -124,7 +124,7 @@ async function save(page: Page) {
   await button.click(); const saved=await response;expect(saved.ok(),await saved.text()).toBeTruthy(); await expect(button).toBeEnabled({ timeout: 120_000 });
 }
 
-test("Puddle preview uses native terrain, reports open bounds, clears on Escape and never writes a body", async ({ page, request }, info) => {
+test("Puddle Water workflow preserves drafts on Escape and selection, reports open bounds and discards explicitly", async ({ page, request }, info) => {
   test.setTimeout(240_000);
   await servePuddleFixtureBinaries(page);
   const defaults = defaultUserSettings();
@@ -136,8 +136,16 @@ test("Puddle preview uses native terrain, reports open bounds, clears on Escape 
   const diskBefore = await readFile(smokePublicPath(LEVEL), "utf8");
   const frame = () => page.evaluate(() => (window as any).__lakeQA.puddleFrame());
   await frame();
-  const section = page.locator('[data-detail-section="puddle-preview"]');
-  if (await section.evaluate(element => element.classList.contains("collapsed"))) await section.locator(".detail-section-toggle").click();
+  await expect(page.locator('[data-puddle-workflow]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Add Lake", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Add River", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add Puddle", exact: true })).toBeEnabled();
+  await page.screenshot({ path: info.outputPath("puddle-water-add.png") });
+  await page.locator("[data-puddle-begin]").click();
+  await expect(page.locator("[data-puddle-stage]")).toHaveText("Click Terrain");
+  await page.screenshot({ path: info.outputPath("puddle-water-picking.png") });
+  await page.locator("[data-puddle-stop-pick]").click();
+  await expect(page.locator("[data-puddle-begin]")).toHaveText("Add Puddle");
   await page.locator("[data-puddle-begin]").click();
   await expect(page.locator("[data-puddle-status]")).toContainText("Çukurun içine");
   await clickWorld(page, [30, 10, 0]);
@@ -154,6 +162,7 @@ test("Puddle preview uses native terrain, reports open bounds, clears on Escape 
   const raised = await frame(); expect(raised.state.state.area).toBeGreaterThan(initial.state.state.area);
   await level.fill("20"); await level.press("Tab");
   await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "open-boundary");
+  await expect(page.locator("[data-puddle-create]")).toBeDisabled();
   const overflow = await frame(); expect(overflow.geometry).toBe(raised.geometry);
   await page.screenshot({ path: info.outputPath("puddle-editor-overflow.png") });
   await level.fill("10.6"); await level.press("Tab");
@@ -161,14 +170,20 @@ test("Puddle preview uses native terrain, reports open bounds, clears on Escape 
   await frame(); await page.screenshot({ path: info.outputPath("puddle-editor-ready.png") });
   await level.focus();
   await page.keyboard.press("Escape");
-  await expect(page.locator("[data-puddle-number]")).toHaveCount(0);
-  expect((await frame()).visible).toBe(false);
-  await page.locator("[data-puddle-begin]").click(); await page.locator("[data-puddle-clear]").click();
-  await expect(page.locator("[data-puddle-status]")).toHaveCount(0);
-  expect((await frame()).state.picking).toBe(false);
-  await page.locator("[data-puddle-begin]").click(); await clickWorld(page, [30, 10, 0]);
-  await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "ready");
-  await page.locator("[data-landscape-mode]").selectOption("sculpt");
+  await expect(page.locator("[data-puddle-stage]")).toHaveText("Pending Draft");
+  expect((await frame()).visible).toBe(true);
+  await expect(page.locator("[data-landscape-mode]")).toBeDisabled();
+  await expect(page.locator("[data-water-terrain]")).toBeDisabled();
+  await page.locator("[data-puddle-resume]").click();
+  await expect(page.locator("[data-puddle-stage]")).toHaveText("Draft Preview");
+  // A real Outliner selection is deferred until this draft is resolved.
+  await page.getByTestId("outliner-row").filter({ hasText: "Lake QA Terrain" }).first().click();
+  await expect(page.locator("[data-puddle-stage]")).toHaveText("Pending Draft");
+  await page.locator("[data-puddle-resume]").click();
+  await page.locator("[data-puddle-finish]").click();
+  await expect(page.locator("[data-puddle-create]")).toHaveText("Create Puddle and Continue");
+  await page.locator("[data-puddle-clear]").click();
+  await expect(page.locator("[data-puddle-workflow]")).toHaveCount(0);
   const cleared = await frame(); expect(cleared.visible).toBe(false); expect(cleared.waterBodies).toBe(0);
   expect(await terrainHash()).toBe(hash);
   expect(await readFile(smokePublicPath(LEVEL), "utf8")).toBe(diskBefore);
@@ -189,12 +204,17 @@ test("Puddle persists creation appearance edits undo delete Save Reload and Play
   const before = await terrainHash();
   const frame = (reposition = false) => page.evaluate(value => (window as any).__lakeQA.puddleSavedFrame(value), reposition);
   await frame();
-  const preview = page.locator('[data-detail-section="puddle-preview"]');
-  if (await preview.evaluate(e => e.classList.contains("collapsed"))) await preview.locator(".detail-section-toggle").click();
+  await expect(page.getByRole("button", { name: "Add Puddle", exact: true })).toBeEnabled();
   await page.locator("[data-puddle-begin]").click(); await clickWorld(page, [30, 10, 0]);
   await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "ready");
   await page.locator('[data-puddle-number="level"]').fill("10.6"); await page.locator('[data-puddle-number="level"]').press("Tab");
+  await page.getByTestId("outliner-row").filter({ hasText: "Lake QA Terrain" }).first().click();
+  await expect(page.locator("[data-puddle-create]")).toHaveText("Create Puddle and Continue");
   await expect(page.locator("[data-puddle-create]")).toBeEnabled(); await page.locator("[data-puddle-create]").click();
+  await expect(page.locator("[data-puddle-workflow]")).toHaveCount(0);
+  await expect(page.locator('[data-water-body][data-water-kind="puddle"]')).toHaveCount(1);
+  await page.locator('[data-water-body][data-water-kind="puddle"]').click();
+  await expect(page.locator('[data-water-body][data-water-kind="puddle"]')).toHaveAttribute("aria-pressed", "true");
   await expect(page.locator('[data-object-id="puddle:0"]')).toBeVisible();
   await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
   const created = await frame(); expect(created.source).toHaveLength(1); expect(created.objects[0].vertices).toBeGreaterThan(0);
@@ -1220,9 +1240,9 @@ test("Lake UX preserves a draft on Escape and exits to normal viewport selection
   expect((await editorSnapshot(page)).selection?.assetId).toBe("shape:cube");
   await page.locator('[data-object-id="lake:0"]').click();
   await page.setViewportSize({ width: 1100, height: 720 });
-  // The shared Water System navigation now precedes the Lake editor. Bring its
-  // whole editing panel into view before checking the core controls together.
-  await page.locator("[data-lake-panel]").scrollIntoViewIfNeeded();
+  // The inspector is taller than the viewport. Scroll the Surface controls
+  // being measured into view, rather than its oversized parent editor.
+  await page.locator('[data-detail-section="lake-basic"]').scrollIntoViewIfNeeded();
   const fit = await page.locator("[data-lake-panel]").evaluate((panel) => {
     const controls = [...panel.querySelectorAll<HTMLElement>("[data-lake-workflow] button, [data-lake-locked], [data-lake-hidden]")];
     const bounds = panel.getBoundingClientRect();

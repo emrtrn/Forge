@@ -29,6 +29,7 @@ import { registerProceduralFoliageTests } from "../tests/engine/proceduralFoliag
 import { registerWorldPartitionStreamingTests } from "../tests/engine/worldPartitionStreaming.test";
 import { registerAssetResidencyTests } from "../tests/engine/assetResidency.test";
 import { registerPhysicsContactTests } from "../tests/engine/physicsContacts.test";
+import { registerPhysicsImpactTests } from "../tests/engine/physicsImpacts.test";
 import { registerStreamedActorStateTests } from "../tests/engine/streamedActorState.test";
 import { registerBehaviorSubsystemTests } from "../tests/engine/behaviorSubsystem.test";
 import { registerWorldCellPersistenceTests } from "../tests/engine/worldCellPersistence.test";
@@ -1369,6 +1370,7 @@ registerProceduralFoliageTests(check);
 registerWorldPartitionStreamingTests(check);
 await registerAssetResidencyTests(checkAsync);
 await registerPhysicsContactTests(checkAsync);
+await registerPhysicsImpactTests(checkAsync);
 registerStreamedActorStateTests(check);
 registerBehaviorSubsystemTests(check);
 await registerWorldCellPersistenceTests(check, checkAsync);

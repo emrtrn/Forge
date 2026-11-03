@@ -1,8 +1,8 @@
 # Deformable & Fracturable Çalışma Planı
 
 > Durum: **Faz 0 tamam** (2026-11-02): spike'lar ve açık kararlar kapandı.
-> **Faz 1 sürüyor** (2026-11-03): saf `impactEvents.ts` (tip, kare içi
-> toplama, eşik/bütçe) yazıldı; Rapier bağlantısı sırada.
+> **Faz 1 sürüyor** (2026-11-03): saf `impactEvents.ts` ve Rapier bağlantısı
+> (`setImpactEventThreshold` / `impacts()`) tamam; actor `"hit"` yükü açık.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -273,27 +273,44 @@ parçalar navmesh engeli olmuyor; v1 için kabul edilebilir.
       silen normallerde en güçlü adım karar verir), hızın en büyüğünü tutar.
       Çift yönelimi `PhysicsContact` ile aynı (`a < b`), normal `a`'dan `b`'ye.
       Manifold noktası olmayan çiftte `point` null; tüketici body konumuna düşer.
-- [ ] Opt-in: yalnız impact isteyen collider'lar (fracture/deformable sidecar'ı
+- [x] Opt-in: yalnız impact isteyen collider'lar (fracture/deformable sidecar'ı
       olanlar veya açık bir `generateImpactEvents`) olay üretir. Diğer
       body'lerin maliyeti değişmez.
-- [ ] Hibrit okuma (K-03): `EventQueue` her alt adımdan sonra boşaltılır;
+      Authored alan açılmadı: runtime API
+      `physics.setImpactEventThreshold(entityId, minImpulse | null)` (N·s).
+      Faz 4/7 modülleri sidecar'ı olan nesneler için çağırır; ayar body'den
+      bağımsız tutulur (rebuild/yeniden ekleme sonrası geri uygulanır),
+      `clear()` siler. Kimse opt-in değilse `step()` kuyruksuz çağrılır, yani
+      eski yol birebir aynı. Yeni allowlist yüzeyi yok.
+- [x] Hibrit okuma (K-03): `EventQueue` her alt adımdan sonra boşaltılır;
       eşiği geçen çiftte o adımda manifold okunur (impulse ağırlıklı nokta,
       `flipped` düzeltmeli normal).
-- [~] Gürültü eşiği ve olay bütçesi (kare başına üst sınır). Saf taraf
-      tamam: `minImpulse` (kare toplamına uygulanır) ve
-      `maxImpactsPerFrame` (en güçlüler kalır, `overBudget` sayılır);
-      `impulseToForceThreshold` / `forceToImpulse` / `restingImpulseFloor`
-      dönüşümleri testte sabit. Subsystem ayarına bağlanması açık.
-- [ ] `physicsSubsystem` API'si: `impacts()` veya listener. Rapier dışı
+      Düzeltme: JS API'de solver noktalarının impulse'u yok. Nokta = manifold
+      başına solver noktalarının ortalaması, manifold ağırlığı = o manifoldun
+      Σ`contactImpulse`'u. Rapier kuralı doğrulandı: `normal()` olayın
+      `collider1`'inden `collider2`'ye bakar, `totalForce` normal yönünde.
+      `relativeSpeed` tahmindir: adım sonrası bağıl hız + J·(1/mₐ + 1/m_b),
+      yalnız doğrusal.
+- [x] Gürültü eşiği ve olay bütçesi (kare başına üst sınır).
+      Eşik entity başına, WASM içinde (`contactForceEventThreshold`
+      = `minImpulse / dt`); bütçe `ImpactAccumulator` varsayılanı (64/kare,
+      en güçlüler kalır, `impactsOverBudget()`). Kalite profiline bağlanması
+      Faz 4 bütçe işiyle birlikte.
+- [x] `physicsSubsystem` API'si: `impacts()` veya listener. Rapier dışı
       (AABB) backend'de boş liste.
+      `impacts()`, `impactsForEntity(id)`, `impactsOverBudget()`; her
+      `update()` başında boşalır, adım atılmayan karede boş.
 - [ ] Actor script `"hit"` olayına isteğe bağlı `impulse`/`point`/`normal`
       yükü. Geriye uyumlu.
-- [~] Testler: kutu düşmesi → beklenen aralıkta impulse; eşik altı olay yok;
+- [x] Testler: kutu düşmesi → beklenen aralıkta impulse; eşik altı olay yok;
       30/60/144 Hz render'da aynı sabit adımda aynı olay dizisi.
-      Saf testler `tests/engine/impactEvents.test.ts`'te (11 kontrol); Rapier
-      senaryoları bağlantıyla gelecek.
-- [ ] Yeni collider alanı eklenirse allowlist (`applyTransformFields`,
-      collision sidecar) ve `CLAUDE.md`.
+      Saf: `tests/engine/impactEvents.test.ts` (11). Rapier:
+      `tests/engine/physicsImpacts.test.ts` (4): 10 kg / 2 m düşüş
+      64.447 N·s, 6.29 m/s, nokta zemin yüzeyinde, normal −Y (Faz 0'la aynı);
+      eşik üstü/opt-out/opt-in'siz dünya sessiz; rebuild sonrası opt-in
+      korunur, `clear()` siler; 30/60/144 Hz'de aynı toplam ve tepe.
+- [-] Yeni collider alanı eklenirse allowlist (`applyTransformFields`,
+      collision sidecar) ve `CLAUDE.md`. Gerekmedi: opt-in runtime API'si.
 
 Kabul: `npm run test:engine -- --filter impact` yeşil, `build:verify` yeşil,
 impact kapalı sahnede fizik adımı maliyeti değişmemiş.
@@ -538,3 +555,6 @@ kullanıcı kararı).
   `tests/engine/impactEvents.test.ts`. Sırada `physicsSubsystem` bağlantısı
   (opt-in `CONTACT_FORCE_EVENTS`, alt adım başına `EventQueue` boşaltma,
   eşiği geçen çiftte manifold okuma, `impacts()` API'si).
+- 2026-11-03: Faz 1 Rapier bağlantısı: `setImpactEventThreshold` +
+  `impacts()`; Rapier testleri Faz 0 ölçümünü birebir tekrarladı. Açık: actor
+  `"hit"` yükü (tasarım sorusu: begin olayına mı eklenir, ayrı faz/olay mı).

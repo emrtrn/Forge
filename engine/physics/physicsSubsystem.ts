@@ -36,6 +36,14 @@ import {
 import { interactionGroupsInteract, type NavigationRole } from "../scene/collision";
 import { rotatePointAboutOrigin, rotatedBoxAabb, rotatedBoxFootprintXZ } from "./rotatedBox";
 import { FixedStepClock, lerpPosition, nlerpQuaternion, type PoseQuat } from "./fixedStep";
+import {
+  ImpactAccumulator,
+  impulseToForceThreshold,
+  manifoldNormal,
+  type ImpactContactPoint,
+  type ImpactVec3,
+  type PhysicsImpact,
+} from "./impactEvents";
 import { computeVehicleDrive } from "./vehicle/vehicleDrive";
 import { nominalWheelLoad, sinkage, vehicleWheelWidth } from "./surface/sinkage";
 import { frameCompaction } from "./surface/wheelTracks";
@@ -138,6 +146,7 @@ type RapierModule = typeof import("@dimforge/rapier3d-compat");
 type RapierWorld = InstanceType<RapierModule["World"]>;
 type RapierRigidBody = ReturnType<RapierWorld["createRigidBody"]>;
 type RapierCollider = ReturnType<RapierWorld["createCollider"]>;
+type RapierEventQueue = InstanceType<RapierModule["EventQueue"]>;
 type RapierImpulseJoint = ReturnType<RapierWorld["createImpulseJoint"]>;
 type RapierVehicleController = ReturnType<RapierWorld["createVehicleController"]>;
 
@@ -253,6 +262,12 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private vehicleSurfaceProvider: VehicleSurfaceProvider | null = null;
   private vehicleGroundSinkProvider: VehicleGroundSinkProvider | null = null;
   private readonly fixedStepListeners = new Set<(deltaSeconds: number) => void>();
+  /** Opt-in impact sources: entity → minimum slice impulse (N·s); see {@link setImpactEventThreshold}. */
+  private readonly impactThresholds = new Map<EntityId, number>();
+  private rapierEventQueue: RapierEventQueue | null = null;
+  private readonly impactAccumulator = new ImpactAccumulator();
+  private frameImpacts: readonly PhysicsImpact[] = [];
+  private frameImpactsOverBudget = 0;
 
   /** Runtime CPU ground state advances after every completed physics slice. */
   onFixedStep(listener: (deltaSeconds: number) => void): () => void {
@@ -719,6 +734,42 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
 
   contactsForEntity(entityId: EntityId): readonly PhysicsContact[] {
     return this.contacts.filter((contact) => contact.a === entityId || contact.b === entityId);
+  }
+
+  /**
+   * Opts an entity's colliders into impact events (Faz 1 of
+   * DEFORMABLE_FRACTURABLE_WORK_PLAN). A fixed slice whose contact impulse
+   * against the entity exceeds `minImpulse` (N·s) is reported by
+   * {@link impacts}; quieter contacts are filtered inside Rapier and cost
+   * nothing. `null` opts out. The setting is runtime-only (fracture/deformable
+   * modules call it), outlives the body (a re-added or rebuilt body picks it
+   * up again) and is dropped by `clear()`. Kinematic ↔ fixed pairs never
+   * produce events in Rapier; those break through `Damage.Apply` instead.
+   */
+  setImpactEventThreshold(entityId: EntityId, minImpulse: number | null): void {
+    if (minImpulse === null || !Number.isFinite(minImpulse)) this.impactThresholds.delete(entityId);
+    else this.impactThresholds.set(entityId, Math.max(0, minImpulse));
+    const record = this.rapierBodies.get(entityId);
+    if (record) this.applyImpactEvents(record);
+  }
+
+  /**
+   * Impacts of the latest `update()`, one per body pair with every fixed slice
+   * of the frame merged (see `ImpactAccumulator`). Empty on a frame that took
+   * no slice and on the placeholder (AABB) backend.
+   */
+  impacts(): readonly PhysicsImpact[] {
+    return this.frameImpacts;
+  }
+
+  /** The latest frame's impacts that involve `entityId`. */
+  impactsForEntity(entityId: EntityId): readonly PhysicsImpact[] {
+    return this.frameImpacts.filter((impact) => impact.a === entityId || impact.b === entityId);
+  }
+
+  /** Pairs the per-frame impact budget left out of the latest {@link impacts}. */
+  impactsOverBudget(): number {
+    return this.frameImpactsOverBudget;
   }
 
   /**
@@ -1283,6 +1334,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   update(_context: EngineUpdateContext): void {
+    this.frameImpacts = [];
+    this.frameImpactsOverBudget = 0;
     if (!this.enabled) {
       this.contacts = [];
       return;
@@ -1299,11 +1352,23 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           if (index === steps - 1) this.capturePreviousPoses();
           // Vehicles push velocity into their chassis right before each slice.
           this.updateVehicles(this.stepClock.step);
-          this.rapierWorld.step();
+          // The queue only goes in when someone opted in, so a level without
+          // impact sources steps exactly as before. It is drained per slice:
+          // a manifold only reflects the slice that just ran.
+          const queue = this.impactThresholds.size > 0 ? this.rapierEventQueue : null;
+          if (queue) {
+            this.rapierWorld.step(queue);
+            this.collectImpactSamples(queue);
+          } else {
+            this.rapierWorld.step();
+          }
           this.applyVehicleGroundResistance(this.stepClock.step);
           for (const listener of this.fixedStepListeners) listener(this.stepClock.step);
         }
         this.updateRapierContacts();
+        const frame = this.impactAccumulator.takeFrame();
+        this.frameImpacts = frame.impacts;
+        this.frameImpactsOverBudget = frame.overBudget;
       }
       this.syncRapierDynamicTransforms();
       return;
@@ -1368,12 +1433,18 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.contacts = [];
     this.collisionDisabled.clear();
     this.suspendedDynamicBodies.clear();
+    this.impactThresholds.clear();
+    this.impactAccumulator.clear();
+    this.frameImpacts = [];
+    this.frameImpactsOverBudget = 0;
   }
 
   dispose(): void {
     this.clear();
     this.rapierWorld?.free();
     this.rapierWorld = null;
+    this.rapierEventQueue?.free();
+    this.rapierEventQueue = null;
     this.rapierBodies.clear();
     this.suspendedDynamicBodies.clear();
     this.rapierColliderToEntity.clear();
@@ -1389,6 +1460,9 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.rapierWorld?.free();
     this.rapierWorld = new RAPIER.World(vectorFromVec3(this.gravity));
     this.rapierWorld.timestep = this.stepClock.step;
+    // Auto-drained before every step, so events nobody reads never pile up.
+    this.rapierEventQueue ??= new RAPIER.EventQueue(true);
+    this.impactAccumulator.clear();
     this.stepClock.reset();
     this.previousPoses.clear();
     this.rapierBodies.clear();
@@ -1723,6 +1797,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       isSensor: body.collider.isSensor,
     });
     for (const collider of colliders) this.rapierColliderToEntity.set(collider.handle, body.id);
+    const record = this.rapierBodies.get(body.id);
+    if (record && this.impactThresholds.has(body.id)) this.applyImpactEvents(record);
     if (body.vehicle && !this.vehicles.has(body.id)) {
       const record: VehicleRecord = {
         entityId: body.id,
@@ -1764,6 +1840,97 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     }
     this.addAabbSensorContacts(contacts, seen);
     this.contacts = this.reportableContacts(contacts);
+  }
+
+  /** Pushes the entity's impact opt-in onto its live colliders. */
+  private applyImpactEvents(record: RapierBodyRecord): void {
+    const RAPIER = this.rapierModule;
+    if (!RAPIER) return;
+    const minImpulse = this.impactThresholds.get(record.id);
+    for (const collider of record.colliders) {
+      if (minImpulse === undefined) {
+        collider.setActiveEvents(RAPIER.ActiveEvents.NONE);
+        continue;
+      }
+      collider.setActiveEvents(RAPIER.ActiveEvents.CONTACT_FORCE_EVENTS);
+      collider.setContactForceEventThreshold(impulseToForceThreshold(minImpulse, this.stepClock.step));
+    }
+  }
+
+  /**
+   * Turns the slice's contact-force events into impact samples. Rapier only
+   * queued pairs above an opted-in collider's threshold; for each one the
+   * manifolds give the point and normal (Faz 0, K-03 hybrid).
+   */
+  private collectImpactSamples(queue: RapierEventQueue): void {
+    const world = this.rapierWorld;
+    if (!world) return;
+    const step = this.stepClock.step;
+    queue.drainContactForceEvents((event) => {
+      const handle1 = event.collider1();
+      const handle2 = event.collider2();
+      const a = this.rapierColliderToEntity.get(handle1);
+      const b = this.rapierColliderToEntity.get(handle2);
+      if (!a || !b || a === b) return;
+      const collider1 = world.getCollider(handle1);
+      const collider2 = world.getCollider(handle2);
+      if (!collider1 || !collider2) return;
+      const force = event.totalForce();
+      const impulse = Math.hypot(force.x, force.y, force.z) * step;
+      const points: ImpactContactPoint[] = [];
+      const normalSum: [number, number, number] = [0, 0, 0];
+      world.contactPair(collider1, collider2, (manifold, flipped) => {
+        const solverCount = manifold.numSolverContacts();
+        if (solverCount === 0) return;
+        // Solver points are world-space but carry no impulse in the JS API, so
+        // each manifold contributes its centroid weighted by its contacts' impulse.
+        let weight = 0;
+        for (let index = 0; index < manifold.numContacts(); index += 1) weight += manifold.contactImpulse(index);
+        let x = 0;
+        let y = 0;
+        let z = 0;
+        for (let index = 0; index < solverCount; index += 1) {
+          const point = manifold.solverContactPoint(index);
+          x += point.x;
+          y += point.y;
+          z += point.z;
+        }
+        points.push({ point: [x / solverCount, y / solverCount, z / solverCount], weight });
+        const raw = manifold.normal();
+        const normal = manifoldNormal([raw.x, raw.y, raw.z], flipped);
+        const share = weight > 0 ? weight : 1e-6;
+        normalSum[0] += normal[0] * share;
+        normalSum[1] += normal[1] * share;
+        normalSum[2] += normal[2] * share;
+      });
+      const normal = impactNormal(normalSum, force, impulse);
+      this.impactAccumulator.add({
+        a,
+        b,
+        impulse,
+        normal,
+        points,
+        relativeSpeed: this.closingSpeedBeforeSlice(a, b, normal, impulse),
+      });
+    });
+  }
+
+  /**
+   * Closing speed along `normal` (out of `a`) before the slice: the post-slice
+   * relative velocity plus the velocity change the impulse caused, J·(1/mₐ + 1/m_b).
+   * Linear only; an estimate for gameplay ("how fast did it hit"), not a solver value.
+   */
+  private closingSpeedBeforeSlice(a: EntityId, b: EntityId, normal: ImpactVec3, impulse: number): number {
+    const bodyA = this.rapierBodies.get(a)?.body;
+    const bodyB = this.rapierBodies.get(b)?.body;
+    const velocityA = bodyA?.linvel() ?? { x: 0, y: 0, z: 0 };
+    const velocityB = bodyB?.linvel() ?? { x: 0, y: 0, z: 0 };
+    const after = (velocityA.x - velocityB.x) * normal[0]
+      + (velocityA.y - velocityB.y) * normal[1]
+      + (velocityA.z - velocityB.z) * normal[2];
+    const inverseMass = (body: RapierRigidBody | undefined): number =>
+      body?.isDynamic() && body.mass() > 0 ? 1 / body.mass() : 0;
+    return Math.max(0, after + impulse * (inverseMass(bodyA) + inverseMass(bodyB)));
   }
 
   private hasDynamicActiveArea(): boolean {
@@ -1977,6 +2144,25 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
       isSensor: left.isSensor || right.isSensor,
     });
   }
+}
+
+/**
+ * The slice's impact normal out of collider1: the manifolds' weighted normal,
+ * or — when the pair separated within the slice and left no manifold — the
+ * contact force direction, which Rapier applies to collider2 along the normal.
+ */
+function impactNormal(
+  normalSum: readonly [number, number, number],
+  force: { x: number; y: number; z: number },
+  impulse: number,
+): ImpactVec3 {
+  const length = Math.hypot(normalSum[0], normalSum[1], normalSum[2]);
+  if (length > 1e-9) return [normalSum[0] / length, normalSum[1] / length, normalSum[2] / length];
+  if (impulse > 0) {
+    const forceLength = Math.hypot(force.x, force.y, force.z);
+    if (forceLength > 0) return [force.x / forceLength, force.y / forceLength, force.z / forceLength];
+  }
+  return [0, 1, 0];
 }
 
 /** Inverse point mass n·M⁻¹n + (r×n)·I⁻¹(r×n), including locked axes. */

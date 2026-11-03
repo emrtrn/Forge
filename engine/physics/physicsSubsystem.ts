@@ -2453,9 +2453,13 @@ function colliderDescsForBody(RAPIER: RapierModule, body: PhysicsBody) {
   const friction = body.collider.friction ?? DEFAULT_FRICTION;
   const restitution = body.collider.restitution ?? DEFAULT_RESTITUTION;
   const groups = body.collider.collisionGroups;
+  // A simulated body's authored mass is split evenly over its primitives;
+  // without it Rapier would weigh each one by volume at density 1.
+  const massKg = body.collider.simulatePhysics ? body.collider.massKg : undefined;
   return primitives.map((primitive) => {
     const desc = primitiveColliderDesc(RAPIER, primitive).setFriction(friction).setRestitution(restitution);
     if (groups !== undefined) desc.setCollisionGroups(groups);
+    if (massKg !== undefined) desc.setMass(massKg / primitives.length);
     return desc;
   });
 }

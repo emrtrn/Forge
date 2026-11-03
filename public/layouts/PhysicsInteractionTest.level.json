@@ -1,0 +1,191 @@
+{
+  "schema": 1,
+  "name": "PhysicsInteractionTest",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            2.5,
+            0,
+            -1.5
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "sm-breakable-crate",
+      "placements": [
+        {
+          "id": "crate-a",
+          "position": [
+            -1.2,
+            0,
+            12
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "crate-b",
+          "position": [
+            0,
+            0,
+            12
+          ],
+          "rotationYDeg": 15,
+          "scale": 1
+        },
+        {
+          "id": "crate-c",
+          "position": [
+            1.2,
+            0,
+            12
+          ],
+          "rotationYDeg": -10,
+          "scale": 1
+        },
+        {
+          "id": "crate-d",
+          "position": [
+            0,
+            1,
+            12
+          ],
+          "rotationYDeg": 30,
+          "scale": 0.8
+        }
+      ]
+    },
+    {
+      "assetId": "sm-breakable-wall",
+      "placements": [
+        {
+          "id": "wall-a",
+          "position": [
+            0,
+            0,
+            26
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            7,
+            2.5,
+            0.4
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "sm-breakable-panel",
+      "placements": [
+        {
+          "id": "panel-a",
+          "position": [
+            8,
+            0,
+            14
+          ],
+          "rotationYDeg": 90,
+          "scale": [
+            2,
+            2,
+            0.08
+          ]
+        },
+        {
+          "id": "panel-b",
+          "position": [
+            -8,
+            0,
+            14
+          ],
+          "rotationYDeg": 90,
+          "scale": [
+            2,
+            2,
+            0.08
+          ]
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "staticObjectsCastShadow": true,
+    "backgroundColor": "#ffffff",
+    "gameMode": "forge.vehicle"
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1,
+    "turbidity": 4,
+    "mie": 0.002,
+    "mieDirectionalG": 0.85
+  },
+  "heightFog": {},
+  "cloudLayer": {
+    "coverage": 0.4,
+    "density": 0.5,
+    "scale": 2,
+    "speed": 0.1
+  },
+  "lights": [
+    {
+      "id": "vehicle-test-sun",
+      "type": "directional",
+      "position": [
+        20,
+        30,
+        20
+      ],
+      "name": "Sun",
+      "rotation": [
+        -50,
+        30,
+        0
+      ],
+      "color": "#fff4e0",
+      "intensity": 4,
+      "castShadow": true
+    }
+  ],
+  "blockingVolumes": [
+    {
+      "id": "physics-test-ground",
+      "position": [
+        0,
+        -0.5,
+        0
+      ],
+      "name": "Ground",
+      "size": [
+        160,
+        1,
+        160
+      ],
+      "renderInGame": true,
+      "color": "#725637"
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/starter-content/Gameplay/Script_ReferenceCar.actor.json",
+      "position": [
+        0,
+        1.2,
+        0
+      ],
+      "name": "Reference Car",
+      "rotation": [
+        0,
+        0,
+        0
+      ]
+    }
+  ]
+}

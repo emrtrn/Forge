@@ -17,6 +17,7 @@ import { createAudioModule } from "./audioModule";
 import type { CapabilityModule } from "./CapabilityModule";
 import { createCharacterMovementModule } from "./characterMovementModule";
 import { createDialogueModule } from "./dialogueModule";
+import { createFractureModule } from "./fractureModule";
 import { createMovingPlatformModule } from "./movingPlatformModule";
 import { createRuntimeUiModule } from "./runtimeUiModule";
 import { createSaveGameModule } from "./saveGameModule";
@@ -48,6 +49,9 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     // Wheel tracks in soft paint layers; off, the terrain keeps its grip/drag
     // response (the shell's surface provider) but shows no tracks.
     createTerrainDeformationModule(),
+    // Pre-baked fracture of static meshes with a .fracture.json; off, they stay
+    // ordinary static props.
+    createFractureModule(),
     // Registered after the platform module purely for readability — the solver
     // resolves platforms per call, and its tick comes from the `movement` slot.
     createCharacterMovementModule(),

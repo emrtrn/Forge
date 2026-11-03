@@ -180,4 +180,27 @@ export async function registerPhysicsImpactTests(checkAsync: CheckAsync): Promis
     assert.equal(at144.peak, at60.peak, "one slice per frame at most: the same peak slice");
     assert.ok(at30.peak >= at60.peak, "30 Hz may merge the peak with its neighbour slice");
   }));
+
+  await checkAsync("physics mass: a simulated compound (convex primitive) collider takes its authored massKg", () => withQuietRapier(async () => {
+    const hull = [[-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [0.5, 0.5, -0.5], [-0.5, 0.5, -0.5],
+      [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [0.5, 0.5, 0.5], [-0.5, 0.5, 0.5]];
+    const body = (id: string, massKg: number): Entity => ({
+      id,
+      components: {
+        Transform: { position: [id === "light" ? 0 : 5, 10, 0], rotation: [0, 0, 0], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false, simulatePhysics: true,
+          massKg, enableGravity: false, linearDamping: 0, primitives: [{ shape: "convex", size: [1, 1, 1], points: hull }],
+        },
+      },
+    } as unknown as Entity);
+    const { physics, app } = await world([body("light", 2), body("heavy", 20)]);
+    physics.applyImpulse("light", [10, 0, 0]);
+    physics.applyImpulse("heavy", [10, 0, 0]);
+    run(app, physics, STEP, 1);
+    // Δv = J / m: a 1 m³ hull at Rapier's density 1 would weigh 1 kg and fly at 10 m/s.
+    assert.ok(Math.abs((physics.velocityOf("light")?.[0] ?? 0) - 5) < 0.05, `light ${physics.velocityOf("light")}`);
+    assert.ok(Math.abs((physics.velocityOf("heavy")?.[0] ?? 0) - 0.5) < 0.01, `heavy ${physics.velocityOf("heavy")}`);
+    await app.dispose();
+  }));
 }

@@ -548,7 +548,7 @@ export function validateAssetManifest(
     if (terrain !== path && publicFiles.has(terrain)) continue;
     // Automatic model companions need no separate asset record. An orphan
     // companion remains visible instead of being hidden by its suffix alone.
-    const companion = path.replace(/\.(collision|materials|uvw|vertexcolors|skeleton)\.json$/i, "");
+    const companion = path.replace(/\.(collision|materials|uvw|vertexcolors|skeleton|fracture)\.json$/i, "");
     if (companion !== path && [".glb", ".gltf"].some((ext) => manifestPaths.has(companion + ext))) continue;
     // Level-owned terrain (`<level>.landscapes/<id>.terrain.json`), painted
     // foliage (`<level>.foliage.json`), Mesh Paint (`<level>.meshpaint.json`),

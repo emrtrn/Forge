@@ -123,6 +123,17 @@ export async function registerContentLoadingTests(check: Check, checkAsync: Chec
     assert.deepEqual(compareAssetHealthWarnings(validateAssetManifest({ ...manifest, assets: [] }), [key]).resolved, [key]);
   });
 
+  check("content: asset health treats a model's fracture sidecar as a companion, an orphan one as unregistered", () => {
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8"));
+    const model = manifest.assets.find((asset: { path: string }) => /\.glb$/i.test(asset.path));
+    const fracture = model.path.replace(/\.glb$/i, ".fracture.json");
+    const report = validateAssetManifest({ ...manifest, assets: [model] }, {
+      publicFiles: [model.path, fracture, "assets/orphan.fracture.json"],
+    });
+    assert.deepEqual(report.issues.filter((issue) => issue.code === "asset-file-unregistered").map((issue) => issue.path),
+      ["assets/orphan.fracture.json"]);
+  });
+
   check("content: asset health treats level-owned terrain as a companion of its registered level", () => {
     const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8"));
     const levelAsset = manifest.assets.find((asset: { path: string }) => /\.level\.json$/i.test(asset.path));

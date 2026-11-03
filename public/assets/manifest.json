@@ -3718,6 +3718,84 @@
       "license": "Unknown"
     },
     {
+      "id": "sm-breakable-crate",
+      "name": "Breakable Crate",
+      "assetType": "staticMesh",
+      "category": "Destructible",
+      "path": "assets/starter-content/StaticMeshes/Destructible/SM_BreakableCrate.glb",
+      "tags": [
+        "destructible",
+        "fracture"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Destructible",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3932
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-breakable-wall",
+      "name": "Breakable Wall",
+      "assetType": "staticMesh",
+      "category": "Destructible",
+      "path": "assets/starter-content/StaticMeshes/Destructible/SM_BreakableWall.glb",
+      "tags": [
+        "destructible",
+        "fracture"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Destructible",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3932
+      },
+      "license": "Unknown"
+    },
+    {
+      "id": "sm-breakable-panel",
+      "name": "Breakable Panel",
+      "assetType": "staticMesh",
+      "category": "Destructible",
+      "path": "assets/starter-content/StaticMeshes/Destructible/SM_BreakablePanel.glb",
+      "tags": [
+        "destructible",
+        "fracture"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Destructible",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3932
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "shape-cylinder",
       "name": "Shape Cylinder",
       "assetType": "staticMesh",

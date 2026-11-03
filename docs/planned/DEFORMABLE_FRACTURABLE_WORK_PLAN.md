@@ -6,8 +6,9 @@
 > olayı. **Faz 6 kod tarafı ve GPU ölçümü tamam** (2026-11-03), görsel
 > kabul bekliyor. Etkileşim alanı ve static mesh sway Faz 6b'ye ayrıldı.
 > **Faz 2 tamam** (2026-11-03): Voronoi bake çekirdeği. **Faz 3 tamam**
-> (2026-11-03): fracture sidecar'ı + Static Mesh Editor bölümü. Sıradaki:
-> Faz 4 (fracture runtime).
+> (2026-11-03): fracture sidecar'ı + Static Mesh Editor bölümü. **Faz 4
+> çekirdeği tamam** (2026-11-03): static placement'lar oyunda kırılıyor;
+> actor component / override / VFX-ses alanları açık.
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -428,33 +429,71 @@ vermez. Kullanıcı görsel kabulü ayrı.
 
 ### Faz 4 — Fracture runtime (`fractureModule`)
 
-- [ ] Modül `createDefaultRuntimeModules()`'e kapalı güvenli eklenir.
-- [ ] Tetikleyiciler: impact eşiği (Faz 1), `Damage.Apply` birikimi
+- [x] Modül `createDefaultRuntimeModules()`'e kapalı güvenli eklenir.
+      `src/scene/capabilities/fractureModule.ts`; shell `FractureHost`
+      servisi (fizik alt kümesi, model, kaynak devreden çıkarma, dinamik
+      render nesnesi kaydı, materyal, bütçe). Host ya da modül yoksa
+      placement'lar düz statik kalır; editör modunda çalışmaz.
+- [x] Tetikleyiciler: impact eşiği (Faz 1), `Damage.Apply` birikimi
       (`damageToBreak`), script/editör çağrısı (`Fracture.Break`).
-- [ ] İdempotent durum geçişi: `intact → fractured` bir kez olur. Aynı
-      karedeki çoklu olaylar tek parça seti üretir.
-- [ ] Kaynağı devreden çıkar: body'yi kaldır, instancing slotunu
-      `collapseInstance` ile çökert ya da klonu gizle.
-- [ ] Parçalar: kaynağın dünya pozu ve hızıyla doğar, hull collider alır,
-      çarpma noktasından dışa impulse görür.
-- [ ] Bütçe: asset başına `maxActiveChunks` ve kalite profiline bağlı global
+      Impact: kırılabilir her entity `setImpactEventThreshold(breakImpulse)`
+      ile opt-in olur, modül her karede `impacts()` okur. Script:
+      `Fracture.Break` mesajı ya da `fractureCommandsService.breakEntity`.
+- [x] İdempotent durum geçişi: `intact → fractured` bir kez olur. Aynı
+      karedeki çoklu olaylar tek parça seti üretir. `FractureRegistry`
+      (`engine/physics/fracture/fractureRuntime.ts`, Codex).
+- [x] Kaynağı devreden çıkar: body'yi kaldır, instancing slotunu
+      `collapseInstance` ile çökert ya da klonu gizle. Shell'in mevcut
+      `destroyActorEntity` yolu.
+- [x] Parçalar: kaynağın dünya pozu ve hızıyla doğar, hull collider alır,
+      çarpma noktasından dışa impulse görür. `planChunkSpawns`: dünya pozu
+      three XYZ quaternion'uyla (fizik/render ile aynı), ölçeklenmiş hull,
+      kütle × |sx·sy·sz|, dışa tekme `0.5·min(6 m/s, J/Σm)` (script'te
+      1.5 m/s). Ek: çarpana impulse'un %60'ı geri verilir — statik kaynak
+      onu fizik adımında durdurmuştu, yoksa araç kırdığı sandıkta çakılı
+      kalıyordu (smoke: 0 → 5 km/h).
+      Bulunan motor hatası: primitive'li (convex) dinamik gövdede `massKg`
+      uygulanmıyordu (Rapier yoğunluk 1 → hacim kg); artık primitive'lere
+      eşit bölünür (`physics mass` testi; araçlar etkilenmez, şasileri
+      yoğunluğu sıfırlayıp kütleyi ayrıca ekliyor).
+- [x] Bütçe: asset başına `maxActiveChunks` ve kalite profiline bağlı global
       sınır. Eskiler önce uyutulur/silinir, küçük parçalar erken temizlenir.
-- [ ] Ömür sonunda geometri/materyal/collider dispose edilir. Hücre unload ve
-      level değişiminde de temizlik yapılır.
-- [ ] Actor olayı `Fracture.Broken` (instigator, impulse) + VFX/ses kancası
-      (veri ile bağlanır, kod sabit değil).
-- [ ] Perf sayaçları: aktif parça, spawn hitch (ms), fizik adımı payı.
-- [ ] Generic test level'ı `public/layouts/PhysicsInteractionTest.level.json`:
-      kutu, duvar, panel, ot alanı, sürülebilir araç.
-- [ ] Engine testleri: eşik altı kırılmaz, çift tetik tek set üretir, bütçe
+      En büyük `maxActiveChunks` parça doğar; `QualitySettings.
+      fractureChunkBudget` (192/128/64/32), en eski önce silinir; ömür
+      `chunkLifetime × (0.5 + 0.5·min(1, hacim/ortalama))`. Uyutma Rapier'a
+      bırakıldı.
+- [~] Ömür sonunda geometri/materyal/collider dispose edilir. Hücre unload ve
+      level değişiminde de temizlik yapılır. Collider + mesh ömürde ve level
+      değişiminde kaldırılır; parça geometrisi asset başına paylaşılır ve
+      level kapanınca dispose edilir. Açık: World Partition'da kaynağın
+      hücresi boşalınca parçaları kaldırmak (v1 yalnız statik placement'lar
+      kırılır, onlar akmaz).
+- [~] Actor olayı `Fracture.Broken` (instigator, impulse) + VFX/ses kancası
+      (veri ile bağlanır, kod sabit değil). `Fracture.Broken` script mesajı
+      yayınlanır (`entityId`, `instigator`, `impulse`); VFX/ses sidecar
+      alanları açık.
+- [x] Perf sayaçları: aktif parça, spawn hitch (ms), fizik adımı payı.
+      `?debug` satırı `fracture: objects … broken … chunks … breaks … spawn
+      … ms`; fizik payı mevcut subsystem profilinde.
+- [~] Generic test level'ı `public/layouts/PhysicsInteractionTest.level.json`:
+      kutu, duvar, panel, ot alanı, sürülebilir araç. Kutu (4), duvar,
+      panel (2), Reference Car (`forge.vehicle`). Yeni kırılabilir asset'ler
+      `StaticMeshes/Destructible/` (küp GLB kopyası + kendi fracture,
+      collision, materyal dosyaları; paylaşılan `Shape_Cube`'a dokunulmadı).
+      Ot alanı Faz 6b etkileşim alanıyla eklenecek.
+- [x] Engine testleri: eşik altı kırılmaz, çift tetik tek set üretir, bütçe
       aşılmaz, dispose sonrası kaynak sızıntısı yok.
-- [ ] Browser smoke: Play'de araçla kutuya çarp → kırılır, parça sayısı
-      sınırda.
+      `tests/engine/fractureRuntime.test.ts` (21) + `physics mass` testi.
+- [x] Browser smoke: Play'de araçla kutuya çarp → kırılır, parça sayısı
+      sınırda. `tests/smoke/fracture-runtime.spec.ts`: 2 sandık / 20 parça,
+      spawn ≈1.4 ms, araç kırıp geçer, parçalar ömürde temizlenir.
 - [ ] Actor Script aktörleri için `Fracturable` component (aynı sidecar'ı
-      referanslar).
+      referanslar). v1 yalnız static placement'lar; placement override
+      `fracture: { enabled, breakImpulse }` (§4) de açık.
 
 Kabul: `build:verify` yeşil, smoke yeşil; kullanıcı görsel/oynanış kabulü
-ayrı raporlanır.
+ayrı raporlanır. **Çekirdek kapandı (2026-11-03)**; açık maddeler (actor
+component, placement override, VFX/ses alanları, hücre temizliği) Faz 4b.
 
 ### Faz 5 — Hasar durumu ve kalıcılık
 
@@ -702,5 +741,8 @@ kullanıcı kararı).
   sidecar tipleri/normalizer/uyarılar/hash, `/__save-fracture` (7. allowlist
   yüzeyi), yükleyici + editör store'u, `fractureGeometry.ts`. Sırada editör
   bölümü (3c).
+- 2026-11-03: Faz 4 çekirdeği: `fractureRuntime.ts` (Codex) + `fractureModule`
+  + shell host + test level + smoke. Motor hatası düzeltildi: compound
+  collider'da `massKg` uygulanmıyordu.
 - 2026-11-03: **Faz 3 kapandı.** Static Mesh Editor "Fracture" bölümü (3c):
   bake, önizleme, Explode, hull wire'ları, uyarılar, kaydetme; editör smoke'u.

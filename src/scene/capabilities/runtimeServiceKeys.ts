@@ -14,7 +14,7 @@
  * subsystem is baked into the shell; as later Phase E slices extract those,
  * the provider moves to the module without the consumers changing.
  */
-import type { AnimationMixer, Object3D, Scene, Vector3 } from "three";
+import type { AnimationMixer, Material, Object3D, Scene, Vector3 } from "three";
 
 import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
 import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
@@ -54,6 +54,7 @@ import type {
   GameSaveState,
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
+import type { PhysicsImpact } from "@engine/physics/impactEvents";
 import type { VehicleGroundSinkProvider } from "@engine/physics/surface/surfaceResponse";
 import type { VehicleDefinition, VehicleInput, VehicleState, VehicleVec3, VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
 import type { SurfaceDeformationSample } from "@engine/terrain/terrainSurface";
@@ -299,6 +300,58 @@ export interface VehicleAiCommands {
 }
 
 export const vehicleAiService = runtimeServiceKey<VehicleAiCommands>("vehicle-ai");
+
+/**
+ * What the fracture capability needs from the shell (DEFORMABLE_FRACTURABLE
+ * Faz 4): the physics world it breaks bodies in, the loaded models it bakes
+ * from, and a way to retire the intact object and render its chunks.
+ * Provided by: the runtime shell (owner of physics, models and render objects).
+ */
+export interface FractureHost {
+  readonly physics: {
+    setImpactEventThreshold(entityId: string, minImpulse: number | null): void;
+    /** The latest frame's impacts (all opted-in pairs). */
+    impacts(): readonly PhysicsImpact[];
+    addEntities(entities: readonly Entity[]): number;
+    removeEntities(entityIds: readonly string[]): void;
+    velocityOf(entityId: string): readonly [number, number, number] | null;
+    applyImpulse(entityId: string, impulse: readonly [number, number, number]): void;
+  };
+  /** The loaded model (`gltf.scene`, asset UVW applied) for a manifest asset id. */
+  model(assetId: string): Object3D | null;
+  /** The material the asset's first material slot resolves to, as its placements render; null = the model's own. */
+  exteriorMaterial(assetId: string): Material | null;
+  /** Retires the intact object: removes its body and hides or frees its render object. */
+  destroySource(entityId: string): void;
+  /** Renders `object` at the entity's interpolated physics pose (null detaches). */
+  attachDynamicObject(entityId: string, object: Object3D | null): void;
+  /** A manifest material, cached by the shell; null when it cannot load. */
+  loadMaterial(materialId: string): Promise<Material | null>;
+  /** The quality profile's level-wide live chunk budget. */
+  chunkBudget(): number;
+}
+
+export const fractureHostService = runtimeServiceKey<FractureHost>("fracture-host");
+
+/** Live fracture state for `?debug` and browser smokes. */
+export interface FractureDebugSnapshot {
+  readonly fracturable: number;
+  readonly fractured: number;
+  readonly activeChunks: number;
+  /** Chunk spawn time of the last break, ms (the hitch the plan's risk 1 watches). */
+  readonly lastSpawnMs: number;
+  readonly breaks: number;
+}
+
+/** Scripted breaks and the debug readout. Provided by: `fractureModule`. */
+export interface FractureCommands {
+  /** Breaks a fracturable entity now; false when it is not fracturable or already broken. */
+  breakEntity(entityId: string, instigator?: string): boolean;
+  isFractured(entityId: string): boolean;
+  snapshot(): FractureDebugSnapshot;
+}
+
+export const fractureCommandsService = runtimeServiceKey<FractureCommands>("fracture-commands");
 
 /**
  * The script-message bus: how gameplay triggers a capability ("play-dialogue")

@@ -31,7 +31,7 @@ import type {
   VehicleSurfaceDebugSnapshot,
 } from "./RuntimeSceneApp";
 import type { SceneCostSnapshot } from "./runtimeDebugSnapshot";
-import type { TerrainDeformationSnapshot } from "./capabilities/runtimeServiceKeys";
+import type { FractureDebugSnapshot, TerrainDeformationSnapshot } from "./capabilities/runtimeServiceKeys";
 import type { WorldEnvironmentState } from "@engine/environment/environmentResolve";
 
 const UPDATE_INTERVAL_MS = 500;
@@ -78,6 +78,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       gameModeDebugText(app) +
       vehicleSurfaceText(app) +
       terrainDeformationText(app) +
+      fractureText(app) +
       aiDebugText(app) +
       aiInspectorText(app) +
       aiNavDebugText(app) +
@@ -480,6 +481,18 @@ export function formatTerrainDeformationDebug(snapshot: TerrainDeformationSnapsh
 /** `terrain detail: nodes 48 levels 2`: CDLOD nodes refined inside the track window (smoke tests parse it). */
 export function formatTerrainTrackDetailDebug(snapshot: TerrainTrackDetailSnapshot): string {
   return `terrain detail: nodes ${snapshot.nodes} levels ${snapshot.levels}`;
+}
+
+/** `fracture: objects 7 broken 1 chunks 10 breaks 1 spawn 1.42 ms` (smoke tests parse it); "" with nothing fracturable. */
+export function formatFractureDebug(snapshot: FractureDebugSnapshot): string {
+  return `fracture: objects ${snapshot.fracturable} broken ${snapshot.fractured} chunks ${snapshot.activeChunks}`
+    + ` breaks ${snapshot.breaks} spawn ${snapshot.lastSpawnMs.toFixed(2)} ms`;
+}
+
+function fractureText(app: RuntimeStatsApp): string {
+  const snapshot = app.getFractureSnapshot?.();
+  return snapshot && snapshot.fracturable > 0 ? `
+${formatFractureDebug(snapshot)}` : "";
 }
 
 function terrainDeformationText(app: RuntimeStatsApp): string {

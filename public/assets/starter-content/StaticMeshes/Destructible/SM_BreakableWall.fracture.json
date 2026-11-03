@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "source": "voronoi",
+  "enabled": true,
+  "seed": 21,
+  "cellCount": 24,
+  "density": 1800,
+  "interiorMaterialId": "starter-mat-concrete",
+  "interiorUvScale": 1,
+  "breakImpulse": 6000,
+  "damageToBreak": null,
+  "chunkLifetime": 15,
+  "maxActiveChunks": 24,
+  "sourceHash": "fnv1a:7e214c06"
+}

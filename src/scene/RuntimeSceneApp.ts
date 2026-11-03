@@ -78,6 +78,9 @@ import {
   characterAnimationCommandsService,
   characterAnimationHostService,
   vehicleHostService,
+  fractureHostService,
+  fractureCommandsService,
+  type FractureDebugSnapshot,
   terrainDeformationService,
   terrainSurfaceHostService,
   type TerrainDeformationSnapshot,
@@ -691,6 +694,8 @@ export interface RuntimeStatsApp {
   getVehicleSurfaceSnapshot?(): VehicleSurfaceDebugSnapshot | null;
   /** Optional: the runtime track field; null while no deformable terrain is loaded. */
   getTerrainDeformationSnapshot?(): TerrainDeformationSnapshot | null;
+  /** Optional: fracture state; null when the module is off. */
+  getFractureSnapshot?(): FractureDebugSnapshot | null;
   /** Optional: terrain CDLOD nodes refined inside the track window, and the quality's detail levels. */
   getTerrainTrackDetailSnapshot?(): TerrainTrackDetailSnapshot;
   /** Optional: the live World Environment (clock, season, weather); null when the level has none. */
@@ -943,6 +948,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * asset's placements, so its slot is not always the placement index.
    */
   private readonly instanceSlots = new Map<string, { meshes: InstancedMesh[]; slot: number }>();
+  /** Render objects of module-owned dynamic bodies, posed by the physics transform sink. */
+  private readonly dynamicRenderObjects = new Map<string, Object3D>();
   /**
    * Instanced-static placements a `collectible` behavior has collected, keyed by
    * `overrideObjectKey(assetId, placementIndex)`. The per-frame instance-transform
@@ -1187,6 +1194,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     entityId: string,
     transform: TransformComponent,
   ): void => {
+    // Module-owned dynamic bodies (fracture chunks): position + rotation only;
+    // the module set the object's scale when it built it.
+    const dynamicObject = this.dynamicRenderObjects.get(entityId);
+    if (dynamicObject) {
+      dynamicObject.position.set(transform.position[0], transform.position[1], transform.position[2]);
+      applyEulerDegrees(dynamicObject, transform.rotation);
+      return;
+    }
     const instance = parseInstanceEntityId(entityId);
     if (instance) {
       this.syncInstanceTransform(instance.assetId, instance.placementIndex, transform);
@@ -1517,6 +1532,28 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       isSurfaceFxActive: (entityId) => this.physicsSubsystem.isDynamicBodyActive(entityId),
       setGroundSinkProvider: (provider) => this.physicsSubsystem.setVehicleGroundSinkProvider(provider),
       onPhysicsStep: (listener) => this.physicsSubsystem.onFixedStep(listener),
+    });
+    this.runtimeServices.provide(fractureHostService, {
+      physics: {
+        setImpactEventThreshold: (entityId, minImpulse) => this.physicsSubsystem.setImpactEventThreshold(entityId, minImpulse),
+        impacts: () => this.physicsSubsystem.impacts(),
+        addEntities: (entities) => this.physicsSubsystem.addEntities(entities),
+        removeEntities: (entityIds) => this.physicsSubsystem.removeEntities(entityIds),
+        velocityOf: (entityId) => this.physicsSubsystem.velocityOf(entityId),
+        applyImpulse: (entityId, impulse) => this.physicsSubsystem.applyImpulse(entityId, impulse),
+      },
+      model: (assetId) => this.models.get(assetId)?.scene ?? null,
+      exteriorMaterial: (assetId) => {
+        const materialId = this.resolveAssetMaterialSlots(assetId)?.slots[0];
+        return materialId ? this.materialCache.get(materialId) ?? null : null;
+      },
+      destroySource: (entityId) => this.destroyActorEntity(entityId),
+      attachDynamicObject: (entityId, object) => {
+        if (object) this.dynamicRenderObjects.set(entityId, object);
+        else this.dynamicRenderObjects.delete(entityId);
+      },
+      loadMaterial: async (materialId) => (await this.ensureMaterialLoaded(materialId).catch(() => undefined)) ?? null,
+      chunkBudget: () => this.qualitySettings.fractureChunkBudget,
     });
     this.runtimeServices.provide(terrainSurfaceHostService, {
       deformationAt: (groundEntityId, contactPoint) =>
@@ -2524,6 +2561,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.runtimeServices.resolve(terrainDeformationService)?.snapshot() ?? null;
   }
 
+  getFractureSnapshot(): FractureDebugSnapshot | null {
+    return this.runtimeServices.resolve(fractureCommandsService)?.snapshot() ?? null;
+  }
+
   getTerrainTrackDetailSnapshot(): TerrainTrackDetailSnapshot {
     return terrainTrackDetailStats();
   }
@@ -3498,6 +3539,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.lightPoolExhaustedWarned = false;
     this.assetUvwDefs.clear();
     this.instanceSlots.clear();
+    this.dynamicRenderObjects.clear();
     this.instanceOverrideObjects.clear();
     this.collectedInstances.clear();
     this.disposeInstanceProbeMaterials();

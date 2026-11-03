@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "source": "voronoi",
+  "enabled": true,
+  "seed": 7,
+  "cellCount": 10,
+  "density": 450,
+  "interiorMaterialId": "m-wood-oak-material",
+  "interiorUvScale": 1,
+  "breakImpulse": 1500,
+  "damageToBreak": null,
+  "chunkLifetime": 10,
+  "maxActiveChunks": 12,
+  "sourceHash": "fnv1a:7e214c06"
+}

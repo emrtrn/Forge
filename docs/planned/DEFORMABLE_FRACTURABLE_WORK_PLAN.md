@@ -13,7 +13,7 @@
 > **Kırılma sırası (kullanıcı kararı, 2026-11-03)** — yarım kalırsa buradan
 > devam: (1) ~~Faz 4b-3 kırılma VFX/ses + debris ayarları~~ (tamam) → (2) **Faz 4c destek
 > grafiği** (4c-1…4c-5 tamam; anchor/sabit parçalar, World Support, kısmi kırılma, ada çöküşü)
-> → (3) Faz 5 kalıcılık (4c yüzünden parça bit maskesiyle) → (4) Faz 4d
+> → (3) ~~Faz 5 kalıcılık (4c yüzünden parça bit maskesiyle)~~ (tamam) → (4) Faz 4d
 > Extended Structures (ihtiyaç olunca). 4b-1, 4b-2 ve ahşap kıymık deseni
 > tamam. APEX Destruction değerlendirmesi Faz 4c başlığının altında.
 >
@@ -715,17 +715,17 @@ Support sorgusunun eğimli zeminde fazla anchor seçmesi (tolerans editörde).
 
 ### Faz 5 — Hasar durumu ve kalıcılık
 
-- [ ] Asgari durum modeli: `intact | damaged | fractured` + birikmiş hasar
+- [x] Asgari durum modeli: `intact | damaged | fractured` + birikmiş hasar
       (0..1). Ara durumların oyundaki anlamı fork'a aittir. Faz 4c'den sonra
       `damaged` durumu düşen parçaların bit maskesini taşır (≤64 parça).
-- [ ] `GameSaveState`'e isteğe bağlı `destructibles` bölümü: placement/actor
+- [x] `GameSaveState`'e isteğe bağlı `destructibles` bölümü: placement/actor
       id → durum. Eski save'ler (alan yok) sorunsuz yüklenir.
-- [ ] Restore: kırık nesne parçasız gelir (K-05), çift kırılma olmaz.
-- [ ] World Partition: hücre boşalıp tekrar yüklenince durum korunur.
-- [ ] Silinmiş/yeniden adlandırılmış id içeren save'de güvenli atlama +
+- [x] Restore: kırık nesne parçasız gelir (K-05), çift kırılma olmaz.
+- [x] World Partition: hücre boşalıp tekrar yüklenince durum korunur.
+- [x] Silinmiş/yeniden adlandırılmış id içeren save'de güvenli atlama +
       uyarı.
-- [ ] `SAVE_GAME_CONTRACT.md` güncellemesi.
-- [ ] Testler: save → load → aynı mantıksal durum; eski sürüm save; eksik
+- [x] `SAVE_GAME_CONTRACT.md` güncellemesi.
+- [x] Testler: save → load → aynı mantıksal durum; eski sürüm save; eksik
       asset fallback.
 
 Kabul: save/load ve hücre yeniden girişinde tutarlı durum, `build:verify`
@@ -775,8 +775,17 @@ Dilimler (2026-11-03):
       (`state.added`) sink'lerden önce günceller. Açık: hücresi boşalan
       *sağlam* aktörün birikmiş `Damage.Apply` hasarı korunmaz (placement'ınki
       korunur). Testler: hücre dönüşü + inşa bekleyen restore.
-- [ ] 5-4 shell + sözleşme: `RuntimeSceneApp` capture/restore bağlantısı,
+- [x] 5-4 shell + sözleşme: `RuntimeSceneApp` capture/restore bağlantısı,
       `SAVE_GAME_CONTRACT.md`, smoke (kır → kaydet → yükle → aynı durum).
+      **Faz 5 kapandı (2026-11-03):** `collectCurrentSaveState` →
+      `captureState()`; `gameplaySaveStateService.restore` → `restoreState`
+      flag'lerden sonra, araç/pawn yerleşmeden önce (duvarın yerine araç
+      konmasın). Smoke `fracture-runtime.spec.ts` "quick-save of a broken
+      wall": kayıt `{ state: "damaged", chunkCount: 24, standing: "ebc324",
+      anchored: "ea2478" }`, yükleme sonrası 12 ayakta, 0 parça, yeni kırılma
+      sayılmaz, 3 s sonra aynı. Not: `breaks` sayacı oturum boyunca birikir
+      (seviye yüklemesinde sıfırlanmaz). Kalan bilinen açık: hücresi boşalan
+      sağlam aktörün birikmiş hasarı (5-3 notu).
 
 ### Faz 6 — Rüzgâr ve temas salınımı (fiziksiz görsel)
 
@@ -1061,3 +1070,6 @@ kullanıcı kararı).
 - 2026-11-03: Faz 5-3: kırık/hasarlı kaynak hücre boşalıp dönünce aynı
   durumda; `isSourceLive`. Sırada 5-4 (shell save bağlantısı + sözleşme +
   smoke).
+- 2026-11-03: **Faz 5 kapandı** (5-4): save capture/restore shell'e bağlandı,
+  `SAVE_GAME_CONTRACT.md` güncellendi, kır → quick-save → quick-load smoke'u.
+  Kırılma sırasında kalan: Faz 4d Extended Structures (ihtiyaç olunca).

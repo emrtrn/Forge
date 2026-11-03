@@ -166,10 +166,11 @@ interface WallSupportLine { standing: number; collapsed: number }
 /**
  * Opens `PhysicsInteractionTest` with the crates and posts taken off the car's
  * path, so it drives straight into the anchored wall; `support` overrides the
- * wall sidecar's support block. Returns the page's errors and a reader for the
- * debug line's `static` / `collapsed` counters.
+ * wall sidecar's support block, `pauseMenu` makes Escape open the starter
+ * Save / Load menu. Returns the page's errors and a reader for the debug
+ * line's `static` / `collapsed` counters.
  */
-async function openWallLevel(page: Page, support?: Record<string, unknown>): Promise<{
+async function openWallLevel(page: Page, options: { support?: Record<string, unknown>; pauseMenu?: boolean } = {}): Promise<{
   errors: string[]; readSupport: () => Promise<WallSupportLine>;
 }> {
   const errors: string[] = [];
@@ -184,6 +185,7 @@ async function openWallLevel(page: Page, support?: Record<string, unknown>): Pro
     const response = await route.fetch();
     const level = await response.json();
     level.instances = level.instances.filter((group: { assetId: string }) => group.assetId !== "sm-breakable-crate");
+    if (options.pauseMenu) level.worldSettings = { ...level.worldSettings, pauseMenuWidget: "menu" };
     await route.fulfill({ response, json: level });
   });
   await page.route("**/project.3dgame.json", async (route) => {
@@ -192,6 +194,7 @@ async function openWallLevel(page: Page, support?: Record<string, unknown>): Pro
     project.editor.defaultScene = LEVEL;
     await route.fulfill({ response, json: project });
   });
+  const support = options.support;
   if (support) {
     await page.route("**/SM_BreakableWall.fracture.json", async (route) => {
       const response = await route.fetch();
@@ -241,10 +244,10 @@ test("fracture runtime: a wall held at one end loses the part a hit cuts off (is
   // pillar, no World Support). The car hits the middle: the chunks within the
   // damage radius fall, and the right part, which now has no path of
   // neighbouring chunks to the anchor, collapses with them. The left part stands.
-  const { errors, readSupport } = await openWallLevel(page, {
+  const { errors, readSupport } = await openWallLevel(page, { support: {
     worldSupport: false,
     anchors: [{ min: [-0.52, -0.02, -0.52], max: [-0.3, 1.02, 0.52] }],
-  });
+  } });
   await page.locator("#game-canvas").click();
   await page.keyboard.down("KeyW");
   await expect.poll(async () => (await readSupport()).standing, { timeout: 25_000 }).toBeGreaterThan(0);
@@ -257,5 +260,44 @@ test("fracture runtime: a wall held at one end loses the part a hit cuts off (is
   expect(after.standing + fell).toBeLessThanOrEqual(24);
   await page.waitForTimeout(3000);
   expect(await readSupport()).toEqual(after);
+  expect(errors).toEqual([]);
+});
+
+test("fracture runtime: a quick-save of a broken wall loads back with the same chunks standing", async ({ page }) => {
+  // Faz 5: the save carries the wall's standing-chunk mask. Loading it rebuilds
+  // the level and the wall comes back partly broken, quietly: the same chunks
+  // stand, nothing falls again, no break is counted.
+  const { errors, readSupport } = await openWallLevel(page, { pauseMenu: true });
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText('save.slots.quick.status = "Empty"');
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect.poll(async () => (await readSupport()).standing, { timeout: 25_000 }).toBeGreaterThan(0);
+  await page.keyboard.up("KeyW");
+  await page.waitForTimeout(1500);
+  const before = await readSupport();
+  // `breaks` counts the whole session, across level loads.
+  const breaksBefore = (await readFracture(page))!.breaks;
+
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-ui-id="title"]')).toContainText("Save / Load");
+  await page.locator('[data-ui-id="quick-save"]').click();
+  await expect(stats).toContainText(/save\.slots\.quick\.status = "Saved /, { timeout: 10_000 });
+  const saved = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((entry) => entry.startsWith("forge.saveGame.") && entry.endsWith(".slot.quick"));
+    return key ? JSON.parse(localStorage.getItem(key)!).payload.destructibles : null;
+  });
+  console.log(`[fracture smoke] saved ${JSON.stringify(saved)}`);
+  expect(saved).toEqual([expect.objectContaining({ state: "damaged", chunkCount: 24 })]);
+
+  await page.locator('[data-ui-id="quick-load"]').click();
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  await expect.poll(async () => (await readSupport()).standing, { timeout: 30_000 }).toBe(before.standing);
+  const line = (await readFracture(page))!;
+  console.log(`[fracture smoke] after load: ${before.standing} stand, ${line.chunks} chunks, ${line.breaks} breaks`);
+  expect(line.chunks).toBe(0);
+  expect(line.breaks).toBe(breaksBefore);
+  await page.waitForTimeout(3000);
+  expect((await readSupport()).standing).toBe(before.standing);
   expect(errors).toEqual([]);
 });

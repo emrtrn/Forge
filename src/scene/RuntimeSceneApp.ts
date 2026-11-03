@@ -1309,6 +1309,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       capture: () => this.collectCurrentSaveState(),
       restore: (request) => {
         this.behaviorSubsystem.applyPersistentStateSnapshot(request.persistentState);
+        // Broken objects first: the car and the pawn are then placed in the world as it was saved.
+        this.runtimeServices.resolve(fractureCommandsService)?.restoreState(request.destructibles);
         // The car the player was driving must exist to be boarded, loaded cell or not.
         if (request.drivingVehicleId) this.activateStreamedActor(request.drivingVehicleId);
         const restoredVehicles = this.applySavedVehicles(request.vehicles);
@@ -3867,6 +3869,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       persistentState: this.behaviorSubsystem.getPersistentStateSnapshot(),
       vehicles: this.collectSavedVehicles(),
       drivingVehicleId: this.gameModeSession?.drivingVehicleId ?? null,
+      destructibles: this.runtimeServices.resolve(fractureCommandsService)?.captureState() ?? [],
     });
   }
 

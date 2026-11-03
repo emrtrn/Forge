@@ -1,6 +1,6 @@
 # Save-Game Envelope Contract
 
-> Status: current contract, checked against source on 2026-10-22.
+> Status: current contract, checked against source on 2026-11-03.
 > Origin: P3 of `RUNTIME_GAMEPLAY_REMAINING_CHECKLIST.md` (removed on
 > 2026-07-14 in `e107f11`; its content is in git history).
 > Audience: fork/template consumers building save/load into a concrete game.
@@ -67,6 +67,7 @@ Defined in `engine/persistence/saveGameState.ts`, produced by `collectSaveState(
 | `flags` | `PersistentScriptStateEntry[]` | Opt-in persistent script state (see P3.3), each `{ entityId, key, value }`, sorted deterministically by `entityId` then `key`. |
 | `vehicles` | `SavedVehicleState[]` (optional in older saves) | Every live ray-cast vehicle's entity ID, position, Euler rotation in degrees, world linear/angular velocity, handbrake, and drivetrain (`gear`, `engineRpm`, or `null`). In a World Partition level it also lists cars parked in unloaded cells (at rest: zero velocities); see *World Partition levels* below. |
 | `drivingVehicleId` | `string \| null` (optional in older saves) | Vehicle occupied by an on-foot pawn. `null` on foot and when the Game Mode pawn is itself the vehicle. |
+| `destructibles` | `SavedDestructibleState[]` (optional in older saves) | Fracturable placements/actors no longer as authored, from the fracture capability's `captureState()`: `fractured` (gone, no chunks), `damaged` (a partly broken anchored source: `chunkCount` + hex `standing` / `anchored` chunk masks, `engine/physics/fracture/fractureMask.ts`) or `intact` with accumulated `Damage.Apply` damage. Each also carries `damage`. Sources not listed load intact. |
 
 Notes:
 
@@ -79,7 +80,8 @@ Notes:
 - The schema version lives on the **envelope** (`schema`), not the payload.
   Current capability store schema is `1`, with **no `migrate` hook wired yet**.
   Older schema-1 saves without vehicle fields remain valid: missing `vehicles`
-  normalizes to `[]`, and missing `drivingVehicleId` to `null`. Invalid vehicle
+  normalizes to `[]`, and missing `drivingVehicleId` to `null`; missing
+  `destructibles` normalizes to `[]` (nothing broken). Invalid vehicle
   entries are dropped individually; duplicate entity IDs keep the first valid
   entry. For an incompatible change, bump the store schema in
   `createSaveGameModule` and supply a `migrate(fromSchema, payload)` to
@@ -114,6 +116,9 @@ state as script state:
 - **AI runtime state** — controllers, blackboards, perception, nav paths rebuild
   from the level.
 - **VFX instances, active audio, timers / lifespans** — all rebuilt from scratch.
+- **Falling fracture chunks** — debris is transient. A broken object restores
+  without them; a partly broken one restores only its standing chunks
+  (`destructibles`).
 
 ## P3.3 — Opt-in persistent script-state pattern
 
@@ -159,6 +164,11 @@ saved level is always rebuilt clean first:
    for a later matching load). This runs **after** scene build + Game Mode
    possession, so a pawn exists to move.
 4. `gameplaySaveStateService.restore` applies persistent `flags` first, then
+   `destructibles` (fracture `restoreState`: no break, effect, sound or
+   `Fracture.Broken` message; an entry waits until its source is registered and
+   built, so it may arrive before the fracture capability has rebuilt the
+   level; a chunk count that no longer matches the asset's bake warns and loads
+   the source broken; an id with no fracturable source warns and is kept), then
    vehicle pose/motion, then the player transform, then boards
    `drivingVehicleId` if supported. A character is placed at rest with its
    respawn transform updated. A vehicle pawn already restored from `vehicles`
@@ -193,6 +203,11 @@ it only has to keep the existing ones meaningful while an actor is not loaded:
   entries for cars whose cell is not loaded; the car appears at its saved pose,
   at rest, when the cell activates. The vehicle in `drivingVehicleId` is brought
   live ahead of its cell so the pawn can board it.
+- **Destructibles.** A broken or partly broken source whose cell unloads keeps
+  its state in the fracture capability and comes back the same when the cell is
+  rebuilt (`FractureHost.isSourceLive`); a save lists it from that state. A
+  restore entry for a source in an unloaded cell waits for the cell. The
+  accumulated damage of an *intact* actor whose cell unloads is not kept.
 - **Other simulated bodies.** Crates and other physics bodies keep their moved pose
   only in memory while the level is loaded (so an unloaded cell does not reset
   them); like loaded ones they are not part of the save-game (P3.2).
@@ -230,5 +245,9 @@ endpoints that write **structured layout / sidecar data** into `public/`
   service contracts.
 - `src/scene/RuntimeSceneApp.ts` — `collectCurrentSaveState`,
   `applySavedPlayerTransform`, `applySavedVehicles`, `applySavedVehicleRide`.
+- `src/scene/capabilities/fractureModule.ts` — `captureState` / `restoreState`
+  of `destructibles`.
 - `tests/smoke/runtime-checkpoint.spec.ts` — browser proof of the
   autosave → load → respawn round-trip.
+- `tests/smoke/fracture-runtime.spec.ts` ("quick-save of a broken wall") —
+  a partly broken wall loads back with the same chunks standing.

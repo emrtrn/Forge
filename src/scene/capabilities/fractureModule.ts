@@ -20,7 +20,7 @@
  * Off (module not registered, or no shell host), every source keeps its
  * ordinary behaviour.
  */
-import { Mesh, MeshStandardMaterial, type BufferGeometry, type Material } from "three";
+import { Euler, Mesh, MeshStandardMaterial, Quaternion, type BufferGeometry, type Material } from "three";
 
 import { assetPath, assetRecordById, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import { bakeFracture, type FractureBakeResult } from "@engine/physics/fracture/fractureBake";
@@ -34,6 +34,7 @@ import {
   type FractureOverride,
   type FracturePlacement,
 } from "@engine/physics/fracture/fractureRuntime";
+import { anchoredChunks, chunksInRadius, damageRadius, supportIslands } from "@engine/physics/fracture/fractureSupport";
 import { fractureGrain, type AssetFractureDef } from "@engine/physics/fracture/fractureTypes";
 import { polyhedronFromMesh, polyhedronVolume } from "@engine/physics/fracture/voronoiFracture";
 import { fractureChunkGeometry, fractureSourceFromObject } from "@engine/render-three/fractureGeometry";
@@ -101,8 +102,41 @@ interface LiveChunkObject {
   readonly maxSeparation: number;
 }
 
+/**
+ * A source hit while its asset's `support.mode` is `anchored` (Faz 4c): it
+ * stands on as static chunk bodies until a chunk loses every path to an anchor.
+ */
+interface DamagedSource {
+  readonly asset: BakedAsset;
+  /** Pose it broke at; standing chunks never move. */
+  readonly pose: FracturePlacement;
+  /** Impulse that breaks a standing chunk further, N·s (the source's own threshold). */
+  readonly threshold: number;
+  readonly anchored: readonly boolean[];
+  /** Chunk index → still standing. */
+  readonly present: boolean[];
+  /** Chunk index → its static body id while standing. */
+  readonly staticIds: (string | null)[];
+}
+
+interface StaticChunk {
+  readonly sourceId: string;
+  readonly chunkIndex: number;
+  readonly mesh: Mesh;
+}
+
 /** Crumble effects one break may spawn; the rest of the small chunks just vanish. */
 const MAX_CRUMBLE_EFFECTS = 6;
+
+const EULER = new Euler();
+const QUATERNION = new Quaternion();
+
+/** Euler degrees (three XYZ, as chunk specs carry them) → quaternion [x, y, z, w]. */
+function quaternionOf(rotation: FractureVec3): [number, number, number, number] {
+  const radians = Math.PI / 180;
+  QUATERNION.setFromEuler(EULER.set(rotation[0] * radians, rotation[1] * radians, rotation[2] * radians, "XYZ"));
+  return [QUATERNION.x, QUATERNION.y, QUATERNION.z, QUATERNION.w];
+}
 
 function meanPosition(specs: readonly ChunkSpawnSpec[]): FractureVec3 | null {
   if (specs.length === 0) return null;
@@ -127,6 +161,10 @@ export function createFractureModule(): CapabilityModule {
   /** Broken source → the World Partition cell its chunks leave with. */
   const brokenCells = new Map<string, string>();
   const chunks = new Map<string, LiveChunkObject>();
+  /** Partly broken anchored sources, by source entity id. */
+  const damaged = new Map<string, DamagedSource>();
+  /** Standing chunk body id → where it belongs. */
+  const staticChunks = new Map<string, StaticChunk>();
   const unsubscribes: Array<() => void> = [];
   /** Bumped by every teardown so a bake finishing for an old level is dropped. */
   let generation = 0;
@@ -162,26 +200,53 @@ export function createFractureModule(): CapabilityModule {
     }
   };
 
+  /** Chunks too small to be worth a body crumble into an effect instead. */
+  const crumbles = (def: AssetFractureDef, spec: ChunkSpawnSpec): boolean =>
+    def.crumbleBelow > 0 && spec.volumeFraction < def.crumbleBelow;
+
+  const announce = (entityId: string, instigator: string | null, impulse: number): void => {
+    breaks += 1;
+    services?.resolve(scriptMessageBusService)?.emit(FRACTURE_BROKEN_MESSAGE, entityId, {
+      entityId,
+      ...(instigator ? { instigator } : {}),
+      impulse,
+    });
+  };
+
   const breakEntity = (entityId: string, impact: FractureImpactInfo | null, instigator: string | null): void => {
     const source = sources.get(entityId);
     const asset = source ? ready.get(source.assetId) : undefined;
     if (!host || !context || !source || !asset) return;
     const started = performance.now();
+    // Anchored assets break only around a hit; a scripted break still brings it all down.
+    if (impact && asset.def.support.mode === "anchored" && breakAnchored(entityId, source, asset, impact)) {
+      lastSpawnMs = performance.now() - started;
+      announce(entityId, instigator, impact.impulse);
+      return;
+    }
     // Actors and simulated placements move: break where the object is now.
     const pose = host.sourcePose(entityId) ?? source.authored;
     const velocity = host.physics.velocityOf(entityId) ?? [0, 0, 0];
     const planned = planChunkSpawns(asset.bake, asset.def, pose, velocity, impact);
     const def = asset.def;
-    // Chunks too small to be worth a body crumble into an effect instead.
-    const crumbles = (spec: ChunkSpawnSpec): boolean => def.crumbleBelow > 0 && spec.volumeFraction < def.crumbleBelow;
-    const specs = planned.filter((spec) => !crumbles(spec));
     const origin = impact?.point ?? meanPosition(planned) ?? pose.position;
     const cell = host.cellOf(entityId);
     if (cell) brokenCells.set(entityId, cell);
     host.physics.setImpactEventThreshold(entityId, null);
     host.destroySource(entityId);
-    presentBreak(def, origin, planned.filter(crumbles));
+    presentBreak(def, origin, planned.filter((spec) => crumbles(def, spec)));
+    spawnDynamic(entityId, asset, planned.filter((spec) => !crumbles(def, spec)), origin);
+    lastSpawnMs = performance.now() - started;
+    announce(entityId, instigator, impact?.impulse ?? 0);
+  };
 
+  /** Spawns chunks as dynamic bodies with their render meshes, inside the level budget. */
+  const spawnDynamic = (
+    ownerId: string, asset: BakedAsset, specs: readonly ChunkSpawnSpec[], origin: FractureVec3,
+  ): void => {
+    if (!host || !context || specs.length === 0) return;
+    const def = asset.def;
+    const entityId = ownerId;
     const entities: Entity[] = [];
     const ids: string[] = [];
     for (const spec of specs) {
@@ -226,13 +291,162 @@ export function createFractureModule(): CapabilityModule {
       budget.add({ id, ownerId: entityId, bornAt: clock, expiresAt: clock + spec.lifetime });
     });
     removeChunks(budget.enforce(host.chunkBudget()));
-    lastSpawnMs = performance.now() - started;
-    breaks += 1;
-    services?.resolve(scriptMessageBusService)?.emit(FRACTURE_BROKEN_MESSAGE, entityId, {
-      entityId,
-      ...(instigator ? { instigator } : {}),
-      impulse: impact?.impulse ?? 0,
+  };
+
+  /** Every chunk of the asset at a pose, index-aligned, kicked away from `impact`. */
+  const planAll = (asset: BakedAsset, pose: FracturePlacement, impact: FractureImpactInfo | null): ChunkSpawnSpec[] =>
+    planChunkSpawns(asset.bake, { ...asset.def, maxActiveChunks: asset.bake.chunks.length }, pose, [0, 0, 0], impact);
+
+  /**
+   * Releases the chunks within the hit's damage radius, then every island the
+   * release cut off from the anchors (APEX support). Returns the released indices.
+   */
+  const releaseAround = (
+    state: DamagedSource, specs: readonly ChunkSpawnSpec[], hit: FractureVec3, impulse: number,
+  ): number[] => {
+    const support = state.asset.def.support;
+    const radius = damageRadius(support.damageRadius, support.damageRadiusPerImpulse, impulse, support.damageRadiusMax);
+    const released = chunksInRadius(specs.map((spec) => spec.position), state.present, hit, radius);
+    for (const index of released) state.present[index] = false;
+    const { islands } = supportIslands(state.present.length, state.asset.bake.links, state.anchored, state.present);
+    for (const island of islands) {
+      for (const index of island) {
+        state.present[index] = false;
+        released.push(index);
+      }
+    }
+    return released;
+  };
+
+  /** Released chunks fall: the largest become bodies (per-asset cap), the rest crumble. */
+  const dropReleased = (
+    ownerId: string, asset: BakedAsset, specs: readonly ChunkSpawnSpec[], released: readonly number[], origin: FractureVec3,
+  ): void => {
+    const def = asset.def;
+    const chosen = released.map((index) => specs[index]!)
+      .sort((a, b) => b.volumeFraction - a.volumeFraction || a.chunkIndex - b.chunkIndex);
+    const bodies = chosen.filter((spec) => !crumbles(def, spec)).slice(0, def.maxActiveChunks);
+    presentBreak(def, origin, chosen.filter((spec) => !bodies.includes(spec)));
+    spawnDynamic(ownerId, asset, bodies, origin);
+  };
+
+  /** What still stands of a partly broken source, as static chunk bodies that take the next hits. */
+  const addStaticChunks = (sourceId: string, state: DamagedSource, specs: readonly ChunkSpawnSpec[]): void => {
+    if (!host || !context) return;
+    const standing = specs.filter((spec) => state.present[spec.chunkIndex]);
+    const entities: Entity[] = standing.map((spec) => {
+      const id = `fracture:${sourceId}:static:${spec.chunkId}:${chunkSerial++}`;
+      state.staticIds[spec.chunkIndex] = id;
+      return {
+        id,
+        components: {
+          Transform: { position: [...spec.position], rotation: [...spec.rotation], scale: [1, 1, 1] },
+          Collider: {
+            shape: "box",
+            size: [1, 1, 1],
+            isStatic: true,
+            isSensor: false,
+            primitives: [{ shape: "convex", size: [1, 1, 1], points: spec.hull.map((point) => [...point]) }],
+          },
+        },
+      } as unknown as Entity;
     });
+    host.physics.addEntities(entities);
+    for (const spec of standing) {
+      const id = state.staticIds[spec.chunkIndex]!;
+      const mesh = new Mesh(state.asset.geometries[spec.chunkIndex], [state.asset.exterior, state.asset.interior ?? state.asset.exterior]);
+      mesh.name = id;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.scale.set(spec.scale[0], spec.scale[1], spec.scale[2]);
+      mesh.position.set(spec.position[0], spec.position[1], spec.position[2]);
+      applyEulerDegrees(mesh, [spec.rotation[0], spec.rotation[1], spec.rotation[2]]);
+      context.scene.add(mesh);
+      staticChunks.set(id, { sourceId, chunkIndex: spec.chunkIndex, mesh });
+      host.physics.setImpactEventThreshold(id, state.threshold);
+    }
+  };
+
+  const removeStaticChunks = (state: DamagedSource, indices: readonly number[]): void => {
+    const ids = indices.map((index) => state.staticIds[index]).filter((id): id is string => !!id);
+    if (ids.length === 0) return;
+    host?.physics.removeEntities(ids);
+    for (const id of ids) {
+      host?.physics.setImpactEventThreshold(id, null);
+      const chunk = staticChunks.get(id);
+      chunk?.mesh.removeFromParent();
+      staticChunks.delete(id);
+      if (chunk) state.staticIds[chunk.chunkIndex] = null;
+    }
+  };
+
+  /** Forgets a partly broken source and takes down what still stood of it. */
+  const clearDamaged = (sourceId: string): void => {
+    const state = damaged.get(sourceId);
+    if (!state) return;
+    removeStaticChunks(state, state.staticIds.map((_, index) => index));
+    damaged.delete(sourceId);
+  };
+
+  /**
+   * First hit of an anchored source: anchors come from the sidecar's regions and,
+   * with World Support, from what the chunks touch right now (the source is
+   * still standing, so the query sees the world it rests on). False when nothing
+   * anchors it — then it breaks whole.
+   */
+  const breakAnchored = (
+    entityId: string, source: FractureSource, asset: BakedAsset, impact: FractureImpactInfo,
+  ): boolean => {
+    if (!host) return false;
+    const def = asset.def;
+    const pose = host.sourcePose(entityId) ?? source.authored;
+    const specs = planAll(asset, pose, impact);
+    const anchored = anchoredChunks(asset.bake.chunks, def.support.anchors);
+    if (def.support.worldSupport) {
+      const exclude = new Set([entityId]);
+      specs.forEach((spec, index) => {
+        if (!anchored[index]) {
+          anchored[index] = host!.physics.touchesStaticWorld(spec.position, quaternionOf(spec.rotation), spec.hull, exclude);
+        }
+      });
+    }
+    if (!anchored.some(Boolean)) return false;
+    const state: DamagedSource = {
+      asset,
+      pose,
+      threshold: registry.breakImpulse(entityId) ?? def.breakImpulse,
+      anchored,
+      present: specs.map(() => true),
+      staticIds: specs.map(() => null),
+    };
+    const hit = impact.point ?? meanPosition(specs) ?? pose.position;
+    const released = releaseAround(state, specs, hit, impact.impulse);
+    const cell = host.cellOf(entityId);
+    if (cell) brokenCells.set(entityId, cell);
+    host.physics.setImpactEventThreshold(entityId, null);
+    host.destroySource(entityId);
+    damaged.set(entityId, state);
+    addStaticChunks(entityId, state, specs);
+    dropReleased(entityId, asset, specs, released, hit);
+    if (!state.present.some(Boolean)) damaged.delete(entityId);
+    return true;
+  };
+
+  /** A later hit on a standing chunk (or `all` = a scripted collapse) of a partly broken source. */
+  const hitDamaged = (sourceId: string, hit: FractureVec3 | null, impulse: number, all = false): boolean => {
+    const state = damaged.get(sourceId);
+    if (!state || !host) return false;
+    const point = hit ?? meanPosition(planAll(state.asset, state.pose, null).filter((spec) => state.present[spec.chunkIndex]));
+    if (!point) return false;
+    const specs = planAll(state.asset, state.pose, { point, impulse });
+    const released = all
+      ? state.present.flatMap((standing, index) => (standing ? [index] : []))
+      : releaseAround(state, specs, point, impulse);
+    if (all) state.present.fill(false);
+    removeStaticChunks(state, released);
+    dropReleased(sourceId, state.asset, specs, released, point);
+    if (!state.present.some(Boolean)) damaged.delete(sourceId);
+    return released.length > 0;
   };
 
   const bakeAsset = async (assetId: string, path: string, hostRef: FractureHost): Promise<BakedAsset | null> => {
@@ -318,6 +532,7 @@ export function createFractureModule(): CapabilityModule {
       if (cell !== key) continue;
       brokenCells.delete(entityId);
       removeChunks(budget.removeOwner(entityId));
+      clearDamaged(entityId);
       const source = sources.get(entityId);
       if (!source) continue;
       sources.delete(entityId);
@@ -329,6 +544,7 @@ export function createFractureModule(): CapabilityModule {
   const teardown = (): void => {
     generation += 1;
     removeChunks(budget.clear());
+    for (const id of [...damaged.keys()]) clearDamaged(id);
     for (const id of sources.keys()) host?.physics.setImpactEventThreshold(id, null);
     for (const unsubscribe of unsubscribes.splice(0)) unsubscribe();
     for (const asset of ready.values()) for (const geometry of asset.geometries) geometry.dispose();
@@ -349,6 +565,7 @@ export function createFractureModule(): CapabilityModule {
       services = runtimeServices;
       runtimeServices.provide(fractureCommandsService, {
         breakEntity: (entityId, instigator) => {
+          if (damaged.has(entityId)) return hitDamaged(entityId, null, 0, true);
           if (!registry.requestBreak(entityId)) return false;
           breakEntity(entityId, null, instigator ?? null);
           return true;
@@ -358,6 +575,7 @@ export function createFractureModule(): CapabilityModule {
           fracturable: registry.ids().length,
           fractured: registry.ids().filter((id) => registry.state(id) === "fractured").length,
           activeChunks: chunks.size,
+          staticChunks: staticChunks.size,
           lastSpawnMs,
           breaks,
         }),
@@ -426,7 +644,13 @@ export function createFractureModule(): CapabilityModule {
       }));
       unsubscribes.push(bus.subscribe(FRACTURE_BREAK_MESSAGE, (envelope) => {
         const target = envelope.target;
-        if (!target || !registry.requestBreak(target)) return;
+        if (!target) return;
+        // A partly broken source: a scripted break brings down what still stands.
+        if (damaged.has(target)) {
+          hitDamaged(target, null, 0, true);
+          return;
+        }
+        if (!registry.requestBreak(target)) return;
         breakEntity(target, null, envelope.source);
       }));
     },
@@ -442,8 +666,16 @@ export function createFractureModule(): CapabilityModule {
       if (!host) return;
       for (const impact of host.physics.impacts()) {
         for (const [entityId, other] of [[impact.a, impact.b], [impact.b, impact.a]] as const) {
-          if (!registry.has(entityId) || !registry.applyImpact(entityId, impact.impulse)) continue;
-          breakEntity(entityId, { point: impact.point, impulse: impact.impulse }, other);
+          const standing = staticChunks.get(entityId);
+          if (standing) {
+            // A standing chunk of a partly broken source: the same rule, from this hit.
+            const state = damaged.get(standing.sourceId);
+            if (!state || impact.impulse < state.threshold) continue;
+            hitDamaged(standing.sourceId, impact.point ?? null, impact.impulse);
+          } else {
+            if (!registry.has(entityId) || !registry.applyImpact(entityId, impact.impulse)) continue;
+            breakEntity(entityId, { point: impact.point, impulse: impact.impulse }, other);
+          }
           // The normal points out of `a`: the source pushed the hitter along it
           // (or against it when the source is `b`); give part of that back.
           const sign = entityId === impact.a ? -1 : 1;

@@ -203,4 +203,25 @@ export async function registerPhysicsImpactTests(checkAsync: CheckAsync): Promis
     assert.ok(Math.abs((physics.velocityOf("heavy")?.[0] ?? 0) - 0.5) < 0.01, `heavy ${physics.velocityOf("heavy")}`);
     await app.dispose();
   }));
+
+  await checkAsync("physics world support: a chunk resting on fixed ground touches it; lifted, excluded or on a body it does not", () => withQuietRapier(async () => {
+    // A 0.4 m chunk hull around its centroid (fracture chunk specs carry this shape).
+    const half = 0.2;
+    const hull: [number, number, number][] = [];
+    for (const x of [-half, half]) for (const y of [-half, half]) for (const z of [-half, half]) hull.push([x, y, z]);
+    const identity: [number, number, number, number] = [0, 0, 0, 1];
+    const { physics, app } = await world([floor(), crate(0, 5)]);
+    run(app, physics, STEP, 1);
+    const none = new Set<string>();
+    assert.equal(physics.touchesStaticWorld([0, half, 0], identity, hull, none), true, "resting on the floor");
+    assert.equal(physics.touchesStaticWorld([0, half + 0.3, 0], identity, hull, none), false, "lifted 30 cm");
+    assert.equal(physics.touchesStaticWorld([0, half, 0], identity, hull, new Set(["floor"])), false, "its own source is excluded");
+    // A dynamic body is not world support: the chunk sits on top of the crate, clear of the floor.
+    assert.equal(physics.touchesStaticWorld([5, 1 + half, 0], identity, hull, none), false, "on a dynamic crate");
+    // Rotated 45° about Z, the hull's lowest corner reaches further down.
+    const tilted: [number, number, number, number] = [0, 0, Math.sin(Math.PI / 8), Math.cos(Math.PI / 8)];
+    assert.equal(physics.touchesStaticWorld([0, half * Math.SQRT2, 0], tilted, hull, none), true, "tilted corner on the floor");
+    assert.equal(physics.touchesStaticWorld([0, half, 0], identity, hull.slice(0, 3), none), false, "too few points");
+    await app.dispose();
+  }));
 }

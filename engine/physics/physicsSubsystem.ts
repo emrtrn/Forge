@@ -837,6 +837,56 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     return hit ? Math.min(1, Math.max(0, hit.timeOfImpact / length)) : null;
   }
 
+  /**
+   * Whether a convex shape at a world pose touches a fixed, non-sensor collider
+   * of any entity outside `exclude` — the fracture World Support probe (a chunk
+   * resting on the floor or set into a wall holds). `points` are relative to
+   * `position`, rotation is a quaternion [x, y, z, w]; they are inflated by
+   * `margin` metres away from their centroid so a face lying exactly on the
+   * ground still counts. False without a Rapier world or for a degenerate hull.
+   */
+  touchesStaticWorld(
+    position: readonly [number, number, number],
+    rotation: readonly [number, number, number, number],
+    points: readonly (readonly [number, number, number])[],
+    exclude: ReadonlySet<EntityId>,
+    margin = 0.02,
+  ): boolean {
+    const RAPIER = this.rapierModule;
+    const world = this.rapierWorld;
+    if (!RAPIER || !world || points.length < 4) return false;
+    const centroid = [0, 1, 2].map((axis) => points.reduce((sum, point) => sum + point[axis]!, 0) / points.length);
+    const vertices = new Float32Array(points.length * 3);
+    points.forEach((point, index) => {
+      const offset = [point[0] - centroid[0]!, point[1] - centroid[1]!, point[2] - centroid[2]!];
+      const length = Math.hypot(...offset);
+      const grow = length > 1e-9 ? (length + margin) / length : 1;
+      for (let axis = 0; axis < 3; axis += 1) vertices[index * 3 + axis] = centroid[axis]! + offset[axis]! * grow;
+    });
+    let shape: InstanceType<typeof RAPIER.ConvexPolyhedron>;
+    try {
+      shape = new RAPIER.ConvexPolyhedron(vertices, null);
+    } catch {
+      return false;
+    }
+    const hit = world.intersectionWithShape(
+      { x: position[0], y: position[1], z: position[2] },
+      { x: rotation[0], y: rotation[1], z: rotation[2], w: rotation[3] },
+      shape,
+      RAPIER.QueryFilterFlags.EXCLUDE_DYNAMIC |
+        RAPIER.QueryFilterFlags.EXCLUDE_KINEMATIC |
+        RAPIER.QueryFilterFlags.EXCLUDE_SENSORS,
+      undefined,
+      undefined,
+      undefined,
+      (collider) => {
+        const entityId = this.rapierColliderToEntity.get(collider.handle) ?? "";
+        return !exclude.has(entityId) && !this.collisionDisabled.has(entityId);
+      },
+    );
+    return hit !== null;
+  }
+
   private cameraIgnoredEntities(): Set<EntityId> {
     if (this.cameraIgnoredCache) return this.cameraIgnoredCache;
     const ignored = new Set<EntityId>();

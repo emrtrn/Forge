@@ -635,6 +635,33 @@ Dilimler:
       aynı kuralı uygular. World Support yükleme anında fizik sorgusuyla.
       Durum: `intact → damaged (bit maskesi) → fractured`; Faz 5'in durum
       modeliyle aynı.
+      **4c-3 durumu (2026-11-03, YARIM — buradan devam):** kod + birim testleri
+      main'de. `fractureModule`: `support.mode: "anchored"` ve bir çarpma
+      (script değil) → `breakAnchored`: bütün parçalar `planAll` ile pozlanır,
+      anchor = sidecar kutuları (`anchoredChunks`) + World Support
+      (`FractureHost.physics.touchesStaticWorld` →
+      `PhysicsSubsystem.touchesStaticWorld`: Rapier `intersectionWithShape`,
+      hull 2 cm şişirilir, kaynak hariç, yalnız fixed/non-sensor; ilk darbe
+      anında sorgulanır). Anchor yoksa bütün kırılma. `releaseAround`:
+      `chunksInRadius` + `supportIslands`; ayakta kalanlar `addStaticChunks`
+      (statik convex gövde + mesh, kaynağın eşiğiyle impact opt-in),
+      düşenler `dropReleased` (en büyük `maxActiveChunks`, gerisi crumble).
+      Ayakta parçaya eşik üstü darbe → `hitDamaged` (aynı kural). Script
+      `Fracture.Break` / `fractureCommands.breakEntity` kalan her şeyi
+      düşürür. Hücre boşalınca statik parçalar kalkar (`clearDamaged`).
+      `?debug` satırına `static N`. Testler: `fractureModule.test.ts`
+      (anchored 5 kontrol), `physicsImpacts.test.ts` "physics world support".
+      Test verisi: `SM_BreakableWall.fracture.json` anchored + worldSupport,
+      yarıçap 0.8 + 0.0001·J, en çok 2 m.
+      **AÇIK SORUN:** smoke `fracture-runtime.spec.ts` "anchored wall"
+      (`test.fixme`): World Support 24 parçanın 11'ini anchor buluyor ama
+      araç çarpınca 24'ü de düşüyor. Şüphe: araç ilk kırılmadan sonra ayakta
+      kalan parçalara art arda çarpıyor (her `hitDamaged` yeni yarıçap
+      açar) ya da düşen parçalar ayaktakileri zincirleme kırıyor. Sıradaki
+      adım: `hitDamaged`'i kaynak başına kısa bir bekleme süresiyle sınırla
+      ve/veya yalnız ilk çarpanın darbesi saysın (düşen parça
+      `fracture:` id'li çarpanları yok say); smoke'ta kaç vuruş olduğunu
+      `breaks`/log ile say; sonra `fixme`'yi kaldır.
 - [ ] 4c-4 editör: Static Mesh Editor'da Support bölümü (mode, anchor kutuları
       + "alttan %N" kısayolu, World Support, yarıçap), önizlemede anchor
       parçaları farklı renk, grafik kenarları tel; "Simulate hit" düğmesi
@@ -933,3 +960,6 @@ kullanıcı kararı).
   separation (veriyle), `AudioCommands.playOneShot`. Sırada Faz 4c.
 - 2026-11-03: Faz 4c-1 (komşuluk grafiği + destek yardımcıları, Codex) ve
   4c-2 (sidecar `support`) tamam. Sırada 4c-3 runtime.
+- 2026-11-03: Faz 4c-3 YARIM bırakıldı (kullanıcı başka oturumu bitirmek
+  istedi): runtime + birim testleri main'de, duvar smoke'u `fixme` — açık
+  sorun ve sıradaki adım Faz 4c-3 notunda.

@@ -16,5 +16,13 @@
   "crumbleBelow": 0,
   "crumbleEffect": null,
   "maxSeparation": 40,
+  "support": {
+    "mode": "anchored",
+    "anchors": [],
+    "worldSupport": true,
+    "damageRadius": 0.8,
+    "damageRadiusPerImpulse": 0.0001,
+    "damageRadiusMax": 2
+  },
   "sourceHash": "fnv1a:7e214c06"
 }

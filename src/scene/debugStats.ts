@@ -483,10 +483,13 @@ export function formatTerrainTrackDetailDebug(snapshot: TerrainTrackDetailSnapsh
   return `terrain detail: nodes ${snapshot.nodes} levels ${snapshot.levels}`;
 }
 
-/** `fracture: objects 7 broken 1 chunks 10 breaks 1 spawn 1.42 ms` (smoke tests parse it); "" with nothing fracturable. */
+/**
+ * `fracture: objects 7 broken 1 chunks 10 breaks 1 spawn 1.42 ms static 12` (smoke tests
+ * parse it; `static` = standing chunks of partly broken objects); "" with nothing fracturable.
+ */
 export function formatFractureDebug(snapshot: FractureDebugSnapshot): string {
   return `fracture: objects ${snapshot.fracturable} broken ${snapshot.fractured} chunks ${snapshot.activeChunks}`
-    + ` breaks ${snapshot.breaks} spawn ${snapshot.lastSpawnMs.toFixed(2)} ms`;
+    + ` breaks ${snapshot.breaks} spawn ${snapshot.lastSpawnMs.toFixed(2)} ms static ${snapshot.staticChunks}`;
 }
 
 function fractureText(app: RuntimeStatsApp): string {

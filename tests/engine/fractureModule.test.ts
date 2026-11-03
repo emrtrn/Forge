@@ -84,6 +84,8 @@ function fakeHost(services: RuntimeServices) {
   const poses = new Map<string, NonNullable<ReturnType<FractureHost["sourcePose"]>>>();
   const cells = new Map<string, string>();
   const listeners = new Set<(key: string) => void>();
+  // World Support probe: a test decides which chunk poses touch the world.
+  const world = { touches: (_position: readonly number[]) => false };
   const host: FractureHost = {
     physics: {
       setImpactEventThreshold(id, threshold) {
@@ -95,6 +97,7 @@ function fakeHost(services: RuntimeServices) {
       removeEntities(ids) { removed.push(...ids); },
       velocityOf: () => [0, 0, 0],
       applyImpulse(id, impulse) { impulses.push({ id, impulse }); },
+      touchesStaticWorld: (position) => world.touches(position),
     },
     model: (id) => id === ASSET_ID ? model : null,
     exteriorMaterial: () => null,
@@ -114,7 +117,7 @@ function fakeHost(services: RuntimeServices) {
     attachDynamicObject(id, object) { attachments.push({ id, object }); },
   };
   return {
-    host, thresholds, impacts, added, removed, destroyed, impulses, attachments, poses, cells, listeners,
+    host, thresholds, impacts, added, removed, destroyed, impulses, attachments, poses, cells, listeners, world,
     dispose() { geometry.dispose(); material.dispose(); },
   };
 }
@@ -363,5 +366,112 @@ export async function registerFractureModuleTests(check: (label: string, fn: () 
       assert.deepEqual(shell.removed, [far.id]);
       assert.equal(commands.snapshot().activeChunks, count - 1);
     }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: { ...SIDECAR, maxSeparation: 5 } });
+  });
+
+  // Faz 4c: anchored support. The unit crate spans y 0..1; the bottom slab anchors it.
+  const SOURCE = instanceEntityId(ASSET_ID, 0);
+  const anchoredSidecar = (support: Record<string, unknown> = {}) => ({
+    ...SIDECAR, cellCount: 16, maxActiveChunks: 16,
+    support: {
+      mode: "anchored", anchors: [{ min: [-1, -0.1, -1], max: [1, 0.25, 1] }], worldSupport: false,
+      damageRadius: 0.3, damageRadiusPerImpulse: 0, damageRadiusMax: 3, ...support,
+    },
+  });
+  const hitSource = (shell: ReturnType<typeof fakeHost>, module: ReturnType<typeof createFractureModule>,
+    id: string, point: [number, number, number], impulse: number) => {
+    shell.impacts.splice(0, shell.impacts.length, { a: "car", b: id, point, normal: [0, 0, 1], impulse, relativeSpeed: 8 });
+    module.update!(0.016);
+    shell.impacts.length = 0;
+  };
+  const isStatic = (entity: Entity) => entity.id.includes(":static:");
+  let wholeCount = 0;
+
+  await check("fracture module: an anchored source breaks only around the hit and the rest stands", async () => {
+    // The same asset without support breaks into every chunk: the count to compare with.
+    await withLevel(async ({ commands, shell }) => {
+      assert.equal(commands.breakEntity(SOURCE), true);
+      wholeCount = shell.added.length;
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: { ...SIDECAR, cellCount: 16, maxActiveChunks: 16 } });
+
+    await withLevel(async ({ commands, shell, module, presented }) => {
+      hitSource(shell, module, SOURCE, [0, 0.95, 0.5], 1000);
+      const statics = shell.added.filter(isStatic);
+      const dynamics = shell.added.filter((entity) => !isStatic(entity));
+      assert.deepEqual(shell.destroyed, [SOURCE]);
+      assert.ok(statics.length > 0, "the anchored base stands");
+      assert.ok(dynamics.length > 0, "the hit region falls");
+      assert.equal(statics.length + dynamics.length, wholeCount, "every chunk is either standing or falling");
+      for (const entity of statics) {
+        assert.equal((entity.components.Collider as { isStatic?: boolean }).isStatic, true);
+        assert.equal(shell.thresholds.get(entity.id), 400, "a standing chunk takes the next hit at the source's threshold");
+      }
+      const snapshot = commands.snapshot();
+      assert.equal(snapshot.staticChunks, statics.length);
+      assert.equal(snapshot.activeChunks, dynamics.length);
+      assert.equal(commands.isFractured(SOURCE), true);
+      assert.equal(presented.effects.length, 0, "the sidecar names no effect");
+
+      // Below the threshold a standing chunk only takes the knock.
+      const standing = statics[statics.length - 1]!.id;
+      hitSource(shell, module, standing, [0, 0.5, 0.5], 100);
+      assert.equal(commands.snapshot().staticChunks, statics.length);
+
+      // A second hard hit low on the side frees more, and what it cut off falls with it.
+      const before = shell.added.length;
+      hitSource(shell, module, standing, [0.5, 0.35, 0], 1000);
+      const freed = shell.removed.filter((id) => id.includes(":static:"));
+      assert.ok(freed.length > 0);
+      assert.equal(commands.snapshot().staticChunks, statics.length - freed.length);
+      assert.ok(shell.added.length > before, "freed chunks become dynamic bodies");
+      for (const id of freed) assert.equal(shell.thresholds.has(id), false);
+
+      // A scripted break brings down what still stands.
+      assert.equal(commands.breakEntity(SOURCE), true);
+      assert.equal(commands.snapshot().staticChunks, 0);
+      assert.equal(commands.breakEntity(SOURCE), false, "nothing left to break");
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
+  });
+
+  await check("fracture module: an anchored source with nothing holding it breaks whole", async () => {
+    await withLevel(async ({ commands, shell, module }) => {
+      hitSource(shell, module, SOURCE, [0, 0.95, 0.5], 1000);
+      assert.equal(shell.added.filter(isStatic).length, 0);
+      assert.equal(shell.added.length, wholeCount);
+      assert.equal(commands.snapshot().staticChunks, 0);
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar({ anchors: [] }) });
+  });
+
+  await check("fracture module: World Support anchors the chunks that touch the world when it breaks", async () => {
+    await withLevel(async ({ commands, shell, module }) => {
+      shell.world.touches = (position) => position[1]! < 0.35;
+      hitSource(shell, module, SOURCE, [0, 0.95, 0.5], 1000);
+      assert.ok(commands.snapshot().staticChunks > 0);
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar({ anchors: [], worldSupport: true }) });
+  });
+
+  await check("fracture module: cutting every anchor brings the whole source down", async () => {
+    await withLevel(async ({ commands, shell, module }) => {
+      // A wide hit at the base frees every anchored chunk: the rest is an island.
+      hitSource(shell, module, SOURCE, [0, 0.1, 0], 1000);
+      assert.equal(commands.snapshot().staticChunks, 0);
+      // Decided before anything is built: no static body appears, every chunk falls.
+      assert.equal(shell.added.filter(isStatic).length, 0);
+      assert.equal(shell.added.length, wholeCount);
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar({ damageRadius: 0.75 }) });
+  });
+
+  await check("fracture module: a partly broken source's standing chunks leave with its cell", async () => {
+    await withLevel(async ({ commands, shell, module }) => {
+      shell.cells.set(SOURCE, "2_0");
+      hitSource(shell, module, SOURCE, [0, 0.95, 0.5], 1000);
+      const statics = shell.added.filter(isStatic).map((entity) => entity.id);
+      assert.ok(statics.length > 0);
+      for (const listener of shell.listeners) listener("2_0");
+      assert.equal(commands.snapshot().staticChunks, 0);
+      for (const id of statics) assert.ok(shell.removed.includes(id));
+      // The placement is whole again and breaks anew.
+      assert.equal(commands.isFractured(SOURCE), false);
+      assert.equal(shell.thresholds.get(SOURCE), 400);
+    }, { layout: layoutOf([{ position: [0, 0, 0] }]), sidecar: anchoredSidecar() });
   });
 }

@@ -160,3 +160,60 @@ test("fracture runtime: a Fracturable actor breaks where it is, not where it was
   for (const y of heights) expect(y).toBeLessThan(3);
   expect(errors).toEqual([]);
 });
+
+// OPEN (2026-11-03, Faz 4c-3): World Support anchors 11 of the wall's 24
+// chunks, yet all 24 fall — suspected: the car keeps driving into the standing
+// chunks (every hit opens a new radius) or falling chunks chain-break them.
+// Fixme until 4c-3 settles it; see DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 4c-3.
+test.fixme("fracture runtime: an anchored wall breaks around the hit and the rest stands", async ({ page }) => {
+  // Faz 4c: the test wall's sidecar is `support.mode: "anchored"` with World
+  // Support. The crates and posts are taken off the car's path, so it drives
+  // straight into the wall: chunks around the hit fall, the chunks still
+  // joined to the floor stand as static bodies and stay standing.
+  const errors: string[] = [];
+  const messages: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    messages.push(message.text());
+    if (message.type() === "error") errors.push(message.text());
+  });
+  await page.context().addInitScript(() => localStorage.clear());
+  await page.route(`**/${LEVEL}`, async (route) => {
+    const response = await route.fetch();
+    const level = await response.json();
+    level.instances = level.instances.filter((group: { assetId: string }) => group.assetId !== "sm-breakable-crate");
+    await route.fulfill({ response, json: level });
+  });
+  await page.route("**/project.3dgame.json", async (route) => {
+    const response = await route.fetch();
+    const project = await response.json();
+    project.editor.defaultScene = LEVEL;
+    await route.fulfill({ response, json: project });
+  });
+  await page.goto(`/?debug&fractureWall=${Date.now()}`);
+  await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
+  await expect(page.locator("#debug-stats")).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
+  const readStatic = async (): Promise<number> => {
+    const text = (await page.locator("#debug-stats").textContent()) ?? "";
+    const match = text.match(/fracture: .* static (\d+)/);
+    return match ? Number(match[1]) : -1;
+  };
+  // Wall + 2 panels + the Fracturable crate actor.
+  await expect.poll(() => readFracture(page), { timeout: 30_000 }).toMatchObject({ objects: 4, broken: 0, chunks: 0 });
+  expect(await readStatic()).toBe(0);
+
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect.poll(async () => (await readFracture(page))?.broken ?? 0, { timeout: 25_000 }).toBeGreaterThan(0);
+  await page.keyboard.up("KeyW");
+  const broken = (await readFracture(page))!;
+  const standing = await readStatic();
+  console.log(`[fracture smoke] wall fell ${broken.chunks} chunks, ${standing} stand`);
+  expect(broken.chunks).toBeGreaterThan(0);
+  expect(standing).toBeGreaterThan(0);
+  // Still standing a moment later: nothing else knocked it down.
+  await page.waitForTimeout(3000);
+  expect(await readStatic()).toBe(standing);
+  expect(errors).toEqual([]);
+});

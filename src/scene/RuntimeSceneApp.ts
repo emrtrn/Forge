@@ -1550,6 +1550,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         removeEntities: (entityIds) => this.physicsSubsystem.removeEntities(entityIds),
         velocityOf: (entityId) => this.physicsSubsystem.velocityOf(entityId),
         applyImpulse: (entityId, impulse) => this.physicsSubsystem.applyImpulse(entityId, impulse),
+        touchesStaticWorld: (position, rotation, points, exclude) =>
+          this.physicsSubsystem.touchesStaticWorld(position, rotation, points, exclude),
       },
       model: (assetId) => this.models.get(assetId)?.scene ?? null,
       exteriorMaterial: (assetId) => {

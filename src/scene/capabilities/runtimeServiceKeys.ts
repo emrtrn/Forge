@@ -316,6 +316,17 @@ export interface FractureHost {
     removeEntities(entityIds: readonly string[]): void;
     velocityOf(entityId: string): readonly [number, number, number] | null;
     applyImpulse(entityId: string, impulse: readonly [number, number, number]): void;
+    /**
+     * World Support probe: does a convex chunk at this world pose (quaternion
+     * [x, y, z, w], points relative to `position`) touch fixed world geometry
+     * other than `exclude`?
+     */
+    touchesStaticWorld(
+      position: readonly [number, number, number],
+      rotation: readonly [number, number, number, number],
+      points: readonly (readonly [number, number, number])[],
+      exclude: ReadonlySet<string>,
+    ): boolean;
   };
   /** The loaded model (`gltf.scene`, asset UVW applied) for a manifest asset id. */
   model(assetId: string): Object3D | null;
@@ -353,6 +364,8 @@ export interface FractureDebugSnapshot {
   readonly fracturable: number;
   readonly fractured: number;
   readonly activeChunks: number;
+  /** Chunks still standing as static bodies of partly broken (anchored) objects. */
+  readonly staticChunks: number;
   /** Chunk spawn time of the last break, ms (the hitch the plan's risk 1 watches). */
   readonly lastSpawnMs: number;
   readonly breaks: number;

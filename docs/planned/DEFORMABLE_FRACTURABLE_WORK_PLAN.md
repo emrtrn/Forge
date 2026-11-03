@@ -852,6 +852,13 @@ Faz 1–5'ten bağımsız, Faz 2 ile paralel yürür.
 Kabul: görsel kabul (kullanıcı) + yoğun foliage sahnesinde GPU ölçümü.
 GPU ölçümü tamam; **görsel kabul bekleniyor.**
 
+Görsel kabulde bulunan (2026-11-03): editörde salınıyor, Play'de salınmıyordu.
+Sebep sway değil, editör kaydı: o oturumda oluşturulan foliage type'ın sonraki
+düzenlemeleri, `SceneApp.saveFoliageTypeAsset` asset'i önbellekteki eski
+manifest'te bulamadığı için hiç yazılmıyordu (yalnız durum çubuğunda uyarı).
+Düzeltme: kayıt bulamazsa manifest'i bir kez yeniden okur. Smoke
+`foliage-type-save.spec.ts`.
+
 ### Faz 6b — Temas salınımı ve static mesh sway (Faz 6'dan ayrıldı)
 
 Faz 6 kabulünden bağımsız; tüketici ihtiyacıyla açılır.

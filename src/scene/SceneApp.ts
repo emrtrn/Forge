@@ -8704,8 +8704,15 @@ export class SceneApp {
 
   /** Persists a Foliage Type def back to its manifest asset via the dev endpoint. */
   private async saveFoliageTypeAsset(assetId: string, def: ForgeFoliageTypeDef): Promise<void> {
-    const manifest = this.manifest ?? (await this.assetLoader?.loadManifest()) ?? null;
-    const record = manifest ? assetRecordById(manifest, assetId) : null;
+    let manifest = this.manifest ?? (await this.assetLoader?.loadManifest()) ?? null;
+    let record = manifest ? assetRecordById(manifest, assetId) : null;
+    // A type created this session is registered on disk after the manifest was
+    // cached: re-read it once, or every later edit of that type is never saved.
+    if (!record && this.assetLoader) {
+      this.assetLoader.invalidateManifest();
+      manifest = this.manifest = await this.assetLoader.loadManifest();
+      record = assetRecordById(manifest, assetId);
+    }
     if (!record) {
       this.onStatus?.(`Foliage type asset not found for save: ${assetId}`, "warning");
       return;

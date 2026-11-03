@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "source": "voronoi",
+  "enabled": true,
+  "seed": 1,
+  "cellCount": 12,
+  "density": 600,
+  "interiorMaterialId": null,
+  "interiorUvScale": 1,
+  "breakImpulse": 400,
+  "damageToBreak": null,
+  "chunkLifetime": 8,
+  "maxActiveChunks": 16,
+  "sourceHash": "fnv1a:b10e7c0f"
+}

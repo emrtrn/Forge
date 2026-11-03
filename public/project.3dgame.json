@@ -6,12 +6,12 @@
   "entry": "src/main.ts",
   "publicDir": "public",
   "editor": {
-    "defaultScene": "layouts/RidgeboundReliefA.level.json",
+    "defaultScene": "assets/starter-content/Levels/Terrain.level.json",
     "assetManifest": "assets/manifest.json",
     "gridSize": 0.25,
     "gridEnabled": false,
     "snapRotationDeg": 15,
-    "snapRotationEnabled": true,
+    "snapRotationEnabled": false,
     "snapScale": 0.1,
     "snapScaleEnabled": true
   },

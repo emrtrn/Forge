@@ -11,12 +11,14 @@
   "metalnessTexture": null,
   "aoTexture": null,
   "opacityTexture": null,
+  "useBaseColorAlphaForOpacity": false,
   "emissiveTexture": null,
   "ormTexture": null,
   "uvTiling": {
-    "x": 1,
-    "y": 1
+    "x": 2,
+    "y": 2
   },
+  "flipY": true,
   "roughness": 0.85,
   "metalness": 0,
   "aoIntensity": 1,
@@ -26,5 +28,6 @@
   "side": "front",
   "emissive": "#000000",
   "emissiveIntensity": 0,
+  "normalMotion": null,
   "layerBlend": null
 }

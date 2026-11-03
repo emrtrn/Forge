@@ -31,7 +31,9 @@
     {
       "id": "rock",
       "name": "Rock",
-      "color": "#7f8485"
+      "color": "#7f8485",
+      "material": "lt-wet-mud",
+      "physicalMaterial": "mud"
     },
     {
       "id": "snow",
@@ -81,7 +83,7 @@
     },
     {
       "key": "1_1",
-      "minHeight": -2.5430076122283936,
+      "minHeight": -3.99615478515625,
       "maxHeight": 1.058609962463379
     }
   ],

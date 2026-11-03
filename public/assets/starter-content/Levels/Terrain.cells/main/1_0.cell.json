@@ -17,20 +17,34 @@
           "scale": 1.6
         }
       ]
+    },
+    {
+      "assetId": "wall-400x200",
+      "placements": [
+        {
+          "position": [
+            169.48,
+            -0.15,
+            102.97
+          ],
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
     }
   ],
   "actors": [
     {
       "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
       "position": [
-        169.73,
+        171.47,
         0,
-        115.58
+        94.85
       ],
       "rotationYDeg": 0,
       "rotation": [
         0,
-        -60,
+        -2.5,
         0
       ],
       "scale": 1

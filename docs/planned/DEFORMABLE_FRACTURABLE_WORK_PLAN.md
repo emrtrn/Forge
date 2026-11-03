@@ -5,7 +5,8 @@
 > bağlantısı (`setImpactEventThreshold` / `impacts()`) ve actor "On Impact"
 > olayı. **Faz 6 kod tarafı ve GPU ölçümü tamam** (2026-11-03), görsel
 > kabul bekliyor. Etkileşim alanı ve static mesh sway Faz 6b'ye ayrıldı.
-> Faz 2 (Voronoi bake) başlamadı.
+> **Faz 2 tamam** (2026-11-03): Voronoi bake çekirdeği. Sıradaki: Faz 3
+> (fracture asset ve editör yüzeyi).
 >
 > Bu belge iki ön çalışmanın Forge açısından değerlendirilmiş, tek çalışma
 > planına indirgenmiş hâlidir:
@@ -328,20 +329,37 @@ impact kapalı sahnede fizik adımı maliyeti değişmemiş.
 Faz 1'den bağımsız. Faz 6 ile paralel yürür. Saf fonksiyon + test olduğu için
 Codex'e uygun.
 
-- [ ] Seed'li tohum üretimi (sınır kutusu içinde, isteğe bağlı yoğunlaştırma
-      noktası).
-- [ ] Hücre başına orta düzlemlerle **dışbükey kapalı mesh** kırpma (kutu,
-      duvar, panel, sandık).
-- [ ] Parça geometrisi: dış yüzler kaynak UV/normal ile, kesik yüzler ayrı
-      material grubu ve kutu projeksiyonu UV ile.
-- [ ] Hull noktaları = hücre köşeleri (ayrıca `ConvexGeometry` gerekmez).
+- [x] Seed'li tohum üretimi (sınır kutusu içinde, isteğe bağlı yoğunlaştırma
+      noktası). `fractureSeeds`: mulberry32, sınırlar her yandan %1 içeri;
+      `focus` ilk `round(share × cellCount)` tohumu küre içinde çeker.
+- [x] Hücre başına orta düzlemlerle **dışbükey kapalı mesh** kırpma (kutu,
+      duvar, panel, sandık). `voronoiCellPlanes` + `clipPolyhedron`
+      (Sutherland–Hodgman, konum/normal/UV enterpolasyonu, düzlem üstü
+      noktalardan kapak).
+- [x] Parça geometrisi: dış yüzler kaynak UV/normal ile, kesik yüzler ayrı
+      material grubu ve kutu projeksiyonu UV ile. Grup 0 dış, grup 1 iç;
+      iç UV kaynak-yerel konumdan (komşu parçaların kesik yüzleri hizalı),
+      baskın eksen X→YZ, Y→XZ, Z→XY.
+- [x] Hull noktaları = hücre köşeleri (ayrıca `ConvexGeometry` gerekmez).
       Kütle hacimle orantılı, parça merkezi = pivot.
-- [ ] Determinizm: aynı mesh + seed → bayt bayt aynı çıktı.
-- [ ] Testler: hacim korunumu (toleransla), örtüşme yok, her hull geçerli,
+- [x] Determinizm: aynı mesh + seed → bayt bayt aynı çıktı.
+- [x] Testler: hacim korunumu (toleransla), örtüşme yok, her hull geçerli,
       dejenere hücre (çok küçük/ince) birleştirilir veya atılır.
+      "Birleştirme" = en küçük dejenere hücrenin tohumunu atıp Voronoi'yi
+      yeniden hesaplamak: komşular hacmi emer, her parça dışbükey kalır
+      (`mergedCells`). `tests/engine/fracture.test.ts` (13).
+
+Uygulama (2026-11-03): `engine/physics/fracture/voronoiFracture.ts` +
+`fractureBake.ts`, three'siz typed array'ler (BufferGeometry'ye çeviri
+Faz 3/4'te render katmanında). Codex yazdı, Claude tasarladı ve inceledi;
+inceleme sonrası `interiorUvScale` doğrulaması eklendi. Bilinen sınırlar:
+tohumlar AABB içinde çekildiği için kutu olmayan dışbükey mesh'te bazı
+hücreler boş kalır ve birleşir (parça sayısı `cellCount`'tan az olabilir);
+`checkFractureSource` ve köşe kaynakları O(n²), düşük poligonlu kırılabilir
+asset için yeterli. Faz 3 doğrulayıcısı `checkFractureSource`'u kullanacak.
 
 Kabul: `--filter fracture` yeşil; 16 hücreli kutu bake'i < 50 ms (ölçülür,
-hedef değil).
+hedef değil). **Kapandı:** filtre yeşil, medyan 2.9–3.5 ms.
 
 ### Faz 3 — Fracture asset ve editör yüzeyi
 
@@ -636,3 +654,5 @@ kullanıcı kararı).
 - 2026-11-03: Faz 6 editör alanları (8176da75), kalite mesafesi (ff9f22b5),
   gpuSweep "wind sway" satırı + GPU ölçümü (sway ≈ kare %1–2). Etkileşim alanı
   ve static mesh sway Faz 6b'ye ayrıldı; Faz 6 görsel kabul bekliyor.
+- 2026-11-03: **Faz 2 kapandı.** Voronoi bake çekirdeği Codex'e yaptırıldı
+  (tasarım + inceleme Claude); 16 hücreli kutu ~3 ms.

@@ -16,5 +16,9 @@ Pure engine physics layer.
   `PhysicsSubsystem.setImpactEventThreshold(id, minImpulse)` opts an entity
   in (Rapier contact-force events, drained per slice, manifold point/normal);
   `impacts()` returns the frame's result. Without an opt-in the step is unchanged.
+- `fracture/`: pure Voronoi fracture bake (`voronoiFracture.ts` seeds,
+  bisector planes and convex clipping; `fractureBake.ts` chunks with an
+  interior material group, hull points, volume-split mass). Typed arrays only,
+  no Three.js. See the deformable/fracturable plan Faz 2.
 - `fixedStep.ts`: the fixed-timestep accumulator (`FixedStepClock`) and the
   pose blend helpers it drives. See `VEHICLE_PHYSICS_PLAN.md` Faz 0 (archived, see `docs/COMPLETED_WORK_INDEX.md`).

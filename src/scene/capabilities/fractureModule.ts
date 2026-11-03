@@ -2,7 +2,8 @@
  * Pre-baked fracture at runtime (DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 4).
  *
  * Every static-mesh placement whose model has an enabled `<Model>.fracture.json`
- * becomes fracturable: its chunks are baked once per asset at level load (the
+ * becomes fracturable — read from the layout, so placements in World Partition
+ * cells that stream in later are covered too: its chunks are baked once per asset at level load (the
  * same pure bake the Static Mesh Editor previews), its collider opts into
  * impact events at the asset's break impulse, and the module listens for
  * `Damage.Apply` / `Fracture.Break` script messages. A break retires the intact
@@ -28,8 +29,9 @@ import type { AssetFractureDef } from "@engine/physics/fracture/fractureTypes";
 import { polyhedronFromMesh, polyhedronVolume } from "@engine/physics/fracture/voronoiFracture";
 import { fractureChunkGeometry, fractureSourceFromObject } from "@engine/render-three/fractureGeometry";
 import { applyEulerDegrees } from "@engine/render-three/transforms";
-import type { TransformComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
+import { instanceEntityId } from "@engine/scene/legacyRoomLayoutAdapter";
+import { readRotation, readScale } from "@engine/scene/transform";
 
 import { loadAssetFracture } from "../assetFractureLoader";
 import type { CapabilityModule } from "./CapabilityModule";
@@ -70,18 +72,6 @@ interface LiveChunkObject {
   readonly mesh: Mesh;
 }
 
-/** `instance:<assetId>:<placementIndex>` → asset id (the static placement entity form). */
-function instanceAssetId(entityId: string): string | null {
-  if (!entityId.startsWith("instance:")) return null;
-  const separator = entityId.lastIndexOf(":");
-  if (separator <= "instance:".length) return null;
-  return decodeURIComponent(entityId.slice("instance:".length, separator));
-}
-
-function readTransform(entity: Entity | undefined): TransformComponent | null {
-  const transform = entity?.components.Transform as TransformComponent | undefined;
-  return transform ?? null;
-}
 
 export function createFractureModule(): CapabilityModule {
   let services: RuntimeServices | null = null;
@@ -92,6 +82,8 @@ export function createFractureModule(): CapabilityModule {
   const baked = new Map<string, BakedAsset>();
   /** Fracturable entity → its asset id. */
   const sourceAsset = new Map<string, string>();
+  /** Fracturable entity → where its placement stands (static placements never move). */
+  const sourcePlacement = new Map<string, FracturePlacement>();
   const chunks = new Map<string, LiveChunkObject>();
   const unsubscribes: Array<() => void> = [];
   let clock = 0;
@@ -114,14 +106,9 @@ export function createFractureModule(): CapabilityModule {
   const breakEntity = (entityId: string, impact: FractureImpactInfo | null, instigator: string | null): void => {
     const assetId = sourceAsset.get(entityId);
     const asset = assetId ? baked.get(assetId) : undefined;
-    const transform = readTransform(context?.entity(entityId));
-    if (!host || !context || !asset || !transform) return;
+    const placement = sourcePlacement.get(entityId);
+    if (!host || !context || !asset || !placement) return;
     const started = performance.now();
-    const placement: FracturePlacement = {
-      position: transform.position,
-      rotation: transform.rotation,
-      scale: transform.scale,
-    };
     const velocity = host.physics.velocityOf(entityId) ?? [0, 0, 0];
     const specs = planChunkSpawns(asset.bake, asset.def, placement, velocity, impact);
     host.physics.setImpactEventThreshold(entityId, null);
@@ -213,6 +200,7 @@ export function createFractureModule(): CapabilityModule {
     for (const asset of baked.values()) for (const geometry of asset.geometries) geometry.dispose();
     baked.clear();
     sourceAsset.clear();
+    sourcePlacement.clear();
     registry.clear();
     chunks.clear();
     clock = 0;
@@ -249,25 +237,27 @@ export function createFractureModule(): CapabilityModule {
       host = hostRef;
       const manifest = await levelContext.resolve(assetManifestService)?.();
       if (!manifest) return;
-      const byAsset = new Map<string, string[]>();
-      for (const entity of levelContext.entities) {
-        const assetId = instanceAssetId(entity.id);
-        if (!assetId) continue;
-        const list = byAsset.get(assetId);
-        if (list) list.push(entity.id);
-        else byAsset.set(assetId, [entity.id]);
-      }
-      for (const [assetId, entityIds] of byAsset) {
-        const record = assetRecordById(manifest, assetId);
-        if (!record || !isModelAssetType(assetType(record))) continue;
-        const asset = await bakeAsset(assetId, assetPath(record), hostRef);
+      // Every placement of the layout, built or not: a partitioned level merges
+      // its cells into `layout.instances` but builds a cell's bodies only when it
+      // streams in. The impact opt-in is kept by entity id, so it applies then.
+      for (const group of levelContext.layout.instances) {
+        const record = assetRecordById(manifest, group.assetId);
+        if (!record || !isModelAssetType(assetType(record)) || group.placements.length === 0) continue;
+        const asset = baked.get(group.assetId) ?? await bakeAsset(group.assetId, assetPath(record), hostRef);
         if (!asset || context !== levelContext) continue;
-        baked.set(assetId, asset);
-        for (const entityId of entityIds) {
-          if (!registry.register(entityId, asset.def)) continue;
-          sourceAsset.set(entityId, assetId);
+        baked.set(group.assetId, asset);
+        group.placements.forEach((placement, index) => {
+          if (placement.hidden) return;
+          const entityId = instanceEntityId(group.assetId, index);
+          if (!registry.register(entityId, asset.def)) return;
+          sourceAsset.set(entityId, group.assetId);
+          sourcePlacement.set(entityId, {
+            position: [placement.position[0], placement.position[1], placement.position[2]],
+            rotation: readRotation(placement),
+            scale: readScale(placement),
+          });
           hostRef.physics.setImpactEventThreshold(entityId, registry.breakImpulse(entityId));
-        }
+        });
       }
       const bus = levelContext.resolve(scriptMessageBusService);
       if (!bus) return;

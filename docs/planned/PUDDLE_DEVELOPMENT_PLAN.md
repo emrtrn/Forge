@@ -1,8 +1,8 @@
 # Puddle — çamurlu zemin ve gerçek tekerlek oyukları
 
-Tarih: 3 Kasım 2026. Durum: **İzole avlu prototipi ve Landscape/Water geçici
-Puddle önizlemesi uygulandı.** Kalıcı W3 ve production entegrasyonu henüz
-tamamlanmadı. Kaynak planlar:
+Tarih: 3 Kasım 2026. Durum: **İzole prototip, Landscape/Water önizlemesi ve
+kalıcı Puddle kaydı uygulandı.** Editör ve Play native terrain kurulumunu paylaşır.
+Canlı deformasyon/araç bağlantısı ve genel W3 performans kabulü açık. Kaynak planlar:
 [Water Body / W3](WORLD_TERRAIN_WATER_BODY_PLAN.md),
 [Terrain Deformasyonu](TERRAIN_DEFORMATION_PLAN.md).
 
@@ -64,8 +64,10 @@ Sınırlar:
    alanı ve su seviyesi; kuru/ıslak önizleme ve taşan sınır uyarısı. Panel bu
    önizlemenin Save/Play içine alınmadığını açıkça belirtir. Gerçek terrain
    aralığı kullanılır; düzlemi ayarlamak yeni Sculpt veya paint verisi üretmez.
-3. **Kalıcı veri:** Puddle kimliği, terrain referansı, seed, sınır, seviye,
-   appearance; validator, save/load, seçim ve undo/redo birlikte eklenir.
+3. **Kalıcı veri — uygulandı:** ayrı `puddleWaters` koleksiyonu; Puddle kimliği,
+   terrain referansı, seed, sınır, kot, görünüm ve hidden/locked. Ortak read/save
+   validator, Outliner/Water seçimi, oluştur/düzenle/sil undo/redo ve Save/Reload/Play
+   desteği vardır. Geometri kaydedilmez. [Teslim raporu](../reports/PUDDLE_PERSISTENCE_2026-11-03.md).
 4. **World Terrain bağlantısı:** gerçek tile üçgenleri, Sculpt revizyonları,
    deformasyonun render filtrelemesi, CDLOD detayı, dirty rect güncellemeleri,
    eksik tile ve tile sınırları. Kaynak iptali, streaming ve travel temizliği.
@@ -92,10 +94,15 @@ World Terrain seç → **Landscape Mode: Water** → **Puddle Preview** →
 Alan native terrain grid'ine hizalanır. İlk kot tıklanan tabanın 5 cm üzeridir;
 çukur sınıra kadar açık kalırsa alanı genişletmek veya kotu düşürmek gerekir.
 
+Hazır önizlemede **Create Puddle** kalıcı gövdeyi oluşturur. Outliner veya Water
+Bodies listesinden seçilen Puddle'ın kotu, alanı ve görünümü düzenlenir; hidden,
+locked ve silme desteklenir. Create/Edit/Delete komutları undo/redo'ya katılır.
+Save gövdeyi level'e yazar; Reload ve Play aynı kaynaktan yüzeyi tekrar üretir.
+
 **Clear Preview**, Esc, başka seçim/mod veya level değişimi geçici yüzeyi
 temizler. Esc panel alanında yazarken de çalışır. Eksik tile yüklemeleri
 iptal edilebilir; geç tamamlanan yükleme temizlenmiş yüzeyi geri getirmez.
 Tek önizleme ve en fazla 16 eksik tile okuması vardır; gövde başına ek planar
-capture tahsis edilmez. Kayıt, undo/redo ve canlı araç/deformasyon bağlantısı bu
-önizlemenin kapsamı değildir. Teknik kayıt:
+capture tahsis edilmez. Önizleme Create yapılmadan kaydedilmez. Kalıcı gövdelerin
+canlı araç/deformasyon bağlantısı sonraki dilimdir. Teknik kayıt:
 [Landscape Puddle önizlemesi](../reports/PUDDLE_EDITOR_PREVIEW_2026-11-03.md).

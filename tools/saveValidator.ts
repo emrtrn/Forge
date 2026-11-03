@@ -6,6 +6,7 @@ import { validateWaterCaustics } from "../engine/scene/waterCaustics";
 import { validateWaterShoreWetness } from "../engine/scene/waterShoreWetness";
 import { validateWaterContactFoam } from "../engine/scene/waterContactFoam";
 import { validateWaterBodies } from "../engine/scene/waterBody";
+import { validatePuddleWaters } from "../engine/scene/puddleWater";
 export { validateSaveTerrainPayload, validateSaveTerrainTile, validateSaveTerrainGlobal } from "./terrainSaveValidator";
 ﻿/**
  * Save-payload validator for the `/__save-layout` dev endpoint.
@@ -2226,6 +2227,7 @@ export function validateLayout(value: unknown): unknown {
   if (landscapes) output.landscapes = landscapes;
   if (riverWaters) output.riverWaters = riverWaters;
   if (layout.waterBodies !== undefined) output.waterBodies = validateWaterBodies(layout.waterBodies);
+  if (layout.puddleWaters !== undefined) output.puddleWaters = validatePuddleWaters(layout.puddleWaters);
   if (actors) output.actors = actors;
   if (worldWidgets) output.worldWidgets = worldWidgets;
   return output;

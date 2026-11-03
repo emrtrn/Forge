@@ -50,8 +50,8 @@ import { selectionId, type Selection } from "./selection";
 
 const DEFAULT_LIGHT_COLOR = "#ffffff";
 
-function buildLakeSelection(lake: LayoutLakeWaterBody, index: number): EditableSelection {
-  return { id: `lake:${index}`, kind: "lake", assetId: "lake-water", category: "terrain", label: lake.name ?? lake.id,
+function buildLakeSelection(lake: Pick<LayoutLakeWaterBody, "id" | "name" | "seed" | "surfaceLevel" | "locked">, index: number, kind: "lake" | "puddle" = "lake"): EditableSelection {
+  return { id: `${kind}:${index}`, kind, assetId: `${kind}-water`, category: "terrain", label: lake.name ?? lake.id,
     position: [lake.seed[0], lake.surfaceLevel, lake.seed[1]], rotation: [0, 0, 0], scale: [1, 1, 1],
     pivot: [0, 0, 0], scaleLocked: true, locked: lake.locked ?? false, castShadow: false,
     collision: false, simulatePhysics: false, physics: {}, metadata: {} };
@@ -791,6 +791,9 @@ export function buildSceneObjects(
     });
   });
 
+  layout.puddleWaters?.forEach((puddle, index) => {
+    objects.push({ ...buildLakeSelection(puddle, index, "puddle"), selected: deps.isSelected({ kind: "puddle", index }), hidden: puddle.hidden ?? false, locked: puddle.locked ?? false });
+  });
   layout.waterBodies?.forEach((lake, index) => {
     objects.push({ ...buildLakeSelection(lake, index), selected: deps.isSelected({ kind: "lake", index }), hidden: lake.hidden ?? false, locked: lake.locked ?? false });
   });
@@ -837,6 +840,10 @@ export function buildEditableSelection(
   selection: Selection,
   deps: SceneObjectDeps,
 ): EditableSelection | null {
+  if (selection.kind === "puddle") {
+    const puddle = layout.puddleWaters?.[selection.index];
+    return puddle ? buildLakeSelection(puddle, selection.index, "puddle") : null;
+  }
   if (selection.kind === "lake") {
     const lake = layout.waterBodies?.[selection.index];
     return lake ? buildLakeSelection(lake, selection.index) : null;

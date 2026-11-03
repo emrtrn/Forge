@@ -16,6 +16,14 @@ import { SHAPE_PRIMITIVE_SIZE } from "../../engine/scene/shapes";
 
 const LEVEL = "layouts/__playwright-lake-world.level.json", TERRAIN = "landscapes/__playwright-lake-world.terrain.json";
 const snapshot = (page: Page) => page.evaluate(() => (window as any).__lakeQA.snapshot());
+async function servePuddleFixtureBinaries(page: Page) {
+  const paths = new Set([terrainGlobalMapPath(TERRAIN), ...[...createLakeFixture().tiles.keys()].map(key => terrainTilePath(TERRAIN, key))]);
+  await page.route("**/landscapes/__playwright-lake-world*.bin", async route => {
+    const path = new URL(route.request().url()).pathname.slice(1);
+    if (!paths.has(path)) { await route.continue(); return; }
+    await route.fulfill({ body: await readFile(smokePublicPath(path)), contentType: "application/octet-stream" });
+  });
+}
 async function clickWorld(page: Page, point: number[]) {
   const p = await page.evaluate((p) => (window as any).__lakeQA.project(...p), point);
   const viewport = (await page.locator("[data-viewport-host]").boundingBox())!;
@@ -118,6 +126,7 @@ async function save(page: Page) {
 
 test("Puddle preview uses native terrain, reports open bounds, clears on Escape and never writes a body", async ({ page, request }, info) => {
   test.setTimeout(240_000);
+  await servePuddleFixtureBinaries(page);
   const defaults = defaultUserSettings();
   await page.addInitScript(value => localStorage.setItem("forge.userSettings", value), JSON.stringify({ schema: 1,
     updatedAt: new Date().toISOString(), payload: { ...defaults, graphics: { ...defaults.graphics,
@@ -165,6 +174,65 @@ test("Puddle preview uses native terrain, reports open bounds, clears on Escape 
   expect(await readFile(smokePublicPath(LEVEL), "utf8")).toBe(diskBefore);
   expect(cleared.glError).toBe(0); expect(errors).toEqual([]);
   await info.attach("puddle-editor", { body: JSON.stringify({ initial, raised, overflow, cleared }), contentType: "application/json" });
+});
+
+test("Puddle persists creation appearance edits undo delete Save Reload and Play without changing terrain", async ({ page, request }, info) => {
+  test.setTimeout(300_000);
+  const defaults = defaultUserSettings();
+  await page.addInitScript(value => localStorage.setItem("forge.userSettings", value), JSON.stringify({ schema: 1,
+    updatedAt: new Date().toISOString(), payload: { ...defaults, graphics: { ...defaults.graphics,
+      selectedQualityLevel: "low", manuallySelected: true, adaptiveOptimizationEnabled: false } } }));
+  // The fixture is written after Vite starts. Serve these exact fixture bytes
+  // deterministically so a startup static-file miss cannot become HTML terrain.
+  await servePuddleFixtureBinaries(page);
+  const { errors } = await setup(page, request);
+  const before = await terrainHash();
+  const frame = (reposition = false) => page.evaluate(value => (window as any).__lakeQA.puddleSavedFrame(value), reposition);
+  await frame();
+  const preview = page.locator('[data-detail-section="puddle-preview"]');
+  if (await preview.evaluate(e => e.classList.contains("collapsed"))) await preview.locator(".detail-section-toggle").click();
+  await page.locator("[data-puddle-begin]").click(); await clickWorld(page, [30, 10, 0]);
+  await expect(page.locator("[data-puddle-status]")).toHaveAttribute("data-puddle-result", "ready");
+  await page.locator('[data-puddle-number="level"]').fill("10.6"); await page.locator('[data-puddle-number="level"]').press("Tab");
+  await expect(page.locator("[data-puddle-create]")).toBeEnabled(); await page.locator("[data-puddle-create]").click();
+  await expect(page.locator('[data-object-id="puddle:0"]')).toBeVisible();
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  const created = await frame(); expect(created.source).toHaveLength(1); expect(created.objects[0].vertices).toBeGreaterThan(0);
+  await page.getByTestId("editor-undo").click(); expect((await frame()).source).toHaveLength(0);
+  await page.getByTestId("editor-redo").click();
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  const opacity = page.locator('[data-puddle-appearance="opacity"]');
+  await opacity.fill("0.65"); await opacity.press("Tab");
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  await page.getByTestId("editor-undo").click(); await expect(opacity).toHaveValue("0.82");
+  await page.getByTestId("editor-redo").click(); await expect(opacity).toHaveValue("0.65");
+  await page.locator("[data-puddle-locked]").check(); await expect(opacity).toBeDisabled();
+  await page.locator("[data-puddle-locked]").uncheck();
+  await page.locator("[data-puddle-hidden]").check(); expect((await frame()).objects).toHaveLength(0);
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "hidden");
+  await page.locator("[data-puddle-hidden]").uncheck();
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  await page.locator("[data-puddle-delete]").click(); expect((await frame()).source).toHaveLength(0);
+  await page.getByTestId("editor-undo").click();
+  await expect(page.locator("[data-puddle-saved-status]")).toHaveAttribute("data-puddle-result", "ready");
+  const edited = await frame(true); expect(edited.glError).toBe(0);
+  await page.screenshot({ path: info.outputPath("puddle-saved-editor.png") });
+  await save(page);
+  const saved = JSON.parse(await readFile(smokePublicPath(LEVEL), "utf8"));
+  expect(saved.puddleWaters).toEqual(edited.source); expect(saved.puddleWaters[0].appearance.opacity).toBe(.65);
+  expect(saved.waterBodies ?? []).toHaveLength(0); expect(await terrainHash()).toBe(before);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!(window as any).__lakeQA);
+  await expect.poll(async () => (await frame()).results[0]?.status, { timeout: 90_000 }).toBe("ready");
+  await page.locator('[data-object-id="puddle:0"]').click(); await expect(opacity).toHaveValue("0.65");
+  const reloaded = await frame(true); expect(reloaded.objects).toEqual(edited.objects);
+  await page.goto("/tests/smoke/pages/terrain-lake-runtime.html", { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(() => !!(window as any).__lakeQA);
+  await expect.poll(async () => (await frame()).results[0]?.status, { timeout: 90_000 }).toBe("ready");
+  const runtime = await frame(true); expect(runtime.source).toEqual(saved.puddleWaters); expect(runtime.objects).toEqual(edited.objects);
+  expect(runtime.glError).toBe(0); expect(await terrainHash()).toBe(before); expect(errors).toEqual([]);
+  await page.screenshot({ path: info.outputPath("puddle-saved-runtime.png") });
+  await info.attach("puddle-persistence", { body: JSON.stringify({ created, edited, reloaded, runtime }), contentType: "application/json" });
 });
 
 test("Lake crest foam controls survive undo Save Reload and runtime", async ({ page, request }, info) => {

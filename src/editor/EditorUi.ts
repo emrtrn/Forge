@@ -4621,7 +4621,7 @@ export class EditorUi {
 
   private renderDetails(selection: EditableSelection | null): void {
     const lakeState = this.app.getLakeEditorState();
-    if (selection && (selection.kind === "lake" || lakeState.draft || lakeState.picking)) {
+    if (selection && (selection.kind === "lake" || selection.kind === "puddle" || lakeState.draft || lakeState.picking)) {
       renderWaterSystemDetails(this.detailsBody, this.app); this.finalizeDetailsRender(selection);
       if (lakeState.leaving || lakeState.picking) this.detailsBody.querySelector("[data-lake-workflow]")?.scrollIntoView({ block: "start" });
       return;

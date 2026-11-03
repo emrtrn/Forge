@@ -3,6 +3,7 @@ import { riverFoamSurfaceFingerprint } from "@engine/render-three/lakeFoamBake";
 import type { RiverWaterObject } from "@engine/render-three/riverWater";
 import { Vector2, Vector3, WebGLRenderTarget, type PerspectiveCamera, type WebGLRenderer, type Scene, type Group } from "three";
 import type { LakeWaterController } from "@/scene/lakeWaterController";
+import type { PuddleWaterController } from "@/scene/puddleWaterController";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { updateLandscapeLod } from "@engine/render-three/landscape";
 import type { TerrainEditorStreaming } from "@engine/terrain/terrainEditorStreaming";
@@ -20,6 +21,7 @@ export function installLakeProbe(app: unknown) {
     riverWaterObjects?: RiverWaterObject[];
     selection: { kind: string; index?: number } | null;
     renderer: WebGLRenderer; scene: Scene; frameHandle: number; landscapeObjects: Group[];
+    puddles?: PuddleWaterController | null;
     postProcessPipeline: { render(dt: number): void; underwaterStats?: unknown } | null;
     worldTerrainStreams?: Map<WorldTerrainDocument, TerrainEditorStreaming>;
     getLakeEditorState?: SceneApp["getLakeEditorState"];
@@ -29,6 +31,21 @@ export function installLakeProbe(app: unknown) {
     layout?: RoomLayout;
     worldTerrains?: Map<string, WorldTerrainDocument>; worldTerrainDocuments?: Map<string, WorldTerrainDocument> };
   (window as any).__lakeQA = {
+    puddleSavedFrame(reposition = false) {
+      cancelAnimationFrame(a.frameHandle);
+      // The fixture's outer bank reaches Y=16; keep the camera above that bed.
+      if (reposition) { a.camera.position.set(38, 26, 14); a.camera.lookAt(30, 10.4, 0); a.camera.updateMatrixWorld(true); }
+      for (const object of a.landscapeObjects) updateLandscapeLod(object, a.camera);
+      a.renderer.render(a.scene, a.camera);
+      return { source: structuredClone(a.layout?.puddleWaters ?? []),
+        results: [...(a.puddles?.results ?? [])].map(([id, result]) => ({ id, ...result })),
+        objects: [...(a.puddles?.objects ?? [])].map(([id, object]) => {
+          const values = object.geometry.getAttribute("position").array;
+          let hash = 2166136261;
+          for (const value of new Uint8Array(values.buffer, values.byteOffset, values.byteLength)) hash = Math.imul(hash ^ value, 16777619);
+          return { id, hash: hash >>> 0, vertices: values.length / 3, color: object.material.color.getHexString(), opacity: object.material.opacity };
+        }), glError: a.renderer.getContext().getError() };
+    },
     puddleFrame() {
       cancelAnimationFrame(a.frameHandle);
       a.renderer.render(a.scene, a.camera);

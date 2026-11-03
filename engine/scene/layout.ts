@@ -1142,6 +1142,7 @@ export interface LayoutLakeWaterBody {
   };
 }
 export type LayoutWaterBody = LayoutLakeWaterBody;
+export type LayoutPuddleWaterBody = import("./puddleWater").PuddleWaterBody;
 
 export interface RoomLayout {
   schema: 1;
@@ -1183,6 +1184,8 @@ export interface RoomLayout {
   riverWaters?: LayoutRiverWater[];
   /** Connected, terrain-clipped Lakes; persistent source parameters only. */
   waterBodies?: LayoutWaterBody[];
+  /** Shallow, native-terrain-clipped Puddles; persistent source parameters. */
+  puddleWaters?: LayoutPuddleWaterBody[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

@@ -1,8 +1,9 @@
 import { Box3, Box3Helper, Group, Vector3, type Scene } from "three";
-import { buildTerrainPuddle, type TerrainPuddleGeometry, type TerrainPuddleRegion } from "@engine/terrain/terrainPuddle";
-import { terrainHeightAt } from "@engine/terrain/terrainHeightQuery";
+import type { TerrainPuddleGeometry, TerrainPuddleRegion } from "@engine/terrain/terrainPuddle";
+import { preparePuddleWater, puddleRegionAroundSeed } from "@engine/terrain/terrainPuddlePreparation";
+import { validatePuddleWater, type PuddleWaterBody } from "@engine/scene/puddleWater";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
-import { tileKey, type TerrainTileData } from "@engine/terrain/terrainTypes";
+import { type TerrainTileData } from "@engine/terrain/terrainTypes";
 import { TerrainPuddleSurface } from "@engine/render-three/terrain/terrainPuddleSurface";
 
 export interface PuddlePreviewState {
@@ -31,6 +32,7 @@ export class PuddlePreview {
   private readonly bounds = new Box3Helper(new Box3(), 0xe9bd69);
   private abort = new AbortController();
   private revision = 0;
+  private region: TerrainPuddleRegion | null = null;
   private state: PuddlePreviewState = { terrainRef: null, seed: null, level: 0, size: 12, spacing: 1, area: 0, status: "idle", message: "" };
 
   constructor(private readonly host: PreviewHost) {
@@ -61,39 +63,25 @@ export class PuddlePreview {
     if (!terrainRef || !seed) return;
     const document = this.host.document(terrainRef);
     if (!document) { this.clear(); return; }
-    const { def } = document, s = def.spacing;
-    const cells = Math.max(2, Math.ceil(this.state.size / s));
-    if (cells > 128) { this.fail("Çalışma alanı 128×128 hücre bütçesini aşıyor; alanı küçültün."); return; }
-    const region: TerrainPuddleRegion = { minX: def.origin[0] + Math.floor((seed[0] - cells * s / 2 - def.origin[0]) / s) * s,
-      minZ: def.origin[2] + Math.floor((seed[1] - cells * s / 2 - def.origin[2]) / s) * s,
-      size: cells * s, cellSize: s, level, seed };
+    const s = document.def.spacing;
+    this.state.spacing = s;
+    let region: TerrainPuddleRegion;
+    try { region = puddleRegionAroundSeed(document.def, seed, this.state.size, level); }
+    catch (error) { this.fail(String(error)); return; }
     this.state = { ...this.state, spacing: s, size: region.size, status: "loading", message: "Kesin terrain verisi hazırlanıyor…" };
     this.host.changed();
-    const tiles = new Map(document.tiles), known = new Set(def.tiles.map(tile => tile.key));
-    const span = def.tileQuads * s, keys: string[] = [];
-    const firstX = Math.max(0, Math.floor((region.minX - def.origin[0]) / span));
-    const firstZ = Math.max(0, Math.floor((region.minZ - def.origin[2]) / span));
-    const lastX = Math.min(def.tilesX - 1, Math.floor((region.minX + region.size - def.origin[0]) / span));
-    const lastZ = Math.min(def.tilesZ - 1, Math.floor((region.minZ + region.size - def.origin[2]) / span));
-    for (let z = firstZ; z <= lastZ; z++) for (let x = firstX; x <= lastX; x++) {
-      const key = tileKey(x, z); if (known.has(key) && !tiles.has(key)) keys.push(key);
-    }
-    if (keys.length > 16) { this.fail("Önizleme en fazla 16 eksik tile yükler; çalışma alanını küçültün."); return; }
     try {
-      // Sequential reads keep this small authoring tool from flooding streaming IO.
-      for (const key of keys) {
-        const tile = await this.host.load(terrainRef, key, signal);
-        if (signal.aborted || revision !== this.revision) return;
-        tiles.set(key, tile);
-      }
+      const body: PuddleWaterBody = { schema: 1, kind: "puddle", coordinateSpace: "world", id: "preview", terrainRef,
+        seed: [...seed], surfaceLevel: level, bounds: { min: [region.minX, region.minZ], max: [region.minX + region.size, region.minZ + region.size] } };
+      const data = await preparePuddleWater(body, document, (key, pending) => this.host.load(terrainRef, key, pending), signal);
       if (signal.aborted || revision !== this.revision) return;
-      const data = buildTerrainPuddle(region, (x, z) => terrainHeightAt(def, { tile: (tx, tz) => tiles.get(tileKey(tx, tz)) }, x, z));
+      if (data.status === "ready") this.region = region;
       if (this.surface.rebuild(data)) this.state.area = data.area;
       // Failed results keep the old valid surface; the outline shows the new request.
       this.bounds.box.set(new Vector3(region.minX, level, region.minZ), new Vector3(region.minX + region.size, level, region.minZ + region.size));
       this.group.visible = true;
       const messages: Record<TerrainPuddleGeometry["status"], string> = {
-        ready: `${data.area.toFixed(2)} m² · Terrain aralığı ${s} m. Bu önizleme kaydedilmez.`,
+        ready: `${data.area.toFixed(2)} m² · Hazır; Create Puddle ile oluşturun.`,
         dry: "Başlangıç noktası kuru; su seviyesini yükseltin veya başka çukur seçin.",
         "open-boundary": "Su çalışma sınırına ulaştı. Alanı genişletin veya seviyeyi düşürün; önceki geçerli yüzey korundu.",
         "missing-terrain": "Bağlı su alanında terrain eksik. Önceki geçerli yüzey korundu; boşluklar suyla doldurulmadı.",
@@ -105,10 +93,18 @@ export class PuddlePreview {
     }
   }
 
+  toBody(id: string, name: string): PuddleWaterBody | null {
+    const region = this.region;
+    if (this.state.status !== "ready" || !region || !this.state.terrainRef) return null;
+    return validatePuddleWater({ schema: 1, kind: "puddle", coordinateSpace: "world", id, name,
+      terrainRef: this.state.terrainRef, seed: [...region.seed], surfaceLevel: region.level,
+      bounds: { min: [region.minX, region.minZ], max: [region.minX + region.size, region.minZ + region.size] } });
+  }
+
   private fail(message: string): void { this.state = { ...this.state, status: "error", message }; this.host.changed(); }
 
   clear(): void {
-    this.abort.abort(); this.revision++;
+    this.abort.abort(); this.revision++; this.region = null;
     this.surface.rebuild({ status: "dry", positions: new Float32Array(), depths: new Float32Array(), area: 0 });
     this.group.visible = false;
     this.state = { ...this.state, terrainRef: null, seed: null, area: 0, status: "idle", message: "" };

@@ -5,6 +5,7 @@ import { LANDSCAPE_EDIT_MODES, landscapeModeSelect } from "./specialActorDetails
 import { applyWaterTooltips } from "./waterTooltips";
 import { renderLakeDetails } from "./lakeDetails";
 import { renderPuddlePreviewDetails } from "./puddlePreviewDetails";
+import { renderPuddleDetails } from "./puddleDetails";
 import type { LandscapeEditMode, RiverWaterDetailsPatch, RiverWaterDetailsView } from "@/scene/SceneApp";
 
 const escapeHtml = (value: string): string => value.replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
@@ -30,7 +31,7 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
   const slot = body.querySelector("[data-water-bodies-slot]");
   if (slot) slot.outerHTML = `<div class="detail-section" data-detail-section="water-bodies"><div class="detail-section-title">Water Bodies</div>
     <div class="landscape-layer-list">${context.bodies.map((water) => `<button type="button" data-water-body="${escapeHtml(water.id)}" data-water-kind="${water.kind}" class="${water.active ? "active" : ""}" aria-pressed="${water.active}" ${context.busy ? "disabled" : ""}>
-      <span>${escapeHtml(water.name)}</span><span>${water.kind === "river" ? "River" : "Lake"}</span></button>`).join("") || '<div class="detail-hint">Henüz su kütlesi yok.</div>'}</div></div>`;
+      <span>${escapeHtml(water.name)}</span><span>${water.kind === "river" ? "River" : water.kind === "puddle" ? "Puddle" : "Lake"}</span></button>`).join("") || '<div class="detail-hint">Henüz su kütlesi yok.</div>'}</div></div>`;
   body.querySelector<HTMLSelectElement>("[data-landscape-mode]")?.addEventListener("change", (event) => {
     const mode = (event.currentTarget as HTMLSelectElement).value as LandscapeEditMode;
     if (LANDSCAPE_EDIT_MODES.includes(mode)) app.selectWaterSystemTerrain(mode);
@@ -43,10 +44,10 @@ export function renderWaterSystemDetails(body: HTMLElement, app: SceneApp, optio
   body.querySelectorAll<HTMLButtonElement>("[data-water-body]").forEach((button) => {
     button.addEventListener("click", () => {
       const kind = button.dataset.waterKind;
-      if (kind === "river" || kind === "lake") app.selectWaterSystemBody(kind, button.dataset.waterBody!);
+      if (kind === "river" || kind === "lake" || kind === "puddle") app.selectWaterSystemBody(kind, button.dataset.waterBody!);
     });
   });
-  if (!options) renderLakeDetails(body, app);
+  if (!options) { if (app.getSelectedPuddle()) renderPuddleDetails(body, app); else renderLakeDetails(body, app); }
 }
 
 function renderRiverWaterDetails(options: SpecialActorDetailsOptions, canAddLake: boolean, app: SceneApp): void {

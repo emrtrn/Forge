@@ -8,6 +8,11 @@ su yüzeyini birleştiren izole avlu prototipi eklendi.
 paneline geçici Puddle önizlemesi eklendi; kalıcı veri ve production terrain/araç
 bağlantısı henüz tamamlanmadı.
 
+**3 Kasım — kalıcı Puddle teslimi:** Ayrı `puddleWaters` kayıt koleksiyonu,
+Create/Edit/Delete undo/redo, Outliner/Water seçimi ve Save/Reload/Play native
+terrain kurulumu eklendi. [Kayıt ve runtime raporu](../reports/PUDDLE_PERSISTENCE_2026-11-03.md).
+Canlı deformasyon/araç bağlantısı ve gerçek GPU kabulü açık kalır.
+
 **30 Ekim — RDR2 tarzı görünüm:** Köpük dokusu Voronoi kenar ağından (caustic
 görünümü) kabarcık kümesine geçti; tepe köpüğü artık dalga **dikliğiyle** oluşur
 (`crestFoamThreshold` anlamı değişti), River'da rapid beyaz suyu ve akış aşağı

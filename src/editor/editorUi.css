@@ -937,6 +937,15 @@
 .world-builder-row input[type="number"] { width: 72px; }
 .world-builder-row input[type="text"] { flex: 1; min-width: 0; }
 .world-builder-reference { display: grid; gap: 4px; margin-top: 6px; font-size: 12px; }
+/* In the window: long lists (plan elements, changes) scroll on their own, and a
+   wide window pairs the form rows (x/z, Population + Search radius) side by
+   side; a row with a button, and anything that is not a row, keeps the width. */
+.forge-window-body { container-type: inline-size; }
+.forge-window .world-builder-list { max-height: 16em; overflow-y: auto; }
+@container (min-width: 600px) {
+  .world-builder-reference { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
+  .world-builder-reference > :not(.world-builder-row), .world-builder-reference > .world-builder-row:has(button) { grid-column: 1 / -1; }
+}
 .world-partition-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
 .world-partition-summary strong { color: var(--forge-text); font-weight: 600; }
 .world-partition-map {

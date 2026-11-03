@@ -63,3 +63,4 @@ Archived completed documents:
 - `VEHICLE_PHYSICS_PLAN.md`
 - `VEHICLE_SOFT_GROUND_RESISTANCE_PLAN.md`
 - `VFX_Lite_Plan.md`
+- `WORLD_BUILDER_WINDOW_PLAN.md`

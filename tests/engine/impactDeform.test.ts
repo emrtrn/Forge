@@ -137,6 +137,22 @@ export function registerImpactDeformTests(check: (label: string, run: () => void
     assert.notEqual(edge.groupOf[0], edge.groupOf[1]);
   });
 
+  check("impact deform: a weld needs the same position, whatever the hash says", () => {
+    // Far apart, with the same normal: never one vertex, even on a hash collision.
+    const count = 2000;
+    const positions: number[] = [];
+    const normals: number[] = [];
+    for (let index = 0; index < count; index += 1) {
+      positions.push(index * 0.37 - 300, (index * 7) % 50, -index * 0.11);
+      normals.push(0, 0, 1);
+    }
+    const surface = createDentSurface({ positions, normals, indices: [] });
+    assert.equal(surface.groupStart.length - 1, count);
+    // Within the tolerance they are one.
+    const close = createDentSurface({ positions: [1, 2, 3, 1.00001, 2, 3], normals: [0, 0, 1, 0, 0, 1], indices: [] });
+    assert.equal(close.groupOf[0], close.groupOf[1]);
+  });
+
   check("impact deform: a non-indexed mesh dents and welds its corners", () => {
     const indexed = grid(10, 2);
     const positions: number[] = [];

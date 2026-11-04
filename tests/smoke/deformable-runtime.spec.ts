@@ -179,8 +179,6 @@ test("deformable runtime: a quick-save keeps the dents and a load brings the sam
   await expect.poll(async () => (await readDeform(page))?.dented ?? 0, { timeout: 25_000 }).toBe(2);
   await page.keyboard.up("KeyW");
   await page.waitForTimeout(1500);
-  const before = (await readDeform(page))!;
-  const shape = (await panelState(page)).delta;
 
   await page.keyboard.press("Escape");
   await expect(page.locator('[data-ui-id="title"]')).toContainText("Save / Load");
@@ -192,10 +190,13 @@ test("deformable runtime: a quick-save keeps the dents and a load brings the sam
   });
   console.log(`[deform smoke] saved ${JSON.stringify(saved?.map((entry) => [entry.entityId, entry.dents.length]))}`);
   expect(saved).toHaveLength(2);
+  // Read here, in the pause menu: the car may touch the panel again until then.
+  const dentCount = saved!.reduce((sum, entry) => sum + entry.dents.length, 0);
+  const shape = (await panelState(page)).delta;
 
   await page.locator('[data-ui-id="quick-load"]').click();
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
-  await expect.poll(async () => (await readDeform(page))?.dents ?? 0, { timeout: 30_000 }).toBe(before.dents);
+  await expect.poll(async () => (await readDeform(page))?.dents ?? 0, { timeout: 30_000 }).toBe(dentCount);
   await expect.poll(async () => (await panelState(page)).owned, { timeout: 30_000 }).toEqual(["sm-dent-panel-clone-0"]);
   const after = await panelState(page);
   console.log(`[deform smoke] shape ${shape} -> ${after.delta}`);

@@ -55,8 +55,6 @@ const FRACTURE_BROKEN_MESSAGE = "Fracture.Broken";
 const HIT_EPISODE_SECONDS = 0.25;
 /** Fracture chunks are debris, not hits. */
 const FRACTURE_CHUNK_PREFIX = "fracture:";
-/** Dents applied per frame; a dent scans every vertex of its object. */
-const MAX_DENTS_PER_FRAME = 4;
 /** Hits waiting for their frame; a pile-up past this is dropped. */
 const MAX_QUEUED_HITS = 16;
 
@@ -376,7 +374,7 @@ export function createDeformableModule(): CapabilityModule {
           });
         }
       }
-      for (const hit of queue.splice(0, MAX_DENTS_PER_FRAME)) applyHit(hit);
+      for (const hit of queue.splice(0, host.dentsPerFrame())) applyHit(hit);
       for (const [entityId, entry] of entries) syncTarget(entityId, entry);
     },
 

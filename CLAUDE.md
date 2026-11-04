@@ -213,7 +213,10 @@ engine/editor.
   fields go in that normalizer (and its maximal test in
   `tests/engine/deformableAsset.test.ts`) or saving drops them (reported in
   `dropped[]`). The sidecar holds parameters only; dents are runtime state and
-  belong to the save-game. A missing sidecar means the asset never dents.
+  belong to the save-game. A missing sidecar means the asset never dents. Placements of such
+  an asset render as clones, never instanced; an actor opts in with a `Deformable`
+  component. `BufferGeometry.clone()` shares `userData` with its source: give a
+  clone its own object before flagging it.
 
 - **World Partition cell files:** with `worldSettings.partition.enabled`, the
   editor saves a level as a persistent level (`worldCells` index) plus

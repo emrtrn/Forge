@@ -1620,6 +1620,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         impacts: () => this.physicsSubsystem.impacts(),
       },
       deformableDef: (assetId) => this.deformableDefs.get(assetId) ?? null,
+      dentsPerFrame: () => this.qualitySettings.deformableDentsPerFrame,
       wheelNodes: (entityId) =>
         (this.physicsSubsystem.vehicleDefinition(entityId)?.wheels ?? []).flatMap((wheel) => wheel.visualNode ?? []),
       renderObject: (entityId) => {

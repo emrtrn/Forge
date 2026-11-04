@@ -81,6 +81,7 @@ function harness(
     },
     deformableDef: (assetId) => assetId === ASSET_ID ? { ...createAssetDeformable(), ...TEST_DEF } : null,
     renderObject: (id) => objects.get(id) ?? null,
+    dentsPerFrame: () => 4,
     wheelNodes: () => ["wheel-front"],
   };
   const { bus, sent, send } = fakeBus();

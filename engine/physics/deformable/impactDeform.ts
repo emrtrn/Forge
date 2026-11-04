@@ -118,18 +118,31 @@ function weldVertices(rest: Float32Array, normals: Float32Array, vertexCount: nu
   groupOf: Uint32Array; groupStart: Uint32Array; groupMembers: Uint32Array;
 } {
   const groupOf = new Uint32Array(vertexCount);
-  const byPosition = new Map<string, number[]>();
-  /** The first vertex of each group, whose normal the others are compared with. */
+  // The first dent pays for this on a live frame, so positions hash to a number
+  // (a string key cost three times as much); the cells settle a hash collision.
+  const cells = new Int32Array(vertexCount * 3);
+  const byPosition = new Map<number, number[]>();
+  /** The first vertex of each group, whose normal and cell the others are compared with. */
   const firstOfGroup: number[] = [];
   for (let vertex = 0; vertex < vertexCount; vertex += 1) {
     const offset = vertex * 3;
-    const key = `${Math.round(rest[offset]! / WELD_TOLERANCE)},${Math.round(rest[offset + 1]! / WELD_TOLERANCE)},${Math.round(rest[offset + 2]! / WELD_TOLERANCE)}`;
+    const x = Math.round(rest[offset]! / WELD_TOLERANCE);
+    const y = Math.round(rest[offset + 1]! / WELD_TOLERANCE);
+    const z = Math.round(rest[offset + 2]! / WELD_TOLERANCE);
+    cells[offset] = x;
+    cells[offset + 1] = y;
+    cells[offset + 2] = z;
+    const key = Math.imul(x, 73856093) ^ Math.imul(y, 19349663) ^ Math.imul(z, 83492791);
     const groups = byPosition.get(key);
-    const match = groups?.find((group) => {
+    let match = -1;
+    for (const group of groups ?? []) {
       const other = firstOfGroup[group]! * 3;
-      return normals[offset]! * normals[other]! + normals[offset + 1]! * normals[other + 1]! + normals[offset + 2]! * normals[other + 2]! >= WELD_MIN_DOT;
-    });
-    if (match !== undefined) {
+      if (cells[other] !== x || cells[other + 1] !== y || cells[other + 2] !== z) continue;
+      if (normals[offset]! * normals[other]! + normals[offset + 1]! * normals[other + 1]! + normals[offset + 2]! * normals[other + 2]! < WELD_MIN_DOT) continue;
+      match = group;
+      break;
+    }
+    if (match >= 0) {
       groupOf[vertex] = match;
       continue;
     }

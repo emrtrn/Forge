@@ -12,7 +12,8 @@
 > override, VFX/ses + debris ayarları, destek grafiği ve kalıcılık.
 > **Faz 6b A kapandı** (2026-11-04): static mesh sway, kullanıcı görsel kabulü.
 > **Faz 6b B beklemede** (kullanıcı kararı, 2026-11-04).
-> **Sıradaki iş Faz 7**: plan hazır, başlanmadı; r187 yükseltmesi bitince başlar.
+> **Faz 7 kod tarafı tamam** (2026-11-04): placement ve araç gövdesi göçükleri,
+> save, editör; kullanıcı görsel kabulü bekliyor.
 >
 > **Kırılma sırası (kullanıcı kararı, 2026-11-03)** — yarım kalırsa buradan
 > devam: (1) ~~Faz 4b-3 kırılma VFX/ses + debris ayarları~~ (tamam) → (2) **Faz 4c destek
@@ -920,11 +921,9 @@ uygulaması Faz 7'den sonra yeniden değerlendirilir.
 
 ### Faz 7 — Kalıcı çarpma göçüğü (`deformableModule`, mode `impact`)
 
-> **Durum: planlandı, başlanmadı (2026-11-04).** Başlangıç kapısı: Three.js
-> r187 yükseltmesi kapanmış olmalı (`THREE_R187_UPGRADE_PLAN.md` Faz 4). O iş
-> başka oturumda sürüyor ve bu fazın dokunacağı `RuntimeSceneApp.ts` ile
-> `SceneApp.ts` matris yollarını da değiştiriyor. Başlarken aşağıdaki dosya
-> referansları yeniden doğrulanır.
+> **Durum: kod tamam, görsel kabul bekliyor (2026-11-04).** `build:verify` yeşil;
+> `deformable-runtime` + `deformable-editor` smoke'ları yeşil. Metal panel ve araç
+> gövdesi görsel kabulü kullanıcıda.
 
 Hedef: dinamik bir çarpma, sidecar'ı olan static mesh'te ve aracın gövdesinde
 kalıcı görsel göçük bırakır. Yalnız o örnek değişir, collider değişmez, göçük
@@ -981,30 +980,30 @@ impact normalidir (`normal` `a`'dan `b`'ye gider; `a` göçüyorsa işaret çevr
 
 **Dilimler:**
 
-- [ ] **7-0 ön hazırlık:** r187 kapısını ve dosya referanslarını doğrula.
+- [x] **7-0 ön hazırlık:** r187 kapısını ve dosya referanslarını doğrula.
       `setImpactEventThreshold` sahip bazlı olur (fracture davranışı aynen kalır).
       Test: iki sahipten biri çıkınca diğerinin eşiği sürer.
-- [ ] **7-1 veri (saf):** `engine/physics/deformable/deformableTypes.ts`
+- [x] **7-1 veri (saf):** `engine/physics/deformable/deformableTypes.ts`
       (`AssetDeformableDef`, `normalizeAssetDeformable`, `DEFORMABLE_LIMITS`,
       `deformableSidecarPath`), `src/scene/assetDeformableLoader.ts`,
       `/__save-deformable` + `validateSaveDeformablePayload` (8. allowlist yüzeyi,
       endpoint listesi, `dropped[]`), `CLAUDE.md`, maksimal round-trip ve drift
       testleri. Bilinmeyen `mode` sidecar'ı reddeder.
-- [ ] **7-2 çekirdek (saf, `impactDeform.ts`; Three'sız, Codex'e uygun):**
+- [x] **7-2 çekirdek (saf, `impactDeform.ts`; Three'sız, Codex'e uygun):**
       vurulan yüzey taraması (bulgu 4), yarıçap + düşüş, rest pozisyona göre
-      vertex başına `maxDepth` sınırı (sıradan bağımsız sonuç), etkilenen
+      vertex başına `maxDepth` sınırı, etkilenen
       vertex listesi, kaynaklı yerel normal (bulgu 3), dent listesi kuralı: yeni
       darbe yarıçap içindeki dent'e eklenir, liste doluysa yeni konum atlanır ve
       sayılır. Testler: sınır aşılmaz, rest'e göre deterministik, ölçekli/dönük
       mesh'te yarıçap dünya biriminde, arka yüzey etkilenmez, kenarda dikiş yok.
-- [ ] **7-3 geometri (`engine/render-three/deformableMeshSync.ts`):** ilk göçükte
+- [x] **7-3 geometri (`engine/render-three/deformableMeshSync.ts`):** ilk göçükte
       copy-on-write: `position` + `normal` `Float32Array`'e açılır (quantize ve
       interleaved dahil), rest kopyası ve komşuluk mesh başına bir kez kurulur.
       Mesh paint klonunda (`forgeMeshPaintClone`) ikinci kez klonlanmaz, `color`
       korunur. Bounding sphere/box güncellenir, gölge aynı geometriyi kullanır.
       Skinned mesh atlanır + uyarı. Testler: çakışan iki örnekten yalnız biri
       değişir, gltf geometrisi bayt bayt aynı kalır, dispose sızıntı bırakmaz.
-- [ ] **7-4 runtime, statik:** `deformableModule` + `deformableHostService`
+- [x] **7-4 runtime, statik:** `deformableModule` + `deformableHostService`
       (fizik impact'leri, `renderObject(entityId)`, canlılık, hücre olayları).
       Runtime preload'da sidecar → `asClone` (`buildInstancedBatch` + hücre
       yolları; level editörü etkilenmez). Kaynak başına kısa vuruş penceresi: aynı
@@ -1017,7 +1016,7 @@ impact normalidir (`normal` `a`'dan `b`'ye gider; `a` göçüyorsa işaret çevr
       Modül ya da sidecar yoksa davranış değişmez. `?debug` sayaçları: dent, atlanan,
       vertex, ms. Yoğun test paneli + `PhysicsInteractionTest` yerleşimi; smoke:
       araç paneli çarpar, yalnız o panel değişir, eşik altı değişmez.
-- [ ] **7-5 actor + araç:** `Deformable` component (`enabled`; `Fracturable`
+- [x] **7-5 actor + araç:** `Deformable` component (`enabled`; `Fracturable`
       deseni: `readDeformableComponent`, `ACTOR_COMPONENT_KINDS`, coverage kuralı,
       Actor Script formu). Gerçek hedef `actorObject` altındaki mesh'ler; hareketli
       kaynakta çarpma anı dünya pozu kullanılır, dent kök uzayında saklanır.
@@ -1025,23 +1024,69 @@ impact normalidir (`normal` `a`'dan `b`'ye gider; `a` göçüyorsa işaret çevr
       grubuyla dışarıda kalır; rig sırasına bağlı değildir. Reference Car'a sidecar +
       component. Smoke: araç duvara çarpar, gövde değişir, tekerlekler ve başka
       araçlar aynı kalır; `visualNode` dönüşü bozulmaz.
-- [ ] **7-6 kalıcılık:** `GameSaveState.deformables?: SavedDeformableState[]`
+- [x] **7-6 kalıcılık:** `GameSaveState.deformables?: SavedDeformableState[]`
       (`id`, kök uzayında `{ point, direction, depth }` listesi, `maxDents` sınırlı).
       Dent bir sonuç kaydıdır, impulse saklanmaz; aynı liste aynı şekli verir.
       `captureState` / `restoreState`, bekleyen girdi (kayıt sırasından bağımsız),
       hücre boşalınca bellekte kalır, bilinmeyen id uyarı + atlama, eski save `[]`.
       `SAVE_GAME_CONTRACT.md`. Testler: save → load aynı şekil, hücre dönüşü, sidecar
       kapatılmış asset'te güvenli atlama. Smoke: çarp → quick-save → quick-load.
-- [ ] **7-7 editör:** Static Mesh Editor "Deformable" bölümü
+- [x] **7-7 editör:** Static Mesh Editor "Deformable" bölümü
       (`src/editor/staticMeshDeformable.ts` + `assetDeformableStore.ts`, adlar EN,
       tooltip TR, `paramFields` kuralları). Modele tıklayarak test darbesi (impulse
       alanı, yön yüzey normali), Reset; darbe yalnız önizlemedir, kayda yazılmaz.
       Yarıçapa göre mesh seyrekse ipucu. Actor Script formu 7-5'te. Smoke: alanlar →
       Save → sidecar round-trip, test darbesi önizlemede şekli değiştirir.
-- [ ] **7-8 ölçüm ve kabul:** `MercedesSLS` ve test panelinde dent başına ms,
+- [~] **7-8 ölçüm ve kabul (ölçüm tamam, görsel kabul açık):** `MercedesSLS` ve test panelinde dent başına ms,
       restore süresi, klon bellek farkı; hedef dent başına en çok 2 ms (ölçülecek,
       aşılırsa bütçe düşer). Kalite profillerine dent bütçesi. `build:verify`
       yeşil, kullanıcı görsel kabulü: metal panel ve araç gövdesi.
+
+**Yapıldı (2026-11-04):**
+
+- **Sıradan bağımsızlık:** vertex başına itmelerin düz toplamı tutulur, `maxDepth`
+  bu toplamın üstüne uygulanır. Toplam sıraya bağlı olmadığından save'den yeniden
+  uygulama canlı şekli birebir verir (smoke: `3.114964 → 3.114964`).
+- **Render nesnesi takibi (bulgu 7):** olay dinlenmez. Modül göçüklü nesneleri her
+  kare shell'in güncel render nesnesiyle karşılaştırır; değiştiyse eski kopyayı
+  bırakır, göçükleri yenisine uygular. Hücre dönüşü, probe rebuild ve save yükleme
+  tek yoldan geçer.
+- **Sidecar zamanı (bulgu 5 düzeltildi):** `loadCollisionDefs` batch'lerden *sonra*
+  çalışıyor, desen yanlıştı (smoke yakaladı). `loadDeformableDefs` layout okunur
+  okunmaz, hücre hazırlığından önce çalışır.
+- **`BufferGeometry.clone()` `userData`'yı paylaşır** (`copy`: referans atama).
+  İşaret klona yazılınca paylaşılan modele gidiyordu. Klon artık kendi `userData`'sını
+  alır. Aynı hata mesh paint'te vardı (ikinci placement'ın boyası bütün kopyalara
+  gidiyordu), üç noktada düzeltildi.
+- **Test Hit kopya üstünde:** modelin kendisine yazmaz, yoksa açık kalan önizleme
+  fracture bake'ini, `sourceHash`'i ve hull üretimini kirletirdi.
+- **Test asset'leri:** `SM_DentPanel` (10 086 vertex, level'da araç yolunun dışında
+  iki adet), Reference Car `sedan-sports.deformable.json` + `Deformable` component.
+- **`.fracture.json` model yeniden adlandırılınca/silinince taşınmıyordu**,
+  `MODEL_SIDECAR_SUFFIXES` listesine `.deformable.json` ile birlikte eklendi.
+- Kapanış sayıları: `Deformable.Dent` mesajı, `Deformable.Dented` yayını, `?debug`
+  satırı `deform: objects … dented … dents … missed … skipped … last … ms`.
+
+**Ölçüm (saf çekirdek, Node, en iyi 5 koşu, ms):**
+
+| Vertex | İlk darbe kurulumu | Yüzey bulma | Göçük (taşınan vertex) |
+|---|---|---|---|
+| 1 000 | 0.21 | 0.11 | 0.12 (48) |
+| 10 000 | 1.74 | 0.08 | 0.47 (479) |
+| 126 000 | 19.43 | 0.66 | 4.44 (6 151) |
+| 500 000 | 110.41 | 2.63 | 18.10 (24 538) |
+
+Kurulum nesne başına bir kez, ilk darbede ödenir; string anahtarlı kaynaklama sayısal
+hash'e çevrilince yarıdan fazla düştü (126 k: 42.9 → 19.4 ms). Geometri klonu buna
+dahil değil. Göçük 126 k yoğun modelde 2 ms hedefinin üstünde (4.44 ms); 10 k altı
+hedefin altında. Bu yüzden `deformableDentsPerFrame` kalite profiline bağlandı (4 / 3
+/ 2 / 1). Yüksek vertex'li bir model tüketiciye girerse ilk darbe yükleme anına
+alınabilir; bugün gerekmedi. Klon bellek farkı ve gerçek Chrome hitch ölçümü yapılmadı.
+
+**Bilinen sınırlar:** araç gövdesi 1 078 vertex olduğu için göçük köşeli görünür ve
+bir darbe yakınında vertex bulamayabilir (`missed` sayılır, smoke'ta 1). Paneldeki
+göçük kapalı bir kutuda iki yüzü birlikte büker. Bir aktör kalıcı yok edilirse dent
+listesi level sonuna kadar bellekte kalır.
 
 **Kapsam dışı (v1):** collider güncellemesi, skinned mesh, göçüğe özel VFX/ses
 alanları, placement override, göçüğü HLOD'a yansıtma, göçüğü kırılma parçalarına
@@ -1244,3 +1289,6 @@ kararı). K-07 ve K-08 2026-11-04'te kullanıcı onayıyla kapandı.
 - 2026-11-04: Faz 6b A kullanıcı tarafından görsel olarak kabul edildi. B1
   beklemeye alındı. Faz 7 dilimlere ayrıldı (7-0…7-8); r187 yükseltmesi
   kapanınca başlar.
+- 2026-11-04: **Faz 7 kod tarafı tamam** (7-0…7-7, 7-8 ölçümü): göçük sidecar'ı,
+  saf çekirdek, copy-on-write geometri, modül, `Deformable` component, save, Static
+  Mesh Editor. Mesh paint `userData` hatası da düzeltildi. Görsel kabul bekliyor.

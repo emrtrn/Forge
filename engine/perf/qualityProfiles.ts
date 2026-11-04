@@ -82,6 +82,8 @@ export interface QualitySettings {
   windSwayDistance: number;
   /** Most fracture chunks alive at once across the level (Faz 4); the oldest go first. */
   fractureChunkBudget: number;
+  /** Dents applied per frame; each scans its object's vertices, the rest wait. */
+  deformableDentsPerFrame: number;
   /**
    * Procedural grass/foliage ring density (`0..1` keep fraction of each rule's
    * candidates, OPEN_WORLD_PLAN Faz 6). Painted foliage is unaffected.
@@ -153,6 +155,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     foliageCullDistanceScale: 1.0,
     windSwayDistance: 150,
     fractureChunkBudget: 192,
+    deformableDentsPerFrame: 4,
     grassDensity: 1.0,
     terrainTrackDetailLevels: 2,
     terrainSelfShadow: true,
@@ -181,6 +184,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     foliageCullDistanceScale: 0.85,
     windSwayDistance: 100,
     fractureChunkBudget: 128,
+    deformableDentsPerFrame: 3,
     grassDensity: 0.8,
     terrainTrackDetailLevels: 2,
     terrainSelfShadow: true,
@@ -209,6 +213,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     foliageCullDistanceScale: 0.65,
     windSwayDistance: 60,
     fractureChunkBudget: 64,
+    deformableDentsPerFrame: 2,
     grassDensity: 0.55,
     terrainTrackDetailLevels: 1,
     terrainSelfShadow: false,
@@ -237,6 +242,7 @@ export const QUALITY_PROFILES: Record<Exclude<QualityLevel, "custom">, QualitySe
     foliageCullDistanceScale: 0.45,
     windSwayDistance: 30,
     fractureChunkBudget: 32,
+    deformableDentsPerFrame: 1,
     grassDensity: 0.3,
     terrainTrackDetailLevels: 0,
     terrainSelfShadow: false,
@@ -388,6 +394,7 @@ function normalizeCustomSettings(value: unknown): Partial<QualitySettings> | nul
   num("foliageCullDistanceScale");
   num("windSwayDistance");
   num("fractureChunkBudget");
+  num("deformableDentsPerFrame");
   num("grassDensity");
   num("terrainTrackDetailLevels");
   bool("terrainSelfShadow");

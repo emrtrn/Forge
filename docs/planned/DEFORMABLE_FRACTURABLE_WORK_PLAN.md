@@ -1107,10 +1107,12 @@ Her madde kendi tüketici ihtiyacıyla açılır.
       **Sıradaki iş, tüketici Gaz-52:** parça filtreli göçük (VM-1) TAMAM
       (2026-11-04): sidecar `parts` (`id`, `nodes`, `zone`), darbe yüzeye oturtulup
       bölge o noktayla sorgulanır, kayıt `part` taşır, smoke `deformable-parts`.
-      Sırada aynı deforme mesh'in kopması (VM-2), sonra kalıcılık ve temizlik
-      (VM-3). Gaz-52'de ayrı tampon düğümü yok; deneme kapı ve aynayla, yan
-      darbeyle yapılır. Sözleşme:
-      `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md` v0.3.
+      Aynı deforme mesh'in kopması (VM-2) TAMAM (2026-11-04): `detach`
+      (`impulse`, `massKg`, `kick`), canlı düğüm taşınır, hız `v + ω × r`, parça ve
+      araç ayrılana kadar birbirinden geçer. Sırada kalıcılık ve temizlik (VM-3):
+      kopan parça henüz kaydedilmez, yeniden kurulumda geri gelir. Gaz-52'de ayrı
+      tampon düğümü yok; deneme kapı ve aynayla, yan darbeyle yapılır. Sözleşme:
+      `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md` v0.4.
 - [ ] `swap-mesh`: hasarlı/kırık modele geçiş (uzak detay, ucuz kırılma).
 - [ ] `joint-break`: parçalar sabit joint'le bağlı başlar, joint gerilmesi
       eşiği aşınca kopar (çit, ileride köprü). Joint gerilmesi Rapier'dan

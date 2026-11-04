@@ -1,35 +1,68 @@
-import { expect, test, type Page } from "./test";
+import { expect, test, type Page, type Route } from "./test";
 
 /**
- * DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 8 / vehicle damage contract VM-1: a car
- * T-bones a parked Gaz-52 on its left door. The door takes the dent; what sits
- * behind the door inside its radius (steering wheel, pedal) and the far door keep
- * the shared model. The grinding car may then slide along the truck and dent the
- * body behind the door, so the body is not asserted either way. Reads `?debug`
- * for the count and the scene for which meshes got their own geometry.
+ * Faz 8 / vehicle damage contract VM-1 and VM-2, on the Gaz-52. A car T-bones the
+ * parked truck on its left door, and the truck drives on after losing a door.
+ * Reads `?debug` for the counts and the scene for what happened to the meshes.
  */
 
 const LEVEL = "layouts/PhysicsInteractionTest.level.json";
+const TRUCK = "assets/vehicles/gaz52/Script_Gaz52.actor.json";
+const SIDECAR = "**/gaz-52_base.deformable.json*";
 
 test.setTimeout(180_000);
 
-/** Meshes of the Gaz-52 that left the shared model. */
-async function dentedTruckMeshes(page: Page): Promise<string[]> {
+interface DeformablePart { id: string; detach?: unknown; zone: unknown }
+
+/** Scene state of the truck's meshes. */
+async function truckState(page: Page): Promise<{
+  dented: string[];
+  /** Meshes under a torn-off piece, by the piece's name. */
+  loose: Record<string, string[]>;
+  /** World position of each torn-off piece. */
+  pieces: Record<string, number[]>;
+}> {
   return page.evaluate(() => {
-    interface Node { name?: string; isMesh?: boolean; geometry?: { userData: Record<string, unknown> } }
+    interface Node {
+      name?: string; isMesh?: boolean; parent?: Node | null;
+      geometry?: { userData: Record<string, unknown> };
+      matrixWorld: { elements: number[] };
+    }
     const w = window as unknown as { __partScenes: { traverse(visit: (object: unknown) => void): void }[] };
-    const names = new Set<string>();
+    const dented = new Set<string>();
+    const loose: Record<string, string[]> = {};
+    const pieces: Record<string, number[]> = {};
     for (const scene of w.__partScenes) {
-      scene.traverse((node) => {
-        const object = node as Node;
-        if (object.isMesh && /Gaz-52_0$/.test(object.name ?? "") && object.geometry?.userData.forgeDeformClone === true) names.add(object.name!);
+      scene.traverse((item) => {
+        const node = item as Node;
+        if (node.name?.startsWith("detached-")) {
+          const { elements } = node.matrixWorld;
+          pieces[node.name] = [elements[12]!, elements[13]!, elements[14]!];
+        }
+        if (!node.isMesh || !/Gaz-52_0$/.test(node.name ?? "")) return;
+        if (node.geometry?.userData.forgeDeformClone === true) dented.add(node.name!);
+        for (let parent = node.parent; parent; parent = parent.parent) {
+          if (parent.name?.startsWith("detached-")) (loose[parent.name] ??= []).push(node.name!);
+        }
       });
     }
-    return [...names].sort();
+    return { dented: [...dented].sort(), loose, pieces };
   });
 }
 
-test("deformable parts: a side hit dents the door and leaves the rest of the truck alone", async ({ page }) => {
+async function readDeform(page: Page): Promise<string> {
+  const text = (await page.locator("#debug-stats").textContent()) ?? "";
+  return text.match(/deform: .*?ms(?: detached \d+)?/)?.[0] ?? "";
+}
+
+async function readVehicleKmh(page: Page): Promise<number> {
+  const text = (await page.locator("#debug-stats").textContent()) ?? "";
+  const match = text.match(/vehicle-chase pawn:\S+ speed:(-?\d+)km\/h/);
+  return match ? Math.abs(Number(match[1])) : -1;
+}
+
+/** Routes the level and the project, then opens Play; returns the errors seen so far and later. */
+async function play(page: Page, editLevel: (level: Record<string, unknown[]>) => void): Promise<{ errors: string[]; messages: string[] }> {
   const errors: string[] = [];
   const messages: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -51,14 +84,7 @@ test("deformable parts: a side hit dents the door and leaves the rest of the tru
     const response = await route.fetch();
     const level = await response.json();
     level.instances = level.instances.filter((group: { assetId: string }) => !["sm-breakable-crate", "sm-dent-panel"].includes(group.assetId));
-    const car = level.actors[0];
-    // Turned a quarter: the truck's left side (+X) faces the car, which drives +Z.
-    level.actors = [car, {
-      classRef: "assets/vehicles/gaz52/Script_Gaz52.actor.json",
-      name: "Parked Gaz-52",
-      position: [0.06, 0, 14],
-      rotation: [0, 90, 0],
-    }];
+    editLevel(level);
     await route.fulfill({ response, json: level });
   });
   await page.route("**/project.3dgame.json", async (route) => {
@@ -67,25 +93,96 @@ test("deformable parts: a side hit dents the door and leaves the rest of the tru
     project.editor.defaultScene = LEVEL;
     await route.fulfill({ response, json: project });
   });
-
   await page.goto(`/?debug&partSmoke=${Date.now()}`);
   await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
   await expect(page.locator("#debug-stats")).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
-  await expect(page.locator("#debug-stats")).toContainText(/deform: objects 2 dented 0 dents 0/, { timeout: 30_000 });
+  return { errors, messages };
+}
+
+/** The car stays pawn; the truck stands a quarter turned, so its left side (+X) faces the car driving +Z. */
+const parkTruckBroadside = (level: Record<string, unknown[]>): void => {
+  level.actors = [level.actors![0], { classRef: TRUCK, name: "Parked Gaz-52", position: [0.06, 0, 14], rotation: [0, 90, 0] }];
+};
+
+async function editSidecar(route: Route, edit: (parts: DeformablePart[]) => DeformablePart[]): Promise<void> {
+  const response = await route.fetch();
+  const sidecar = await response.json();
+  sidecar.parts = edit(sidecar.parts);
+  await route.fulfill({ response, json: sidecar });
+}
+
+test("deformable parts: a side hit dents the door and leaves the rest of the truck alone", async ({ page }) => {
+  await page.route(SIDECAR, (route) => editSidecar(route, (parts) => parts.map(({ detach: _detach, ...part }) => part)));
+  const { errors, messages } = await play(page, parkTruckBroadside);
+  await expect.poll(() => readDeform(page), { timeout: 30_000 }).toMatch(/objects 2 dented 0 dents 0/);
 
   await page.locator("#game-canvas").click();
   await page.keyboard.down("KeyW");
-  await expect.poll(() => dentedTruckMeshes(page), { timeout: 40_000 }).not.toEqual([]);
+  await expect.poll(async () => (await truckState(page)).dented, { timeout: 40_000 }).not.toEqual([]);
   await page.keyboard.up("KeyW");
   await page.waitForTimeout(1000);
 
-  const dented = await dentedTruckMeshes(page);
+  const { dented, loose } = await truckState(page);
   console.log(`[parts smoke] ${JSON.stringify(dented)}`);
   expect(dented).toContain("Door_L_Gaz-52_0");
+  // What sits behind the door inside the dent's radius. The grinding car may slide
+  // along the truck and dent the body further back, so the body is not asserted.
   for (const untouched of ["Door_R_Gaz-52_0", "steering_wheel_Gaz-52_0", "Stop_Gaz-52_0", "Mirror_R_Gaz-52_0"]) {
     expect(dented).not.toContain(untouched);
   }
+  expect(loose).toEqual({});
   expect(messages.filter((message) => message.includes("parts with no matching mesh"))).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("deformable parts: a hard side hit tears the dented door off, once, and it comes to rest", async ({ page }) => {
+  const { errors } = await play(page, parkTruckBroadside);
+  await expect.poll(() => readDeform(page), { timeout: 30_000 }).toMatch(/objects 2 dented 0 dents 0/);
+
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect.poll(() => readDeform(page), { timeout: 40_000 }).toMatch(/detached 1/);
+  await page.keyboard.up("KeyW");
+
+  const torn = await truckState(page);
+  console.log(`[parts smoke] torn ${JSON.stringify(torn.pieces)}`);
+  expect(torn.loose).toEqual({ "detached-door_left": ["Door_L_Gaz-52_0"] });
+  expect(torn.dented, "the door left with its dent, not as a clean copy").toContain("Door_L_Gaz-52_0");
+
+  await page.waitForTimeout(4000);
+  const settled = await truckState(page);
+  console.log(`[parts smoke] settled ${JSON.stringify(settled.pieces)}`);
+  expect(Object.keys(settled.pieces)).toEqual(["detached-door_left"]);
+  const [x, y, z] = settled.pieces["detached-door_left"]!;
+  // A door 1.5 m tall rests below its 1.7 m starting height, and nothing flung it away.
+  expect(y!).toBeLessThan(1.2);
+  expect(y!).toBeGreaterThan(-0.2);
+  expect(Math.hypot(x! - 0, z! - 14)).toBeLessThan(12);
+  expect(await readDeform(page)).toMatch(/detached 1/);
+  expect(errors).toEqual([]);
+});
+
+test("deformable parts: a truck that lost a door still drives", async ({ page }) => {
+  // Any front hit counts for the door here: straight driving cannot reach its side.
+  await page.route(SIDECAR, (route) => editSidecar(route, (parts) => parts.map((part) => (
+    part.id === "door_left" ? { ...part, zone: { min: [-2, 0, -6], max: [2, 3, 3] } } : part
+  ))));
+  const { errors } = await play(page, (level) => {
+    const floor = level.blockingVolumes![0] as Record<string, unknown>;
+    level.actors = [{ classRef: TRUCK, name: "Driven Gaz-52", position: [0, 0, 0], rotation: [0, 0, 0] }];
+    level.blockingVolumes!.push({ ...floor, id: "smoke-wall", name: "Smoke Wall", position: [0, 2, 12], size: [8, 4, 1] });
+  });
+
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect.poll(() => readDeform(page), { timeout: 40_000 }).toMatch(/detached 1/);
+  await page.keyboard.up("KeyW");
+  await page.waitForTimeout(500);
+
+  await page.keyboard.down("KeyS");
+  await expect.poll(() => readVehicleKmh(page), { timeout: 20_000 }).toBeGreaterThan(3);
+  await page.keyboard.up("KeyS");
+  expect(await readDeform(page)).toMatch(/detached 1/);
   expect(errors).toEqual([]);
 });

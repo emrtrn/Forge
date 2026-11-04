@@ -220,7 +220,13 @@ engine/editor.
   `zone`) make a model dent piece by piece: a hit is placed on the model's surface
   first, because a contact point can sit well off it, and the zone is checked with
   that surface point, so it must hold the outer surface at the part. Meshes
-  outside the parts are the body; a dent's `part` goes to the save-game.
+  outside the parts are the body; a dent's `part` goes to the save-game. A part's
+  `detach` (`impulse`, `massKg`, `kick`) tears its live nodes off into a body of
+  their own, dents included; loose parts are not saved yet. Such a piece starts
+  inside its car, so the pair passes through until apart
+  (`PhysicsSubsystem.passThroughUntilApart`): Rapier reads hooks only on a step
+  with an event queue, and a hook-flagged collider on a step without hooks locks
+  the world for good.
 
 - **World Partition cell files:** with `worldSettings.partition.enabled`, the
   editor saves a level as a persistent level (`worldCells` index) plus

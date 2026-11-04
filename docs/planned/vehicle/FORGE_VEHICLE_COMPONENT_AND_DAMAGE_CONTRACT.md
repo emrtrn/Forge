@@ -513,7 +513,7 @@ Yeni oturumda aşağıdaki metni olduğu gibi yapıştır.
 > - Nesne adları glTF düğüm adı olur; yalnız ASCII harf, rakam, `_`, `-` kullan. `PART_FRONT_BUMPER` gibi her parça kendi düğümü olsun.
 > - Tekerlekler: dört ayrı düğüm, arka ikiz lastikler taraf başına tek düğümde. `*.vehicle.json` içindeki `wheels[].visualNode` bunlara bağlanır. Dönme ekseni aks olmalı.
 > - Hasar alacak parçalar komşularıyla vertex paylaşmaz. Parça kopunca görünecek yüzeyler modellenir: tampon arkası, şasi uçları, ızgara altı, kapı boşluğu, kabin içi. Çeki kancaları şasidedir, tamponla gitmez.
-> - Kaput, çamurluk ve kapıda göçük için yeterli vertex olsun. Ölçek noktası: Gaz-52 gövdesi 3027 vertex ve fazla seyrek. Greybox'ta bunu kilitleme, yalnız parça sınırını doğru kur.
+> - Kaput, çamurluk ve kapıda göçük için yeterli vertex olsun. Referans ölçüm: Gaz-52 gövdesi 3027 vertex, 0,8 m yarıçaplı göçükte 292 vertex oynuyor. Greybox'ta yoğunluğu kilitleme, yalnız parça sınırını doğru kur.
 >
 > Yapılacaklar, bu sırayla:
 > 1. **Dimensions:** sözleşme ölçüleri ayrı bir `dimensions` kaynağından ister, ama böyle bir belge yok. Görselden ölçü alınmaz (oranlar yanıltıcı, aks aralığı / tekerlek çapı ≈ 3,2). Boy, en, yükseklik, aks aralığı, iz genişliği, tekerlek yarıçapı, kasa ölçüleri için bir öneri tablosu çıkar, Gaz-52 ile karşılaştır ve **onayımı al**. Onaysız modellemeye geçme.

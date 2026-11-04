@@ -1047,7 +1047,7 @@ impact normalidir (`normal` `a`'dan `b`'ye gider; `a` göçüyorsa işaret çevr
 alanları, placement override, göçüğü HLOD'a yansıtma, göçüğü kırılma parçalarına
 yansıtma, hasar haritasıyla doku/çizik.
 
-**Başlarken onaylanacak varsayılanlar:** K-07 ve K-08 (§6).
+**Onaylanan kararlar:** K-07 ve K-08 (§6).
 
 Kabul: metal panel ve araç gövdesi görsel kabulü, `build:verify` yeşil.
 
@@ -1109,7 +1109,7 @@ kanıtlanmadan başlanmaz.
 ## 6. Açık kararlar
 
 K-01…K-06 2026-11-02'de kapandı (K-03 ve K-02 teknik, diğerleri kullanıcı
-kararı). K-07 ve K-08 Faz 7 başlamadan onaylanacak öneridir.
+kararı). K-07 ve K-08 2026-11-04'te kullanıcı onayıyla kapandı.
 
 | ID | Karar | Sonuç |
 |---|---|---|
@@ -1119,8 +1119,8 @@ kararı). K-07 ve K-08 Faz 7 başlamadan onaylanacak öneridir.
 | K-04 | Fracture yalnız asset seviyesinde mi, placement/actor override'ı da var mı? | **Kapandı:** üçü birden. Asset sidecar asıl tanımdır; placement override (`enabled`, `breakImpulse`); actor `Fracturable` component aynı sidecar'ı referanslar. |
 | K-05 | Kalıcılık kapsamı: kırık enkazın pozu saklanır mı? | **Kapandı:** yalnız durum. Load'da nesne kırık ve parçasız gelir. Asset başına "kalıcı enkaz" seçeneği ancak somut ihtiyaçla açılır. |
 | K-06 | Rüzgâr kaynağı nerede yaşar? | **Kapandı:** WES rüzgârı (yön, güç, gust; hava/mevsimle değişir). WES'siz level'da World Settings sabit değeri. |
-| K-07 | Actor göçüğü nasıl açılır? | **Öneri, Faz 7 başında onaylanır:** `Fracturable` gibi `Deformable` component. Placement'lar sidecar ile otomatik, placement override yok. |
-| K-08 | Deformable asset'in placement'ları ne zaman instancing'den çıkar? | **Öneri, Faz 7 başında onaylanır:** yüklemede `asClone` (Faz 0 kararı). Göçüksüz örnek de ayrı çizilir; asset başına birkaç kopya varsayılır. İlk göçükte clone'a geçiş daha az draw call verir ama hücre, probe ve culling kayıtlarını çoğaltır. |
+| K-07 | Actor göçüğü nasıl açılır? | **Kapandı (2026-11-04):** `Fracturable` gibi `Deformable` component. Placement'lar sidecar ile otomatik, placement override yok. |
+| K-08 | Deformable asset'in placement'ları ne zaman instancing'den çıkar? | **Kapandı (2026-11-04):** yüklemede `asClone` (Faz 0 kararı). Göçüksüz örnek de ayrı çizilir; asset başına birkaç kopya varsayılır. İlk göçükte clone'a geçiş daha az draw call verir ama hücre, probe ve culling kayıtlarını çoğaltır. |
 
 ---
 

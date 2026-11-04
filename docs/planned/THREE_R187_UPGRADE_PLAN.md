@@ -1,6 +1,6 @@
 # Three.js r184 → r187 Yükseltme Planı
 
-> Durum: **kod tamam, kullanıcı görsel kabulü ve bir maliyet kararı bekliyor**
+> Durum: **kod tamam, görsel kabul alındı, yalnız bir maliyet ölçümü bekliyor**
 > (uygulama 2026-11-04). Forge `three@0.187.0` + `@types/three@^0.187.0` kullanıyor.
 >
 > Kaynaklar: three.js wiki *Migration Guide* (184→185, 185→186, 186→187
@@ -155,14 +155,14 @@ Bump → 0.187.0 sonrası derleme kırılır; bu faz tek dilimde kapanır.
   `r184-vs-r187.json`): hiçbirinde piksellerin %1'i 24/255'ten fazla değişmedi; 69'u
   birebir aynı. Birebir aynı olanlar düz renk ortam girdili sabit sahneler, gerçek göğü
   sınamıyor. Gerçek gök altında en büyük fark GAZ-52 sahnesi, ortalama 5,5/255 (K8).
-- [ ] Kullanıcı görsel kabulü (su, gökyüzü yansıması, probe'lar, gölgeler).
+- [x] Kullanıcı görsel kabulü (su, gökyüzü yansıması, probe'lar, gölgeler): 2026-11-04.
 - [x] Mimari not: reversed-Z S5 ve su örneklemesi kod açıklamalarında güncel;
   `CLAUDE.md`'de bu konuda madde yoktu.
 - [x] Kullanıcı kabulünde bulunan hata, yükseltmeden bağımsız kodda (8f9796a6): sahnede nehir
   varken probe bake'inin +Y yüzü siyahtı, çünkü planar capture `scene.onBeforeRender` içinde
   küp yüzünü geri koymuyordu. Ayrıca kameradan 50 m'den uzak probe gökyüzünü göremiyordu;
   bake artık gök kutusunu probe'a merkezliyor. Kullanıcı sahnesinde doğrulandı.
-- [ ] Görsel kabulden sonra plan `Forge-Archive`'e taşınır.
+- [ ] Hareketli güneş capture ölçümü (3-9) kararlaşınca plan `Forge-Archive`'e taşınır.
 - Smoke'larda three: `page.evaluate` içinde `/tests/smoke/pages/engineThree.ts` import
   edilir. `/node_modules/.vite/deps/three.js` smoke sunucusunun değil, eski bir dev
   oturumunun bundle'ıdır; farklı three sürümü yükleyebilir.

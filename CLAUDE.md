@@ -224,8 +224,9 @@ engine/editor.
   clone its own object before flagging it. Optional `parts` (`id`, `nodes`,
   `zone`) make a model dent piece by piece: a hit is placed on the model's surface
   first, because a contact point can sit well off it, and the zone is checked with
-  that surface point, so it must hold the outer surface at the part. Meshes
-  outside the parts are the body; a dent's `part` goes to the save-game. A part's
+  that surface point, so it must hold the outer surface at the part (`Fit Zone` in
+  the Static Mesh Editor's Parts list does this, `fitPartZone`). Meshes outside
+  the parts are the body; a dent's `part` goes to the save-game. A part's
   `detach` (`impulse`, `massKg`, `kick`) tears its live nodes off into a body of
   their own, dents included. The save-game keeps which parts are gone
   (`detachedParts`), not the loose piece; loading a save from before the hit puts

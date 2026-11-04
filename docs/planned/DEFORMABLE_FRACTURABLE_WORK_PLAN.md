@@ -1113,8 +1113,8 @@ Her madde kendi tüketici ihtiyacıyla açılır.
       `detachedParts` kayda girer, yeniden kurulumda parça dönmez, eski kayıt
       yüklenince geri takılır, 16 gevşek parça bütçesi. Gaz-52'de ayrı tampon
       düğümü yok; deneme kapı ve aynayla, yan darbeyle yapıldı. Kullanıcı oyunda
-      doğruladı. Açık: kararlı aktör kimliği, `parts` için editör arayüzü. Sözleşme:
-      `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md` v0.5.
+      doğruladı. Kararlı aktör kimliği ve Static Mesh Editor `Parts` listesi de tamam. Sözleşme:
+      `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md` v0.7.
 - [ ] `swap-mesh`: hasarlı/kırık modele geçiş (uzak detay, ucuz kırılma).
 - [ ] `joint-break`: parçalar sabit joint'le bağlı başlar, joint gerilmesi
       eşiği aşınca kopar (çit, ileride köprü). Joint gerilmesi Rapier'dan

@@ -1,7 +1,7 @@
 # FORGE — Vehicle Component & Damage Contract
 
 **Dosya:** `FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`  
-**Sürüm:** v0.6 — tasarım sözleşmesi; motor hattı VM-1…3 ve kararlı aktör kimliği uygulandı, araç hattı öneri  
+**Sürüm:** v0.7 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, araç hattı öneri  
 **Tarih:** 2026-11-04 (Europe/Istanbul)  
 **Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`, ilk oyun tüketicisi Ridgebound `RB-V-001 — Doruk K-180`  
 **Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattı başlamadı.  
@@ -220,7 +220,7 @@ Sözleşme üç katmanı ayırır:
 
 - `damageProfileId` yalnız Ridgebound içerik referansıdır. Forge genel modülü Ridgebound’a özel sayı/oyun cezası taşımamalıdır.
 - `massKg` ve kütle dağılımı artık iki kez sayılmamalı: bağlı parça araç gövdesinin toplam inertial özelliklerine dahil edilmişse kopma anında *tek* kütle otoritesi korunur. Basit v1 için bağlı araç collider ve toplam kütle değişimi yoksa açık fizik yaklaşımı/deliberate approximation kaydı gerekir.
-- Mevcut `<Model>.fracture.json`, `<Model>.deformable.json` ve araç `*.vehicle.json` sözleşmeleriyle çakışmadan yeniden kullanılmalı. **VM-1 kararı (`VCD-D02`):** parça listesi modele ait olduğu için `<Model>.deformable.json` içindedir ve `normalizeAssetDeformable` allowlist'inden geçer: `parts[]`, her parça `{ id, nodes[], zone: { min, max } }`. **VM-2:** parçaya isteğe bağlı `detach: { impulse, massKg, kick }` eklendi; `impulse` zorunlu, yoksa parça kopmaz. Yukarıdaki kavramsal JSON'un diğer alanları mevcut tip sayılmaz.
+- Mevcut `<Model>.fracture.json`, `<Model>.deformable.json` ve araç `*.vehicle.json` sözleşmeleriyle çakışmadan yeniden kullanılmalı. **VM-1 kararı (`VCD-D02`):** parça listesi modele ait olduğu için `<Model>.deformable.json` içindedir ve `normalizeAssetDeformable` allowlist'inden geçer: `parts[]`, her parça `{ id, nodes[], zone: { min, max } }`. **VM-2:** parçaya isteğe bağlı `detach: { impulse, massKg, kick }` eklendi; `impulse` zorunlu, yoksa parça kopmaz. **Editör:** Static Mesh Editor'ın Deformable bölümündeki `Parts` listesi parçayı düğüm listesinden veya modele tıklayarak ekler, bölgeyi kurar (`Fit Zone`), `Detach` ayarlarını yazar, bölgeleri viewport'ta tel kutu gösterir; Test Hit vurduğu parçayı ve oyunda kopup kopmayacağını söyler. Yukarıdaki kavramsal JSON'un diğer alanları mevcut tip sayılmaz.
 - Fracture bileşeninin `sourceHash` ve otomatik bake davranışı, araç parçaları için node-seçilmiş kaynakta yeniden doğrulanmalı. Bir bütün kamyonun tek fracture kaynağına dönüştürülmesi yasak.
 
 ## 6. Hasar–kopma durum makinesi
@@ -292,7 +292,7 @@ Faz 1 `PhysicsImpact` olayı fiziksel chassis collider'ından gelebilir; **motor
 - Normal ve impulse bileşeniyle malzeme/bağlantı eşiğini değerlendir.
 - Bölge tanımları görsel mesh node'a referans verir, ama aracın mevcut tek chassis collider'ını gereksiz yere parçalara ayırmaz.
 - **Bölge ham temas noktasına değil, yüzey noktasına bakar (VM-1).** Temas noktası collider'dadır ve gövde o kareye kadar hareket etmiş olabilir: Gaz-52'de nokta kapı hizasında ama yüzeyden 0,24 m dışarıda ölçüldü (x = 1,43; kutu yüzeyi x = 1,19). Bu yüzden darbe önce darbe doğrultusu boyunca modelin yüzeyine oturtulur, bölge o noktayla sorgulanır. Böylece önden gelen bir darbe, doğrultusu üzerinde ileride duran bir kapıya yazılmaz.
-- Bölge, parçanın hizasındaki **en dış yüzeyi** kapsamalıdır; bu yüzey parçanın kendisi olmayabilir. Gaz-52'de kapı x = 0,98'de, o hizadaki dış yüzey x = 1,17'dedir; bölge x 0,7–1,3 aralığındadır.
+- Bölge, parçanın hizasındaki **en dış yüzeyi** kapsamalıdır; bu yüzey parçanın kendisi olmayabilir. Gaz-52'de kapı x = 0,98'de, o hizadaki dış yüzey x = 1,17'dedir; bölge x 0,7–1,3 aralığındadır. `Fit Zone` bu kuralı otomatik uygular: parçanın en ince ekseninde, modelin merkezinden uzak tarafta bölgeyi modelin sınırına kadar uzatır (`fitPartZone`).
 - Bölgede yüzey bulunamazsa göçük gövdeye düşer; kopma yine bölgeye göre değerlendirilir. Parça düğümü modelde yoksa ilk darbede tek bir `[deformable]` uyarısı çıkar.
 - Uygulamadaki alan adı `zone`dur; Forge'daki ilgisiz `damage-zone` davranışıyla karışmaz.
 
@@ -440,7 +440,7 @@ Aşağıdaki testler `RB-V-001` ön tamponu için yazılmıştır. Motor hattın
 
 ### 13.1. Motor hattı tamamlandı
 
-VM-1…3 ve kararlı aktör kimliği kapandı. Kalan motor işleri bir sonraki tüketici gelince açılır: parça düzenleme arayüzü (bugün `parts` JSON'dan yazılır), `VCD-12` benchmark'ı, cam için düğüm seçimli fracture (`VCD-D07`), placement'ların kayıt kimliği.
+VM-1…3, kararlı aktör kimliği ve parça arayüzü kapandı. Kalan motor işleri bir sonraki tüketici gelince açılır: `VCD-12` benchmark'ı, cam için düğüm seçimli fracture (`VCD-D07`), placement'ların kayıt kimliği, viewport'ta bölgeyi sürükleyerek düzenleme (bugün sayısal).
 
 ### 13.2. Blender ilk modelleme görevi
 
@@ -465,5 +465,6 @@ VM-1…3 ve kararlı aktör kimliği kapandı. Kalan motor işleri bir sonraki t
 | 2026-11-04 | `VCD-004` / v0.4 | VM-2 tamam: `detach` verisi, canlı düğüm taşıma, `v + ω × r`, çift bazlı geçiş, `Deformable.PartDetached`; `VCD-D01/04/05` kapandı; kare hızı riski eklendi. Görsel not: yandan çarpmada araba kapıyı kamyonun altına süpürüyor | **[VM-2 TAMAM]** |
 | 2026-11-04 | `VCD-005` / v0.5 | VM-3 tamam: `detachedParts`, nesne yeniden kurulumu, kayıttan geri takma, 16 parça bütçesi, sahibin hücresiyle temizlik, `assetId` koruması; `VCD-D06` kapandı; `VCD-D12` kullanıcı önceliğine bırakıldı. Kullanıcı kopmayı oyunda doğruladı | **[MOTOR HATTI TAMAM]** |
 | 2026-11-04 | `VCD-006` / v0.6 | `VCD-D12` kapandı: `LayoutActorInstance.id`, kayıt sınırında çeviri, editörde üretim. Placement sınırı yazıldı | **[TAMAM]** |
+| 2026-11-04 | `VCD-007` / v0.7 | Static Mesh Editor `Parts` listesi, `Fit Zone`, viewport tel kutuları, Test Hit parça bilgisi | **[TAMAM]** |
 
 **Devam protokolü:** motor hattı kapandı; `RB-V-001` modellemesi ayrı yürür ve hazır olunca VC-2…VC-4 ile bağlanır. Her aşama sonunda belge sürümü yükseltilir; Drive kopyası varsa **aynı dosya ID'sinde** güncellenir. Uygulama başka bir oturumda gerçekleştirilirse commit/fixture, test sonucunu ve açık riskleri bu belgenin yeni sürüm kaydına ekle.

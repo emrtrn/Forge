@@ -1550,7 +1550,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     });
     this.runtimeServices.provide(fractureHostService, {
       physics: {
-        setImpactEventThreshold: (entityId, minImpulse) => this.physicsSubsystem.setImpactEventThreshold(entityId, minImpulse),
+        setImpactEventThreshold: (entityId, minImpulse) =>
+          this.physicsSubsystem.setImpactEventThreshold(entityId, minImpulse, "fracture"),
         impacts: () => this.physicsSubsystem.impacts(),
         addEntities: (entities) => this.physicsSubsystem.addEntities(entities),
         removeEntities: (entityIds) => this.physicsSubsystem.removeEntities(entityIds),

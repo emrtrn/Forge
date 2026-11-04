@@ -262,8 +262,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private vehicleSurfaceProvider: VehicleSurfaceProvider | null = null;
   private vehicleGroundSinkProvider: VehicleGroundSinkProvider | null = null;
   private readonly fixedStepListeners = new Set<(deltaSeconds: number) => void>();
-  /** Opt-in impact sources: entity → minimum slice impulse (N·s); see {@link setImpactEventThreshold}. */
-  private readonly impactThresholds = new Map<EntityId, number>();
+  /** Opt-in impact sources: entity → owner → minimum slice impulse (N·s); see {@link setImpactEventThreshold}. */
+  private readonly impactThresholds = new Map<EntityId, Map<string, number>>();
   private rapierEventQueue: RapierEventQueue | null = null;
   private readonly impactAccumulator = new ImpactAccumulator();
   private frameImpacts: readonly PhysicsImpact[] = [];
@@ -745,10 +745,21 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
    * modules call it), outlives the body (a re-added or rebuilt body picks it
    * up again) and is dropped by `clear()`. Kinematic ↔ fixed pairs never
    * produce events in Rapier; those break through `Damage.Apply` instead.
+   *
+   * Each `owner` holds its own threshold and the entity reports at the lowest
+   * one, so an object that both breaks and dents keeps both opt-ins. Impacts
+   * are shared: a consumer must compare `impulse` with its own threshold.
    */
-  setImpactEventThreshold(entityId: EntityId, minImpulse: number | null): void {
-    if (minImpulse === null || !Number.isFinite(minImpulse)) this.impactThresholds.delete(entityId);
-    else this.impactThresholds.set(entityId, Math.max(0, minImpulse));
+  setImpactEventThreshold(entityId: EntityId, minImpulse: number | null, owner = "default"): void {
+    const owners = this.impactThresholds.get(entityId);
+    if (minImpulse === null || !Number.isFinite(minImpulse)) {
+      owners?.delete(owner);
+      if (owners?.size === 0) this.impactThresholds.delete(entityId);
+    } else if (owners) {
+      owners.set(owner, Math.max(0, minImpulse));
+    } else {
+      this.impactThresholds.set(entityId, new Map([[owner, Math.max(0, minImpulse)]]));
+    }
     const record = this.rapierBodies.get(entityId);
     if (record) this.applyImpactEvents(record);
   }
@@ -1896,7 +1907,8 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private applyImpactEvents(record: RapierBodyRecord): void {
     const RAPIER = this.rapierModule;
     if (!RAPIER) return;
-    const minImpulse = this.impactThresholds.get(record.id);
+    const owners = this.impactThresholds.get(record.id);
+    const minImpulse = owners ? Math.min(...owners.values()) : undefined;
     for (const collider of record.colliders) {
       if (minImpulse === undefined) {
         collider.setActiveEvents(RAPIER.ActiveEvents.NONE);

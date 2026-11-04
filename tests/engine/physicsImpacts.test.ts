@@ -123,6 +123,40 @@ export async function registerPhysicsImpactTests(checkAsync: CheckAsync): Promis
     await app.dispose();
   }));
 
+  await checkAsync("physics impacts: owners keep their own thresholds and the lowest one reports", () => withQuietRapier(async () => {
+    // The 2 m drop is ≈ 64 N·s: only the lower of the two thresholds lets it through.
+    const both = await world([floor(), crate(2)], (p) => {
+      p.setImpactEventThreshold("floor", 500, "fracture");
+      p.setImpactEventThreshold("floor", 5, "deformable");
+    });
+    assert.ok(strongest(run(both.app, both.physics, STEP, 120)), "the lower owner's threshold applies");
+    await both.app.dispose();
+
+    const left = await world([floor(), crate(2)], (p) => {
+      p.setImpactEventThreshold("floor", 500, "fracture");
+      p.setImpactEventThreshold("floor", 5, "deformable");
+      p.setImpactEventThreshold("floor", null, "deformable");
+    });
+    assert.deepEqual(run(left.app, left.physics, STEP, 120).flat(), [], "the other owner's threshold outlives one leaving");
+    await left.app.dispose();
+
+    const kept = await world([floor(), crate(2)], (p) => {
+      p.setImpactEventThreshold("floor", 5, "deformable");
+      p.setImpactEventThreshold("floor", null, "fracture");
+    });
+    assert.ok(strongest(run(kept.app, kept.physics, STEP, 120)), "one owner leaving does not silence another");
+    await kept.app.dispose();
+
+    const none = await world([floor(), crate(2)], (p) => {
+      p.setImpactEventThreshold("floor", 5, "deformable");
+      p.setImpactEventThreshold("floor", 500, "fracture");
+      p.setImpactEventThreshold("floor", null, "deformable");
+      p.setImpactEventThreshold("floor", null, "fracture");
+    });
+    assert.deepEqual(run(none.app, none.physics, STEP, 120).flat(), [], "no owner left opts the entity out");
+    await none.app.dispose();
+  }));
+
   await checkAsync("physics impacts: an On Impact binding receives the impact, On Hit edges are unchanged", () => withQuietRapier(async () => {
     const events: string[] = [];
     const impacts: PhysicsImpact[] = [];

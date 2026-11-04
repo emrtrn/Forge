@@ -1,0 +1,454 @@
+# FORGE — Vehicle Component & Damage Contract
+
+**Dosya:** `FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`  
+**Sürüm:** v0.2 — tasarım sözleşmesi / uygulanmış API değil  
+**Tarih:** 2026-11-04 (Europe/Istanbul)  
+**Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`, ilk oyun tüketicisi Ridgebound `RB-V-001 — Doruk K-180`  
+**Durum:** **[YÖN ONAYLANDI / UYGULAMA BAŞLAMADI]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. Şema ve alan adları hâlâ öneridir; bu belge yeni özellikleri hazır olarak ilan etmez.  
+**Yetki ayrımı:** Forge genel model, deformasyon, kırılma, kopma, kayıt ve editör altyapısını sağlar. Ridgebound hangi parçanın nasıl hasarlanacağını, eşikleri, onarım/ekonomi/oynanış sonuçlarını belirler. 
+
+**Girdi kaynakları:**
+- `DEFORMABLE_FRACTURABLE_WORK_PLAN.md` — 4 Kasım 2026; özellikle §1, §3–§5 Faz 1–5/7/8, §6–§8. Bu belgeye bağlı tarihlendirilmiş uygulama durumu esas alınmıştır.
+- `FORGE_OFFROAD_FORGE_TEKNIK_DURUM_RAPORU_2026-10-23.md` — eski referans; GLTF/vehicle/physics altyapısına giriş, 4 Kasım güncelliği olduğu iddia edilmez.
+- `RIDGEBOUND_ARAC_KONSEPT_LISTESI_VE_GORSEL_URETIM_PLANI.md` v0.1 — 10 araçlık aday konsept kuyruk; `RB-V` araç ID, `VEH` sanat üretim işi ID.
+- `RIDGEBOUND_CONCEPT_DESIGN_INVENTORY.md` — `VEH-01/02/03`; modelleme, parça ayrımı, yük profili.
+- `00_RIDGEBOUND_PROJE_YONETIM_KURALLARI.md` §12; `FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN.md` §0.3 — ortak Drive devir ve tasarım/test ayrımı.
+- Canlı Forge kodu, `main` @ `731ae7ae` (2026-11-04) — §1 durumları bu commit'e göre yazıldı; kod tarandı, bu sürüm için test çalıştırılmadı. Gaz-52 ölçümleri aynı gün `Terrain` sahnesinde alındı.
+- `Eskitilmiş Mavi Hizmet Kamyonu.png` — `RB-V-001` form referansı (ön ¾, sol yan, arka ¾).
+
+---
+
+## 0. Yönetici kararı / tek cümlelik sözleşme
+
+**Araç parçası, ana GLB içindeki bağımsız ve kimlikli bir alt düğüm olabilir. Parçanın deformasyonu yalnız ona ait kopyalanmış geometriye uygulanır; kopma gerçekleştiğinde mümkünse _aynı deforme olmuş mesh_ yerel bağından çıkarılır ve kopma anındaki dünya pozu ve kinematik koşullarıyla bağımsız fizik gövdesine bağlanır.**
+
+Bir dosyanın tek GLB olması otomatik olarak ayrı fizik gövdeleri anlamına gelmez. Ayrı mesh/düğüm, bağımsız kırılma/deformasyon, ayrı collider ve kalıcılık **farklı aşamalardır**. Kapsam içinde olan her ayrı davranış veriyle açıkça işaretlenmelidir.
+
+**Kesin ayrım:**
+- **Modelleme sözleşmesi:** tek Blender master, ayrıştırılmış mesh/düğümler, kararlı ID ve pivotlar; bir ana araç GLB; gerekirse aynı kaynaktan dışa aktarılan hasar parçaları.
+- **Runtime sözleşmesi:** hareketli bütün araç = `vehicle` physics gövdesi; bağlı parçalar kural olarak onun görsel alt düğümleri; kopan parçalar yeni bağımsız dynamic body olur.
+- **Hasar sürekliliği:** mevcut göçük, katmanlı hasar, malzeme ve görünür form kopma öncesinden sonrasına taşınır; temiz yedek parça ile anlık değiştirme varsayılan değildir.
+- **Kalıcılık sözleşmesi:** hasar/kopma mantıksal durumu ve göçük reçetesi korunur. Kopmuş parçanın uzaydaki fiziksel konumunu kaydetmek ayrıca açık profil gerektirir.
+
+**v0.2 kararları (kullanıcı, 2026-11-04):**
+- Konsept form olduğu gibi kalır; ızgara ve kabin özgünleştirilmez. Ortografik ve 3B model kabulü yine ayrı kapıdır.
+- Temel dokuda kalıcı vuruk olmaz; göçükleri runtime sistemi üretir (§3.1).
+- `detach` önce Forge Faz 8 işi olarak **Gaz-52** üzerinde yapılır; `RB-V-001` modellemesi bu işi beklemez ve bu iş de modellemeyi beklemez (§11).
+
+## 1. Uygulanmış ve önerilmiş özelliklerin mevcut durumu
+
+Aşağıdaki durum `main` @ `731ae7ae` koduna göredir. Kod tarandı; "ölçüldü" yazmayan satırlar bu sürümde çalıştırılarak denenmedi.
+
+| Konu | Koddaki durum | Sözleşmeye etkisi |
+|---|---|---|
+| Rapier impact yüzeyi; `setImpactEventThreshold`, `impacts()`, actor `On Impact` | **Tamam.** Eşik sahip bazlı (`bce53640`) | Çarpışma şiddeti/noktası/normali tüketilebilir; `Deformable` ve `Fracturable` birlikte eşik tutabilir. |
+| Voronoi kırılma hazırlığı; statik placement/actor kırılma; dinamik parçalar; support | **Faz 2–4c tamam** | Genel fracture boru hattı var; araç alt düğümünü koparan sistem değil. |
+| Kırılma VFX/ses, debris bütçeleri ve hasar durumunun save/load'u | **Faz 4b/5 tamam** | Referans davranış; araç parçası save sözleşmesi yine ayrı gerekir. |
+| Metal panel/araç gövdesinde kalıcı vertex göçüğü, `Deformable` | **Faz 7 kod tamam** (`04b1bed8`…`731ae7ae`); görsel kabul kullanıcıda. r187 kapısı kapandı (`48ca7f23`, `6e490998`). **Gaz-52'de ölçüldü** | Göçük ürün kabiliyeti, ama **aktör bazlı**; parça bazlı değil (§6.2). Aktörün ayrıca `Deformable` bileşeni taşıması gerekir. |
+| `source: imported`, Blender'dan fracture geometrisi | **Faz 8 açık** | Tek GLB'de cam düğümü bulunması camın ayrı kırılmasını garanti etmez. |
+| `detach` (kapı/ayna/tampon vb. alt düğümün body olması) | **Faz 8 açık; sıradaki iş** | Kodda `detach` veya `partId` kavramı yok. |
+| `joint-break` / `swap-mesh` | **Faz 8 açık** | Opsiyonel ileri aşamalar. |
+| Tekerlek yön/rotasyon/süspansiyon görsel bağları, raycast vehicle | **Tamam.** `visualNode` → `VehicleWheels`; dent sistemi tekerlekleri dışlar. **Gaz-52'de ölçüldü** | Dört tekerlek ayrı wheel rigid body değildir; tekerlek kopması ayrı tasarımdır. |
+| Copy-on-write göçük geometrisi | **Tamam** (`DentTarget`) | Paylaşılan GLB değişmez; mesh ilk göçükte kendi kopyasını alır. |
+| Kütle güncelleme yapı taşları | `setAdditionalMassProperties`, `recomputeMassPropertiesFromColliders` var; araçta denenmedi | `VCD-D04` için başlangıç noktası. |
+| Göçüğe göre collider güncellemesi | Faz 7 v1 kapsam **dışı**, `visual_only` | Görsel ezilme fizik collider'ı sürekli yeniden şekillendirmez. |
+
+**Kritik kaynak sınırları:** `fractureSourceFromObject(root)` verilen kökün altındaki mesh'leri *birleştirir* ve mevcut çağrılar model kökünü verir. Tek araç GLB'sine tek genel fracture sidecar ekleyerek sadece ön camı hedeflemek **güvenilir değildir**. Faz 7, kırılma sonrasında göçükleri parçalara aktarmaz. Araçta **deformed mesh → detach** sürekliliği bu belgeyle istenen, ayrıca geliştirilecek davranıştır.
+
+**Gaz-52 ölçüm referansı (2026-11-04):** 2500 kg, yaklaşık 22 km/h, kırılan duvara önden çarpma. Eski ayarlarla (`maxDepth 0.12`, `fullImpulse 3000`) 4 cm çökme ve 46 vertex; `maxDepth 0.35`, `fullImpulse 1500`, `radius 0.8` ile 14 cm çökme ve 292 vertex. Göçük iki far mesh'ine de yaklaşık 0,65 cm taştı.
+
+## 2. Terimler, varlık kimliği ve statü
+
+| Terim | Anlam |
+|---|---|
+| `VehicleAsset` | Oyundaki tek taşıtın görsel ana asset'i ve onu kullanacak vehicle tanımı. |
+| `Part` | Kararlı `partId`'si olan, mesh düğüm kümesi ve yerel pivotu tanımlı alt bileşen. |
+| `Attachment` | Parçanın araçla ilişkisi: parent, soket/pivot, montaj ve isteğe bağlı dayanıklılık. |
+| `Attached` | Parça araç rigid body ile birlikte hareket eder; kendi dynamic body'si yoktur. |
+| `Deformed` | Parçanın örneğe özgü görsel vertex geometrisi orijinalden farklıdır. |
+| `Detached` | Parça araç hiyerarşisinden ayrılmıştır; kendi dünya pozu ve bağımsız fizik durumu vardır. |
+| `Fractured` | Parça tek mesh olarak kalmaz; bir veya çok kırık parça / silinmiş orijinal kaynak vardır. |
+| `Part instance` | Örneğe özgü hasar, geometri, bağlılık ve fizik state sahibi; cache'teki paylaşılmış source asset değildir. |
+| `Deformation recipe` | Başlangıç mesh'i + sürüm/sabit kaynak kimliği üstüne tekrarlanabilir dent kayıtları. |
+| `Collision proxy` | Fizik gövdesi için basit collider/hull; görseldeki her göçüğü izlemek zorunda değil. |
+
+**Kimlik kuralları (önerilen invariant):**
+1. Araç kimliği `vehicleInstanceId`, statik/actor kimliğiyle çakışmaz.
+2. Parça kimliği asset içinde tekil ve **model revizyonlarında kararlı** olmalı: ör. `front_bumper`, `hood`, `windshield`.
+3. Aynı kimliği yeniden üretim scripti deterministik verir; görünen Blender nesne adı değişebilecekse mapping dosyası otorite olur.
+4. Runtime parça anahtarı `(vehicleInstanceId, partId)`; kopma sonrası da bu kimlik korunur. Debris geçici fizik ID'si ayrı olabilir.
+5. `VEH-01` (konsept üretim işi) ile `RB-V-001` (araç modeli kimliği) birbirine karıştırılmaz.
+6. `sourceAssetHash`/`topologyVersion` değişince eski deformasyon kayıtlarını körlemesine yeni vertex indekslerine uygulamak yasaktır; uyarlama veya görünür fallback gereklidir.
+
+## 3. Blender → GLB üretim sözleşmesi
+
+### 3.1. Ana ilkeler
+
+- **Tek düzenlenebilir Blender master:** `RB-V-001_Master.blend`. Prosedürel parçalar Claude/Codex `bpy` ile üretilebilir; script ve araç sürümü tutulur.
+- **İlk Forge teslimi tek ana araç GLB:** bir kök ve alt düğüm hiyerarşisi; her hasar alacak bileşen bağımsız node/mesh. Malzeme, dönüş, pivot korunur.
+- **Ayrı model çıktıları isteğe bağlı:** Blender master kaynak korunarak, parçaya özel fracture bake veya mevcut entegrasyonun gerektirdiği fallback için `.glb` dışa aktarılabilir. **İkinci elde çizilmiş temiz yedek** olarak tasarlanmaz.
+- **Hasar için net parça sınırları:** tampon, kaput, cam ve kapılar mümkünse komşu mesh'lerle kaynak vertex paylaşmayan ayrık mesh olmalı; kopma anında görünmeyen arka yüz ve açık bağlantı noktaları oyun estetiğine göre ele alınmalı.
+- **Deformasyona uygun topology:** gerçek göçük istenen metal panellerde yeterli, dengeli yüzey tessellation; ince camda fracture farklı bir mekanik. Aşırı sık poligon veya her parçada yüksek tessellation otomatik şart değildir.
+- **Transform otoritesi:** Forge model kuralı kilitli: birim metre, **+Y yukarı, +Z ileri, aracın sağı −X** (`engine/physics/vehicle/vehicleTypes.ts`). Gaz-52'de düğüm dönüşümleri uygulanmış GLB ölçüleri metreye ve `vehicle.json` değerlerine uyuyor. `RB-V-001` için `unitScale=1` ilk import smoke'unda yine teyit edilir; merkez/pivot ve Blender dönüşümü ilk teslimde kilitlenir.
+- **Wheel special case:** `definition.wheels[].visualNode` ve oluşan `VehicleWheels` grubu hasar/deform taramasında özel muamele görür; araç gövde deformasyon sistemi bunların döndürme/steer animasyonunu bozmaz. Arka ikiz lastikler taraf başına **tek** `visualNode` altında durur (iç + dış lastik).
+- **Hasar dokuda boyanmaz:** temel dokuda kalıcı vuruk, ezik veya normal-map göçüğü olmaz; aksi halde runtime göçüğüyle üst üste biner. Pas, boya aşınması ve kir malzemede kalabilir. Görseldeki sol kapı vuruğu modele veya dokuya aktarılmaz.
+- **Açığa çıkacak yüzeyler:** tampon, kapı veya cam gidince görünecek bölgeler modellenir: tampon arkası, şasi uçları, ızgara altı, kapı boşluğu ve kabin içi. Görselde çeki kancaları şasiye bağlı okunur; tampon kopunca yerinde kalır.
+
+### 3.2. Örnek hiyerarşi (öneri, Forge şeması değil)
+
+```text
+RB_V001_ROOT
+├── CHASSIS
+│   ├── Chassis_Frame
+│   └── Cabin_Shell
+├── PART_FRONT_BUMPER (pivot: bağlantı geometrisi)
+│   └── Mesh_Front_Bumper
+├── PART_HOOD
+│   └── Mesh_Hood
+├── PART_WINDSHIELD
+│   └── Mesh_Windshield
+├── PART_DOOR_L
+│   └── Mesh_Door_L
+├── PART_DOOR_R
+│   └── Mesh_Door_R
+├── PART_CARGO_BED
+│   ├── Bed_Base
+│   ├── Tailgate
+│   └── Wood_Side_Panels
+├── VEHICLE_WHEELS
+│   ├── Wheel_FL
+│   ├── Wheel_FR
+│   ├── Wheel_RL
+│   └── Wheel_RR
+└── SOCKETS
+    ├── CargoAnchor
+    ├── DriverSeat
+    └── CameraAnchor
+```
+
+Bu isimler **zorunlu Forge API** olarak anlaşılmamalı. Node mapping'in gerçek formatı ilgili repo `vehicleTypes`, `vehicleModule`, `GLTF loader` ve asset validator incelenerek belirlenir.
+
+### 3.3. Parça asset kabul (Blender çıkışı)
+
+- [ ] Her oynar/kopar parça **tek ve kararlı `partId`** taşır; aynı parça iki ayrı mekanizmada kimliksiz tekrar etmez.
+- [ ] Tüm export nesneleri 3B sahnede aynı araç ölçeği/ekseniyle oturur; dışa aktarılan pozlar başka parçaların local origin'ine bağlı yanlış aktarılmaz.
+- [ ] Pivot ve ana bağlantı soketleri teknik paftadaki yerlerle uyumludur.
+- [ ] Gereken durumlarda parça kapalı manifold veya özel fracture kaynak kurallarına uygundur; cam kırığı için yalnız ince, çift yüzlü görsel mesh'in Voronoi v1'e uygun olduğu varsayılmaz.
+- [ ] Mesh normal/UV/PBR malzeme ve node hiyerarşisi GLB'de korunur; malzeme texture export'u görsel smoke ile doğrulanır.
+- [ ] LOD, mesh triangle, doku ve GLB boyut bütçeleri hedef donanım testinden sonra sayısal olarak kilitlenir.
+- [ ] Orijinal konsept görseli teknik ortografik ölçüm değildir; ölçüler ayrı `dimensions` sözleşmesinden gelir. Görselin oranları kabaca aks aralığı / tekerlek çapı ≈ 3,2 verir (Gaz-52: 3,8); bu değer ölçü olarak kullanılmaz.
+- [ ] Temel dokuda kalıcı hasar yoktur; açığa çıkacak yüzeyler ve kabin içi modellenmiştir (§3.1).
+- [ ] Göçük alacak geniş saclar (kaput, çamurluk, kapı) yeterli vertex yoğunluğuna sahiptir; `missed` sayacı Play'de kontrol edilir.
+
+## 4. Parça davranış sınıfları ve hasar matrisi
+
+**Önerilen teknik `behavior` bileşimi:**
+- `rigid_visual`: yalnız görünüm; hasar yok.
+- `dent`: attached iken örneğe özel kalıcı göçük (Faz 7 temelinden ileride).
+- `detach`: eşik/hasarda bütün parça ayrılıp yeni dynamic body olur (Faz 8).
+- `fracture`: parça birden çok kırık parçaya dönüşür; önceden hazırlanmış veya mevcut destekli geometriye bağlı.
+- `joint_motion`: menteşeli/yatay açılma; kopma eşiği ayrıca olabilir, v1 dışı.
+- `wheel_visual`: mevcut vehicle tekerlek kontrolünün sahip olduğu özel sınıf.
+
+| Doruk K-180 parçası | Varsayılan bağlı davranış | İleri hasar | Kopma/kırılma | İlk prototip |
+|---|---|---|---|---|
+| `front_bumper` | Araca bağlı rigid görsel | `dent`, birikimli görsel göçük | `detach` | **P0 demonstratör** |
+| `hood` | Bağlı panel | `dent` | `detach`, menteşe sonra | P1 |
+| `door_left`, `door_right` | Bağlı panel | `dent` | `detach`, menteşe sonra | P1 |
+| `front_fender_left/right` | Bağlı panel | `dent` | gerekirse `detach` | P1 |
+| `windshield` | Bağlı kırılabilir panel | çatlak VFX/maske (ayrı) | `fracture` veya swap; cam özel kalite/bütçe | P1 |
+| `side_glass_left/right` | Bağlı cam | çatlak | `fracture` | P2 |
+| `cargo_tailgate` | Bağlı kasa parçası | ahşap/metal hasarı | `detach`/yerel `fracture` | P2 |
+| `wood_side_panel_*` | Bağlı panel | parça hasarı | splinter-fracture (uygun kaynak) | P2 |
+| `mirror_left/right` | Bağlı rigid görsel | yok | `detach` (ince kol, ucuz aday) | P1 |
+| `front_grille_panel` | Bağlı panel | `dent` | gerekirse `detach` | P2 |
+| `headlight_*`, `turn_signal_*`, `tail_lamp_*` | Bağlı rigid görsel | çatlak VFX/maske (ayrı) | `fracture` veya görsel kayıp | P2 |
+| `rear_window` | Bağlı cam | çatlak | `fracture` | P2 |
+| `fuel_tank` | Bağlı rigid görsel | `dent` | yok; oynanış sonucu Ridgebound'un | P2 |
+| `cab_step`, `mudflap_*`, `wiper_*` | `rigid_visual` | yok | `detach` sonra | P3 |
+| `cargo_stake_*`, `cargo_latch_*` | Bağlı kasa parçası | yok | `detach` sonra | P3 |
+| `tow_hook_*` | Şasiye bağlı `rigid_visual` | yok | yok; tampon kopunca yerinde kalır | P0 modellemesi |
+| `wheel_*` | `wheel_visual`; motor kontrolü sahibi | ileride lastik/aks hasarı | kopma **ayrı vehicle physics tasarımı** | **mevcut kontrol korunur** |
+| `chassis_main` | Rigid physics otoritesi | ayrı gövde göçüğü araştırması | genel parçalanma MVP dışı | **mevcut vehicle korunur** |
+
+**Oyun için P0 kapsam:** bütün tablo değil; yalnız **ön tampon** üzerinden gerçek “dent → detach” teknoloji dilimi. Daha sonra diğer araçlarda aynı genel mekanizma farklı veri profilleriyle tekrar kullanılır.
+
+**Motor denemesi kapsamı (Gaz-52):** aynı mekanizma önce mevcut GLB'deki ayrı düğümlerle kanıtlanır. Ölçüler düğüm dönüşümleri uygulanmış araç uzayındadır.
+
+| Gaz-52 parçası | GLB düğümü | Vertex | Konum | Rol |
+|---|---|---|---|---|
+| `door_left/right` | `Door_L`, `Door_R` | 546 | x ±0,77–0,98, y 0,93–2,46, z −0,57…0,44 | **Ana gösterim:** `dent → detach` |
+| `mirror_left/right` | `Mirror_L`, `Mirror_R` | 184 | x ±0,84–1,22, y 1,67–2,44, z 0,45–0,71 | İkinci durum: küçük parça |
+| gövde | `Gaz-52_Gaz-52_0` | 3027 | x ±1,19, y 0,46–2,6, z −4,64…2,26 | Parça dışı darbelerin yedeği |
+
+Gaz-52'de ayrı tampon düğümü bulunamadı. `Front_rail` tampon değildir: ön aks hizasındadır (z 1,0–1,39), aracın burnu ise z = 2,26'dadır. Tamponun gövde mesh'inde olduğu varsayılır; bu yüzden Gaz-52 denemesi önden değil **yandan** darbe kullanır.
+
+## 5. Hasar veri modeli — öneri, mevcut Forge JSON şeması değildir
+
+Sözleşme üç katmanı ayırır:
+1. **Forge genel runtime component / asset davranışı:** parçanın hangi node'a, hangi collider/rigid body kalıbına ve hangi event'e bağlı olduğu.
+2. **Ridgebound data profile:** hasar eşikleri, malzeme tepkileri, oynanış/onarım sonuçları; değerler testle ayarlanır.
+3. **Save state:** araç örneğinin anlık birikmiş hasarı, göçük kayıtları, attachment durumu ve gerekli detached dünya pozu.
+
+**Örnek kavramsal mapping (ŞEMA ÖNERİSİ; yeni dosya alanları/endpoint adları onaylanmadı):**
+
+```json
+{
+  "contractVersion": 1,
+  "vehicleAssetId": "RB-V-001",
+  "modelAsset": "RB-V-001.glb",
+  "sourceAssetHash": "<build-hash>",
+  "parts": [
+    {
+      "partId": "front_bumper",
+      "visualNode": "PART_FRONT_BUMPER",
+      "attachmentNode": "SOCKET_FRONT_BUMPER",
+      "behaviors": ["dent", "detach"],
+      "collisionProxy": "hull_or_box_ref",
+      "damageProfileId": "ridgebound_bumper_steel_v1",
+      "onDetached": "spawn_dynamic_from_live_mesh"
+    },
+    {
+      "partId": "windshield",
+      "visualNode": "PART_WINDSHIELD",
+      "behaviors": ["fracture"],
+      "damageProfileId": "ridgebound_safety_glass_v1"
+    }
+  ]
+}
+```
+
+- `damageProfileId` yalnız Ridgebound içerik referansıdır. Forge genel modülü Ridgebound’a özel sayı/oyun cezası taşımamalıdır.
+- `massKg` ve kütle dağılımı artık iki kez sayılmamalı: bağlı parça araç gövdesinin toplam inertial özelliklerine dahil edilmişse kopma anında *tek* kütle otoritesi korunur. Basit v1 için bağlı araç collider ve toplam kütle değişimi yoksa açık fizik yaklaşımı/deliberate approximation kaydı gerekir.
+- Mevcut `<Model>.fracture.json`, `<Model>.deformable.json` ve araç `*.vehicle.json` sözleşmeleriyle çakışmadan yeniden kullanılmalı. Önerilen varsayılan: parça listesi modele ait olduğu için `<Model>.deformable.json` içine ve `normalizeAssetDeformable` allowlist'ine girer (`VCD-D02`); kesin karar VM-1'in ilk diliminde verilir. Burada yazılan alanlar mevcut tip sayılmaz.
+- Fracture bileşeninin `sourceHash` ve otomatik bake davranışı, araç parçaları için node-seçilmiş kaynakta yeniden doğrulanmalı. Bir bütün kamyonun tek fracture kaynağına dönüştürülmesi yasak.
+
+## 6. Hasar–kopma durum makinesi
+
+**Parça bağlanma durumu (otorite):** `attached | detached | destroyed`.  
+**Görsel hasar durumu (ortogonal):** `undamaged | deformed | fractured` ve `dentRecords`.  
+**Fracture yapısal durumu:** planın mevcut `intact | damaged | fractured` mantığından kopya değil, uygun sistem entegrasyonu ile eşlenir.
+
+> Kopmuş bir tampon `detached + deformed` olabilir. Tek `broken` boolean bu durumu doğru temsil etmez.
+
+```text
+ATTACHED / UNDAMAGED
+       │ impact
+       ▼
+ATTACHED / DEFORMED ─────── impact ─────► ATTACHED / DEFORMED (birikimli)
+       │ detach threshold
+       ▼
+DETACHING (atomik geçiş; tekrar işlenmez)
+       │
+       ▼
+DETACHED / DEFORMED  ──────► physics / collisions / optional further dents
+       │
+       └──► optional cleanup/recovery ─► DESTROYED or RECOVERED (ayrı kural)
+```
+
+**İdempotency:** Tek fizik adımındaki tekrar impact/damage olayları aynı tampon için birden fazla detached body doğuramaz. `detach` sistemi olay başına bir kez uygular ve deterministic state transition üretir.
+
+**Ayrılma sırası (önerilen transaction):**
+1. Rapier impact `point/normal/impulse` olayını ve araç **önceki/geçerli** rigid-body hızlarını örnekle; uygun `partId` için çarpma eşlemesi yap (aşağıdaki §7).
+2. Kopma öncesinde birikmiş `dentRecords`, canlı `BufferGeometry`/material, local-to-world transform, orijinal bağlantı ve collision bilgilerini immutable snapshot olarak sabitle.
+3. Yeni detached instance kimliğini `(vehicleInstanceId, partId)` ile türet. Dünya pozu/parça pivotu korunarak yeni dynamic body oluştur; gövdenin atılacağı yerde ve gövdeyle çakışmayacak şekilde ilk collider pozunu hesapla.
+4. **Tercih edilen yöntem A:** paylaşımdan ayrılmış **aynı deformed mesh** için parenting değişimi yap; `worldPosition/worldQuaternion/worldScale` korunur. Parçaya ait geometry, materyal, normal, shading, bounding bounds bakımından kaynak referansları doğru yönetilir.
+5. **Fallback yöntem B:** aynı Blender masterdan export edilen eşleşen bağımsız part mesh'i örnekle; orijinalde saklanan `dentRecords` ile **aynı hasar geometrisini** yeniden kur, sonra attached örneği gizle. Eşleşmeyen topology ile temiz parça takası kabul dışı.
+6. Parça kaynak node'u araçta ikinci kez görünür kalmaz; ownership tekilleştirilir. Çift collider ve çift kütle engellenir; collision filtreleri yeni body'nin araçla temasını kontrollü yönetir.
+7. Yeni dynamic body için kopma anındaki doğrusal/açısal hız, kütle, inertia ve gerekirse impact yönlü impulse atanır; fizik iterasyonu başladıktan sonra render pozu rigid body tarafından sürülür.
+8. `Part.Detached` gibi genel olay (yeni mesaj adı **öneri**) bir kez yayımlanır. Ridgebound bu olayı ses, VFX, görev/onarım kuralları için dinler.
+9. State, gerektiği profile göre save'e girer; level/cell unload, performans budget ve cleanup yaşam döngüsü açık olur.
+
+### 6.1. Hız aktarımı (fizik kuralı)
+
+Araç gövdesi doğrusal hız `v`, açısal hız `ω` ile hareket ederken tamponun dünya merkez noktası `p`, aracın referans merkezi `c` ise:
+
+`v_part = v_chassis + ω_chassis × (p − c)`
+
+Mevcut fracture yolu bunu sağlamaz: chunk'lara kaynak gövdenin doğrusal hızı kopyalanır (`fractureRuntime.ts`), `ω × r` eklenmez. Gövde doğurma yolu yeniden kullanılabilir, hız hesabı `detach` için yeni yazılır.
+
+Kopma impulse'u uygulanacaksa bu hıza **ayrı** eklenir. Dünya dönüşü, pivot yerleşimi ve açısal hız korunur. Sadece araç merkez hızını kopyalamak, dönüşte kopan tamponun doğal hareketini bozabilir. **Geçiş anında çift darbe impulse'u uygulanmamalı** (kaynak contact solver'ın zaten işlediği etki ile detach force aynı sanılmamalı); fizik alt-adım sırası testle belirlenir.
+
+### 6.2. Deforme geometri aktarımının olmazsa olmazları
+
+- İlk dent'te **copy-on-write**: glTF cache'teki paylaşılmış geometri asla tüm araçlara ortak mutasyona uğramaz.
+- Detach anında **temiz yedekle swap yapılmaz**; A'da canlı klon mesh korunur, B'de aynı rest geometry + dent recipe ile özdeş şekil restore edilir.
+- `deformable` planının `position/normal Float32Array` açma, quantization/interleaving, kaynaklı normal güncelleme, UV seam ve skinned mesh kuralları Faz 7'de uygulandı (`DentTarget`, `impactDeform.ts`).
+- Deformasyon maskesi/parça kaynağı yalnız `partId` ile işaretli **seçili mesh(ler)** üzerinde çalışmalı; araç tekerleklerine veya başka araç örneklerine göçük bulaşmamalı. **Bugün bu kural yalnız tekerlekler için sağlanıyor:** `DentTarget` aktör kökünün tüm mesh'lerini tarar, tek filtresi `exclude`; Gaz-52'de göçük farlara da taştı. Parça filtresi VM-1'in ilk işidir. `parts` tanımlamayan asset bugünkü gibi davranmaya devam eder.
+- `visual_only`: göçüğe göre collider her darbede yeniden oluşturulmaz. Kopmuş tamponun basitleştirilmiş detached convex hull/box proxy'si yine de gerçekçi düşme/yuvarlanmayı sağlayabilir; görsel mesh ile fark raporlanır.
+- Detach sonrası ilk sürümde **daha fazla göçük** opsiyoneldir; kullanıcının istediği zorunlu hedef kopma anındaki bütün deformasyonun korunmasıdır. Sonraki darbelerde dent üretimi ayrıca Faz 7 altyapısıyla test edilir.
+- Kopan parça fiziksel olarak araç üzerinde eksilmeli, ama ana araç hala güvenilir biçimde sürülebilir kalmalı; collider/mass/inertia değişimi kapsamı ayrıca teknik karardır.
+
+## 7. Çarpışmanın araca ait hangi parçaya uygulandığı
+
+Faz 1 `PhysicsImpact` olayı fiziksel chassis collider'ından gelebilir; **motorun o anda hangi görsel node'un vurulduğunu zaten bildiği varsayılmaz.** Bu nedenle part resolver gerekir.
+
+**Önerilen kısa yol — P0:**
+- Çarpışma noktasını araç yerel uzayına dönüştür.
+- Kaynak kamyonun ön tamponuna uygun authored `damageZone` (kutu/kapsül veya basit hull) ile eşleştir.
+- Tek darbede varsa en uygun/öncelikli part seç; değilse gövde/none fallback.
+- Normal ve impulse bileşeniyle malzeme/bağlantı eşiğini değerlendir.
+- Bölge tanımları görsel mesh node'a referans verir, ama aracın mevcut tek chassis collider'ını gereksiz yere parçalara ayırmaz.
+- **Bölge collider yüzeyini kapsamalıdır.** Temas noktası görsel mesh'te değil collider kutusundadır. Gaz-52'de kutu gövde sınırına oturur (x ±1,19), kapı ise x ±0,98'dedir; yalnız kapı mesh'ine sıkı oturan bir bölge temas noktasını kaçırır. Bölge, parçadan collider yüzeyine kadar uzatılır.
+- Ad çakışmasına dikkat: `damage-zone` Forge'da oyuncuya hasar veren ilgisiz bir davranıştır (`src/game/behaviors.ts`). Uygulamada ayrı bir ad seçilir.
+
+**Genişleme — P1:** parça bazlı sensor/proxy ve temas noktası yakınlığı, soket ekseni, çoklu parça etkisi, darbe yönüne bağlı hasar. Yanlış parça seçimini engellemek için overlap/öncelik kuralları gerekir.
+
+**Özel durum:** Ön camın kırılabilir panel davranışı, mevcut bütün GLB'yi birleştiren fracture bake'e bağlanamaz; cam **kendi kaynak mesh'ine** sahip olmalı ve fracture/baked chunk yalnız o mesh'ten veya uyumlu ayrı cam GLB'sinden hazırlanmalıdır. Cam çatlak görünümü, gerçek parçaların fiziksel doğumu ve camın tamamen kaybolması üç ayrı kalite düzeyidir.
+
+## 8. Fizik sahipliği ve collision sözleşmesi
+
+1. **Bağlı faz:** araç `vehicle` rigid body toplam hareketi yönetir. Bağlı parçalar öncelikle görsel child; raycast tekerlekler mevcut kontrolü izler. `partCollider` yalnız hasar seçimi için görsel zone ise Rapier'e yeni rigid body eklenmez.
+2. **Kopma anı:** (a) part root world pose; (b) source body's spatial velocity; (c) ayrı mass/inertia; (d) collider ref; (e) contact filtreleri; (f) tek physics ownership atomik kurulur.
+3. **Kopmuş faz:** parça kendi Rapier dynamic body'si ve basitleştirilmiş collision proxy ile yönetilir; render bu pozdan türetilir. `three.Object3D.attach` gibi hiyerarşi geçişi yalnız görsel kısmıdır; physics body/Collider'ı otomatik doğurmaz.
+4. **Ana chassis:** tampon kopunca görsel boşluk kalır. Chassis collider'ındaki tampon çıkıntısı varsa bunu **kalıcı collider proxy kararına** göre ya küçük sade gövde farkı olarak kabul et ya da ayrı detachable collider yaklaşımı geliştir. Her dent'te bütün chassis collision rebuild yapılmaz.
+5. **Kütle ve inertia:** detach v1 için kütlenin nasıl transfer edileceği teknik tasarımda açık seçilecek; bağlı parçanın ağırlığı hem chassis'te hem yeni body'de iki kez kalamaz. Dinamik kütle güncellemesi yapılmıyorsa bu fiziki yaklaşım `approximation` olarak beyan edilir ve testte etkisi ölçülür.
+6. **Filtre ve stabilizasyon:** kopma sonrası ilk birkaç kare için araca çok yakın parça jitter/penetration doğurmamalı; solver ve filtre parametreleri değişirse farklı açılardan çarpışma testi gerekir.
+7. **World Partition:** detached parçanın yaşam döngüsü kaynak araç/cell ile ilişkilendirilir; taşıt hareketli olduğundan static placement cell cleanup'ı doğrudan kopyalanmaz.
+
+## 9. Kayıt / yükleme, restore ve geri dönüş
+
+**Zorunlu minimal düzey:** kopmuş ön tampon aynı aracın üzerinde yeniden görünmemeli; hasarlı attached tamponun dent şekli save/load'da korunmalı. Aynı olay tekrar tekrar tetiklenmemeli.
+
+**Kademeli iki persistence profili:**
+
+| Profil | Kaydedilir | Ne zaman kullanılır |
+|---|---|---|
+| **Logical (P0)** | `vehicleInstanceId`, `partId`, `attachmentState`, `damageAmount`, `dentRecords`, source/topology rev, kırılma state | Genel araç parçaları; dışarıdaki geçici debris'in hassas yeri kaydedilmeyebilir. |
+| **World-persistent detached (P1/opsiyonel)** | Yukarıdakilere ek `worldPose`, `linearVelocity`, `angularVelocity` ve bağımsız body instance kimliği | Oynanış/onarım açısından yerdeki parçanın geri bulunması gerekiyorsa. |
+
+**Önerilen örnek kayıt (yeni API değil):**
+
+```json
+{
+  "vehicleInstanceId": "truck-player-01",
+  "assetId": "RB-V-001",
+  "parts": [
+    {
+      "partId": "front_bumper",
+      "attachmentState": "detached",
+      "damage": 0.73,
+      "sourceAssetHash": "<hash>",
+      "dentRecords": [
+        {"pointLocal": [0.1, 0.0, 0.0], "directionLocal": [0.0, 0.0, -1.0], "depth": 0.05}
+      ],
+      "detachedWorldState": null
+    }
+  ]
+}
+```
+
+- Faz 7-6 kaydı kök uzayında `{ entityId, dents[] }` tutar; `sourceAssetHash` veya topoloji sürümü yoktur. Bu sözleşme **part-local vs vehicle-local** dönüşümlerinin tutarlı bir kaydını şart koşar. Öneri: `part-local` rest geometry üzerinden dent recipe; eski `deformables` kayıtları kök uzayında okunmaya devam eder, kayıt dönüştürücüsü vehicle actor ile test edilir.
+- Runtime aktör kimliği sıra numarasına bağlıdır (`actor:${index}`, `engine/scene/actorInstance.ts`). Aktör listesi değişirse kayıt başka aktöre bağlanabilir. Kalıcı `vehicleInstanceId` bu kimliğin üzerine kurulamaz (`VCD-D12`).
+- Fracture Faz 5'te enkaz pozlarının kaydedilmemesi kullanıcı kararıdır; bu belge **genel fracture kuralını değiştirmez**. Araçta ayrı `World-persistent detached` profilinin açılması kullanıcı/oyun ihtiyacına bağlıdır.
+- Yeni kayıtta olmayan alanlar eski save ile uyumlu olmalı, bilinmeyen ID/mesh hash/topology değişince güvenli fallback ve uyarı üretmelidir. Dünya dışına çıkmış geçici debris restore edilmek zorunda değildir.
+- Hasarlı parça, fizik sistemini yeniden yükledikten sonra **aynı kaynak mesh'e** dent recipe uygulanarak yeniden üretilebilir; runtime transient vertex buffer'larının her baytını save etmek zorunlu değildir.
+
+## 10. Ortak üretim sorumlulukları
+
+| Rol | Sorumluluk | Somut teslim |
+|---|---|---|
+| **Kullanıcı + GPT** | Konsept tasarım, görsel onay, hasar davranışı önceliği, kararlı parça sınırları | Onaylı sanat referansı + `VEH-02` breakdown + karar kaydı |
+| **Claude + Blender** | Tek ana `.blend`; parametrik parça geometrisi; pivot/kimlik, normal/UV/PBR; GLB export | `RB-V-001.glb`, Blender master, parça raporu, ortografik screenshot |
+| **Forge motor oturumu (Claude veya Codex)** | Gerçek schema adaptörü; part resolver; detach + kütle/collider/save/test; önce Gaz-52 | Commit, validator, engine/smoke test ve benchmark |
+| **Ortak sınır** | İki oturum aynı üretim dosyasını eşzamanlı düzenlemez; kaynak Blender master modelleme oturumunda, engine mapping motor oturumunda kalır; onaylı değişiklik sözleşme revizyonuyla paylaşılır. | Tekil kaynak otoritesi, test ve kabul ayrımı |
+
+## 11. Aşamalı uygulama planı — kapsamı büyütmeden
+
+İş iki bağımsız hatta yürür. **Motor hattı** Forge Faz 8'dir ve Gaz-52 üzerinde kanıtlanır. **Araç hattı** `RB-V-001` modelidir, ayrı yürür ve motor hattını beklemez.
+
+**Motor hattı — Forge Faz 8, Gaz-52:**
+
+| Aşama | Yapılacak iş | Çıkış kapısı / doğrulama | Durum |
+|---|---|---|---|
+| **VC-0** | Canlı Forge `vehicle.json`, GLTF wheel visual, component, impact, fracture, save, r187 durumu incelemesi | §1 fark tablosu | **[TAMAM — 2026-11-04]** |
+| **VM-1** | Parça tanımı, darbe→parça çözücüsü, parça filtreli göçük | Yan darbe yalnız kapıyı göçertir; farlar ve komşu parçalar değişmez; `parts` tanımsız asset aynı davranır | **[SIRADA]** |
+| **VM-2** | `detach`: aynı deforme mesh'in yeni dynamic body'ye geçişi, `v + ω × r`, tek seferlik geçiş, collision filtreleri | Kapı tek kez kopar; ilk kare form aynı; temiz swap yok; araç sürülebilir | **[PLAN]** |
+| **VM-3** | Kayıt (`logical` profil), hücre boşalması, temizlik/bütçe, kütle tutarlılığı | Save/load sonrası kopan parça araca geri takılmaz; sahipsiz debris birikmez | **[PLAN]** |
+
+**Araç hattı — `RB-V-001`, motor hattından bağımsız:**
+
+| Aşama | Yapılacak iş | Çıkış kapısı / doğrulama | Durum |
+|---|---|---|---|
+| **VC-1** | Blender'da `RB-V-001` greybox parça sınırları ve pivot/eksen paketi | Tek GLB import, 4 wheel node, statik bumper bağı ve smoke | **[PLAN]** |
+| **VC-2** | `front_bumper` için `dent` (VM-1 hazırsa veriyle bağlanır) | 2 art arda darbe aynı tamponu büker; başka araç değişmez; save/reload shape aynı | **[PLAN / VM-1 BAĞIMLILIĞI]** |
+| **VC-3** | `front_bumper` için `detach` | Önceki göçük aynı mesh üstünde; part tek doğar; araca bağlı görünmez | **[PLAN / VM-2 BAĞIMLILIĞI]** |
+| **VC-4** | `RB-V-001` için save/restore ve bütçe doğrulaması | Tekrarlı save/load, parçanın geri takılmaması, bellek stabilliği | **[PLAN / VM-3 BAĞIMLILIĞI]** |
+| **VC-5** | Kaput, kapı, cam gibi diğer part profilleri | Her malzeme için ayrı test; tek genel “hasar” efekti yok | **[SONRA]** |
+
+**Geliştirme sırası notu:** Faz 7 kodu ve r187 kapısı kapandı; açık olan Faz 7 görsel kabulü motor hattını bekletmez. Yeni commit'ler bu belgeden daha güncel kanıt getirebilir; fark tarih ve commit ile kaydedilir.
+
+### 11.1. P0 demonstratör senaryoları ve negatif testler
+
+Aşağıdaki testler `RB-V-001` ön tamponu için yazılmıştır. Motor hattında aynı testler Gaz-52'de **tampon yerine `door_left`** ile, yan darbeyle çalıştırılır; `VCD-01` için tekerlek ve kapı düğümleri kontrol edilir.
+
+| Test ID | Senaryo | Beklenen kabul |
+|---|---|---|
+| `VCD-01` | GLB import + node mapping | Tampon ve dört wheel görseli doğru eksen/ölçekte, hiçbir parça kayıp değil. |
+| `VCD-02` | İlk eşik üstü ön darbe | Yalnız ön tamponun örnek geometrisi deforme olur; cache'teki kaynak değişmez. |
+| `VCD-03` | İkinci darbe | Birinci göçük korunur; maksimum derinlik/hasar sınırı aşılmaz. |
+| `VCD-04` | Kopma darbesi | Tampon tek ve yalnız bir kez detached dynamic body olur; kaput/tekerler unaffected; araç sürülebilir. |
+| `VCD-05` | Geometri sürekliliği | Kopma öncesi **deforme edilmiş tampon** ile kopma sonrası ilk kare mesh aynı formu taşır (geometrik sapma sadece fizik pozundan kaynaklanır); temiz swap olmaz. |
+| `VCD-06` | Dünya pozu ve hız | Başlangıç dünya pozu korunur; `v + ω×r` doğrulanır; açısal hız aynı; tekrarlı impulse yok. |
+| `VCD-07` | Kırık save/load | Kayıt geri dönünce tampon araca takılı değildir; logical damage korunur; world pose yalnız seçilen persistence profilinde korunur. |
+| `VCD-08` | İki araç instance | Yalnız çarpılan aracın tamponu göçer/kopar; diğer araç ve source GLB görseli değişmez. |
+| `VCD-09` | Düşük impulse ve parça dışı darbe | Eşik altı hasar yok; yanlışlıkla cam/tekerleğe işlem gitmez. |
+| `VCD-10` | Dünya/hücre çıkışı + tekrar giriş | Sahipsiz debris birikmez; detached mantıksal durum korunur; restore/cell cleanup çakışmaz. |
+| `VCD-11` | Tampon collider/geometri farkı | Görsel göçük fizik proxy tutarlılığıyla test edilir; beklenen sapma ve sınır yazılır. |
+| `VCD-12` | Performans ve video gözlemi | Spawn hitch, dynamic body sayısı, collider sayısı, frame p50/p95 ve bellek delta raporlanır; bütçeler ölçümle kararlaştırılır. |
+
+**Doğrulama komutları:** commit kaydıyla `npx tsc --noEmit`; ilgili motor testleri; `npm run build:verify`; izole editör/Play smoke (`npm run dev:smoke`, port 5273, asla 5173). **Hiçbiri bu belgeyi yazarken çalıştırılmadı.** Smoke, `Terrain` sahnesi yerine küçük ve hızlı bir fixture kullanmalıdır: headless 10 fps'te `Terrain` yüklemesi dakikalar sürüyor.
+
+**Kullanıcı onayı:** Otomatik testin geçmesi, sürüş hissi/hasar görünümü/kopma görsel kalitesinin kabul edildiği anlamına gelmez. Konsept formu kullanıcı tarafından **olduğu gibi korunmuştur**; ortografik ve 3B modelleme ayrı kabul kapısıdır.
+
+## 12. Teknik açık kararlar (kanon/kod kararı değil)
+
+| ID | Açık konu | Önerilen varsayılan | Kararı kim netleştirir? |
+|---|---|---|---|
+| `VCD-D01` | Parentten ayrılan node'un yeniden bağlanması / araç scene graph otoritesi | Canlı mesh reparent (A), aynı kaynak/reçete fallback (B) | Motor oturumu + kullanıcı kabulü |
+| `VCD-D02` | Vehicle part hasar JSON'unun nereye yazılması | `<Model>.deformable.json` + `normalizeAssetDeformable`; VM-1'de kesinleşir | Motor oturumu |
+| `VCD-D03` | Part-local/vehicle-local dent koordinat kaydı | `part-local` rest uzayı; source hash/version ile; eski kök uzayı kayıtları okunur | Motor oturumu / test |
+| `VCD-D04` | Parça ayrılınca chassis mass/inertia nasıl değişir | Tek kütle otoritesi; basit yaklaşım kullanılırsa açıkça belgelenir | Motor oturumu / fizik testleri |
+| `VCD-D05` | Parça kaynak collider'ını çıkarma | İlk sürümde collider proxy ayrımını ölç; geometri-korrelasyon kabulü testle | Motor oturumu |
+| `VCD-D06` | Detached parçanın save'de fiziksel pozu | İlk olarak logical; persistent debris ihtiyacı onayla açılır | Kullanıcı / GDD |
+| `VCD-D07` | Cam parçalama mimarisi | Node-seçimli fracture veya Blender'dan ayrık cam asset; camı bütün araç kaynağına bake etme | Motor oturumu + sanat |
+| `VCD-D08` | Kapı/kaput menteşe hareketi | Kopma/hasar ayrı; dinamik joint sonrası | Kullanıcı / öncelik |
+| `VCD-D09` | Kopmuş tekerlek ve aktarma bozulması | İlk dilim dışında; wheel visual + raycast mapping korunur | Kullanıcı / fizik |
+| `VCD-D12` | Kalıcı `vehicleInstanceId` kaynağı | `actor:${index}` kullanılmaz; aktöre kararlı kimlik eklenir veya mevcut bir kimlik kullanılır; VM-3 öncesi kesinleşir | Motor oturumu |
+
+**Kapanan kararlar:**
+
+| ID | Karar | Tarih / kaynak |
+|---|---|---|
+| `VCD-D10` | `Deformable` ve `Fracturable` eşikleri sahip bazlı tutulur; çözüldü | `bce53640` |
+| `VCD-D11` | Konsept form olduğu gibi kalır, özgünleştirilmez; ortografik ve 3B kabul ayrıdır | Kullanıcı, 2026-11-04 |
+| `VCD-D13` | Temel dokuda kalıcı vuruk olmaz; göçükleri runtime üretir | Kullanıcı, 2026-11-04 |
+| `VCD-D14` | `detach` önce Gaz-52'de, `RB-V-001` modellemesinden bağımsız yapılır | Kullanıcı, 2026-11-04 |
+
+## 13. Motor ve modelleme oturumlarına devredilecek işler
+
+### 13.1. Motor ilk uygulama görevi — VM-1
+
+> `main` üzerinde `CLAUDE.md`, `DEFORMABLE_FRACTURABLE_WORK_PLAN.md` Faz 7/8 ve bu belgenin v0.2 sürümünü oku. Faz 7 `Deformable` mevcuttur ve kırılmadan korunmalıdır; `detach` ve parça kavramı yoktur. VM-1'i yap: Gaz-52 için `door_left/right` ve `mirror_left/right` parçalarını veriyle tanımla, darbe noktasını collider yüzeyinden parçaya eşle, göçüğü yalnız seçili parçanın mesh'lerine uygula. `parts` tanımlamayan asset bugünkü gibi davranmalı. Yeni alanları mevcut normalizer'a ve maksimal teste ekle. VM-2 için yalnız arayüzün önünü açacak kadar tasarla, `detach` yazma. Küçük fixture ile smoke kur; `Terrain` sahnesini ve kullanıcının açık authoring dosyalarını değiştirme. Dilimleri ayrı commit'le ve kanıtını yaz.
+
+### 13.2. Blender ilk modelleme görevi
+
+> Ridgebound `RB-V-001 — Doruk K-180` tasarımını `Eskitilmiş Mavi Hizmet Kamyonu.png` formuna bağlı kalarak tek master `.blend` içinde kur. İlk teslimde ayrık `front_bumper`, `hood`, `windshield`, `doors`, `mirrors`, `bed`, `chassis` ve tekerlek düğümleri için kararlı `partId`, pivot ve geçici attachment referansları oluştur; metrik greybox ve ortografik ön/yan/arka/üst çıktıları hazırla. Forge kuralı +Y yukarı, +Z ileri, sağ −X, birim metredir. Temel dokuya kalıcı vuruk boyama; kabin içi ve parça kopunca açığa çıkacak yüzeyleri §3.1'e göre planla. Değişiklikleri script ile deterministik üret. Detaylı görünüm ve dent için tessellation, ilk importer smoke ve ölçü/profil kabulünü beklemeli. Tek ana GLB ver; ayrı tampon/ön cam GLB'sini yalnız PoC veya fracture tüketicisi gerekirse aynı kaynaktan dışa aktar.
+
+## 14. Öncelik, kapsam ve bağlantılar
+
+- Ridgebound ana tasarım çerçevesi **lojistik / izole dağ yerleşimleri**dir. Araçların hasarı oyunun ilerideki mekanikleri için önemlidir ama **M0 → M1 → M2 ilk oynanabilir tek araç / yük / rota kapsamı sessizce genişletilmez**.
+- İlk araç `RB-V-001 Doruk K-180` için sanat takip işleri `VEH-01` (genel form), `VEH-02` (parça breakdown) ve `VEH-03` (yük görünümleri) olarak ayrı durur.
+- Konsept kaydı: `RIDGEBOUND_ARAC_KONSEPT_LISTESI_VE_GORSEL_URETIM_PLANI.md` — [Drive](https://drive.google.com/file/d/1r9zYRTiXE4Sxca22UHrxtUkRsRYaO-0p/view).
+- Yönetim kuralları: `00_RIDGEBOUND_PROJE_YONETIM_KURALLARI.md` — [Drive](https://drive.google.com/file/d/1KujcbRwP0DP7krTwsZshgObeMUSzjv6I/view).
+- Ortak teknik devir: `FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN.md` §0.3 — [Drive](https://drive.google.com/file/d/1Z8rkqGMz5b46ONP1IW5Dosz5Ftajy87n/view).
+- Kaynak teknik planın mevcut örneği: bu oturuma eklenen `DEFORMABLE_FRACTURABLE_WORK_PLAN.md` (2026-11-04). Kanıtlar kaynak belgenin kendi commit ve test kayıtlarıdır; bu sözleşme yeni kanıt üretmez.
+
+## 15. Sürüm ve karar günlüğü
+
+| Tarih | Sürüm / ID | Kayıt | Statü |
+|---|---|---|---|
+| 2026-11-04 | `VCD-001` / v0.1 | Modüler GLB / Blender → Forge, iki eksenli parça durumu, `dent → detach` canlı mesh sürekliliği, collider/mass, save ve acceptance test sözleşmesi taslağı | **[ÖNERİ — ONAY BEKLİYOR]** |
+| 2026-11-04 | `VCD-002` / v0.2 | §1 canlı kodla güncellendi (Faz 7 ve r187 kapandı); kullanıcı kararları işlendi; motor hattı `VM-1…3` Gaz-52 için açıldı; görselden parça matrisi genişletildi; parça filtresi, collider yüzeyi, `ω × r`, kayıt uzayı ve aktör kimliği riskleri eklendi | **[YÖN ONAYLANDI — UYGULAMA BAŞLAMADI]** |
+
+**Devam protokolü:** VM-1 → VM-2 → VM-3 Gaz-52 üzerinde; `RB-V-001` modellemesi ayrı yürür ve hazır olunca VC-2…VC-4 ile bağlanır. Her aşama sonunda belge sürümü yükseltilir; Drive kopyası varsa **aynı dosya ID'sinde** güncellenir. Uygulama başka bir oturumda gerçekleştirilirse commit/fixture, test sonucunu ve açık riskleri bu belgenin yeni sürüm kaydına ekle.

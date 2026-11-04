@@ -87,6 +87,7 @@ import {
 import type { AssetManifest, AssetRecord } from "@engine/assets/manifest";
 import { loadForgeMaterial } from "@/scene/materialAssets";
 import { createForgeGltfLoader } from "@engine/render-three/gltfLoader";
+import { setFixedMatrix } from "@engine/render-three/transforms";
 import { repairMeshPaintTopology } from "@engine/scene/meshPaint";
 
 export interface StaticMeshEditorOptions {
@@ -1241,8 +1242,7 @@ export class StaticMeshEditor {
       if (!(object instanceof Mesh) || !object.geometry) return;
       const geometry = new EdgesGeometry(object.geometry);
       const line = new LineSegments(geometry, this.complexCollisionMaterial);
-      line.matrixAutoUpdate = false;
-      line.matrix.copy(object.matrixWorld);
+      setFixedMatrix(line, object.matrixWorld);
       line.renderOrder = 4;
       this.complexCollisionLines.push(line);
       this.complexCollisionGroup.add(line);

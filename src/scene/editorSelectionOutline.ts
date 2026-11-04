@@ -16,6 +16,7 @@ import { OutlinePass } from "three/examples/jsm/postprocessing/OutlinePass.js";
 import { clone as cloneSkeletonHierarchy } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 import { isRenderableMesh } from "@engine/render-three/materials";
+import { setFixedMatrix } from "@engine/render-three/transforms";
 import { tagSceneSource } from "./runtimeDebugSnapshot";
 import type { PostProcessPipeline } from "@engine/render-three/postProcess";
 
@@ -109,8 +110,7 @@ export class EditorSelectionOutline {
       if (!isRenderableMesh(object) || object.userData.forgeTerrain) return;
       const proxy = new Mesh(object.geometry, this.invisibleMaterial);
       proxy.name = `${object.name || "mesh"}-outline-proxy`;
-      proxy.matrix.copy(object.matrixWorld);
-      proxy.matrixAutoUpdate = false;
+      setFixedMatrix(proxy, object.matrixWorld);
       proxy.frustumCulled = false;
       proxy.castShadow = false;
       proxy.receiveShadow = false;

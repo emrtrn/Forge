@@ -349,6 +349,7 @@ import {
   colliderBoxFromBounds,
   composePlacementMatrix,
   composeTransformMatrix,
+  setFixedMatrix,
 } from "@engine/render-three/transforms";
 import type {
   LayoutActorInstance,
@@ -5625,8 +5626,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   ): Object3D {
     const object = gltf.scene.clone(true);
     object.name = `${assetId}-clone-${placementIndex}`;
-    object.matrix.copy(composePlacementMatrix(placement));
-    object.matrixAutoUpdate = false;
+    setFixedMatrix(object, composePlacementMatrix(placement));
     object.visible = !(placement.hidden ?? false);
     object.userData.assetId = assetId;
     object.userData.placementIndex = placementIndex;

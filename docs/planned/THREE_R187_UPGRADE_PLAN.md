@@ -1,6 +1,6 @@
 # Three.js r184 → r187 Yükseltme Planı
 
-> Durum: **planlandı, başlanmadı** (2026-11-03).
+> Durum: **uygulanıyor** (başlangıç 2026-11-04; planlama 2026-11-03).
 > Forge bugün `three@0.184.0` + `@types/three@^0.184.0` kullanıyor
 > (`package.json`). Hedef `three@0.187.0`; `@types/three@0.187.0` npm'de var.
 >
@@ -65,18 +65,18 @@ etmiyor), `Sky` `up` uniform'u (Forge set etmiyor), `PCFSoftShadowMap`
 
 Bugün de doğru olan, yükseltmeyi küçülten değişiklikler.
 
-- [ ] **0-1 (K4):** Elle `matrix` yazan ve `matrixAutoUpdate = false` yapan
-  her yerde `matrixWorldNeedsUpdate = true`. Önce placement kurulumu
-  (`RuntimeSceneApp`, `SceneApp` ×2), sonra kalan 18 `.matrix.copy/compose`
-  yeri tek tek gözden geçirilir. `vehicleModule.ts` ve `lakeWater.ts` zaten
-  doğru örnek.
-- [ ] **0-2 (K5):** Kendi `dispose()`'u olan Object3D alt sınıflarına
-  `super.dispose?.()` (r184'te metot yok, opsiyonel çağrı). r186'dan sonra
-  `?.` kaldırılır.
-- [ ] **0-3 (K2, K6):** `reflectionCapture.ts` koruma kontrolü hedef satırı
-  bulamazsa dev uyarısı basar. Chunk metnine tutunan tüm yamaların
-  hedeflerini `ShaderChunk`'ta arayan bir engine testi (`shaderChunkAnchors`)
-  eklenir; yükseltmede ilk kırılan bu test olur, sessiz bozulma kalmaz.
+- [x] **0-1 (K4):** Yalnız `matrixAutoUpdate = false` olan nesneler etkileniyor
+  (`updateMatrix()` bayrağı zaten kaldırıyor). Gerçek yer sayısı 8, 18 değil:
+  kalan eşleşmeler Object3D değil, özel `Matrix4` alanları
+  (`meshParticleEffect`, `riverPlanarReflection`, `riverWheelSurface`). Sekizi
+  tek yardımcıda toplandı: `setFixedMatrix` (`engine/render-three/transforms.ts`).
+- [ ] **0-2 (K5):** İptal, Faz 2'ye taşındı: `super.dispose?.()` r184 tiplerinde
+  derlenmiyor (metot yok); cast yazmak yerine r186'da doğrudan `super.dispose()`.
+- [x] **0-3 (K2, K6):** `reflectionCapture.ts` hedef bulamazsa bir kez uyarır.
+  `tests/engine/shaderChunkAnchors.test.ts` yamaların `#include` ve metin
+  hedeflerini `ShaderLib` / `ShaderChunk`'ta arar; yükseltmede ilk kırılan bu
+  test olur. Ek: `tests/smoke/reflection-capture.spec.ts` probe yamasını gerçekten
+  render edip pikselden doğrular (blend, yalnız-specular, parallax).
 - [ ] **0-4:** Görsel referans: yükseltme öncesi smoke ekran görüntüleri
   (su, göl, nehir, reflection capture, reversed-Z gölge, terrain) bir kez
   alınıp karşılaştırma için saklanır (repo dışında).
@@ -129,6 +129,12 @@ Bump → 0.187.0 sonrası derleme kırılır; bu faz tek dilimde kapanır.
   irradiance `ENVMAP_MAX_LOD`). Blend yolundaki `captureGlobalEnv`
   `samplerCube` olur. Parallax bloğu yön hesabına dokunduğu için aynen kalmalı;
   doğrulanır.
+  **r184'ten kalan hata, burada düzeltilir:** `captureGlobalEnv` probe'un
+  `CUBEUV_*` sabitleriyle okunuyor, gök capture'ı probe'dan farklı boyuttaysa
+  yanlış texel gelir ve probe içindeki diffuse söner (64 px probe + 256 px gökte
+  mavi kanal 0; ikisi 256 iken 0.986). r187'de `ENVMAP_MAX_LOD` de probe'un olur:
+  gök kendi LOD sayısıyla örneklenmeli. `reflection-capture.spec.ts` bu düzeltmede
+  uyumsuz boyutu da kapsar (bugün yalnız varsayılan 256 ile çalışıyor).
 - [ ] **3-5 `reflection.ts`:** `fromScene` dönüş tipi; `scene.environment`
   bağlama ve `userData.waterSkySunDirection` korunur.
 - [ ] **3-6 (K3) Reversed-Z bias:** `shadowDepthBias()` artık iki modda da
@@ -159,12 +165,15 @@ Bump → 0.187.0 sonrası derleme kırılır; bu faz tek dilimde kapanır.
 
 ## 4. Açık sorular (uygulamada kapanacak)
 
-1. r185 ve r186'da `envmap_physical_pars_fragment` tam olarak hangi satırları
-   değiştirdi? (Yalnız r187 kaynağı doğrulandı.) Faz 1 / 2'de kaynakla bakılır.
+1. **Kapandı.** r185 ve r186'da `envmap_physical_pars_fragment` yalnız yön
+   fonksiyonlarının adını değiştiriyor (`transformDirectionByInverseViewMatrix`,
+   `transformNormalByInverseViewMatrix`); `textureCubeUV` ve `ENVMAP_TYPE_CUBE_UV`
+   r187'ye kadar duruyor. r186 ayrıca retroreflective blok ekliyor.
 2. `roughnessToMip` ve `ENVMAP_MAX_LOD` su shader'ına include ile mi alınır,
    yoksa mip sayısı uniform'u mu gerekir? İki farklı boyuttaki (64 / 256)
    küp aynı shader'da örneklendiği için bu karar 3-1'i belirler.
-3. r187 PMREMGenerator küp çıktısını hangi `mapping` / işaretle veriyor?
-   3-2'deki geçerlilik kontrolü buna göre yazılır.
+3. **Kapandı.** r187 PMREM çıktısı `texture.isPMREMTexture === true` taşıyor
+   (`PMREMGenerator._allocateTarget`); three'nin kendisi de buna bakıyor. 3-2 bunu
+   kullanır. `envMapMaxLod` = mip sayısı − 1, program parametresi olarak geliyor.
 4. "Remove code deprecated in r177" (#34517) ve diğer "Remove deprecated code"
    PR'ları maddeleştirilmemiş. Bump sonrası `tsc` ne gösterirse o.

@@ -18,6 +18,19 @@ export function composePlacementMatrix(
   return composeTransformMatrix(placement.position, readRotation(placement), readScale(placement));
 }
 
+/**
+ * Pins an object to a hand-written local matrix. Three only recomputes the world
+ * matrix of a non-auto-updating object when `matrixWorldNeedsUpdate` is set, and
+ * since r185 that holds for `updateWorldMatrix()` too, which is what
+ * `Box3.setFromObject` and `getWorldPosition` call. Without the flag a query made
+ * before the first render reads the identity matrix: bounds at the world origin.
+ */
+export function setFixedMatrix(object: Object3D, matrix: Matrix4): void {
+  object.matrix.copy(matrix);
+  object.matrixAutoUpdate = false;
+  object.matrixWorldNeedsUpdate = true;
+}
+
 /** Builds an XYZ-order Euler from a degrees vector. */
 export function eulerDegrees(rotation: Vec3): Euler {
   return new Euler(

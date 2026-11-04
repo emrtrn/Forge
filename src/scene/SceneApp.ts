@@ -200,6 +200,7 @@ import {
   applyEulerDegrees,
   colliderBoxFromBounds,
   composePlacementMatrix,
+  setFixedMatrix,
 } from "@engine/render-three/transforms";
 import {
   collisionWireEntries,
@@ -4628,8 +4629,7 @@ export class SceneApp {
     placements.forEach((placement, placementIndex) => {
       const object = gltf.scene.clone(true);
       object.name = placement.name ?? `${baseLabel} ${placementIndex + 1}`;
-      object.matrix.copy(composePlacementMatrix(placement));
-      object.matrixAutoUpdate = false;
+      setFixedMatrix(object, composePlacementMatrix(placement));
       object.visible = !(placement.hidden ?? false);
       object.userData.assetId = assetId;
       object.userData.placementIndex = placementIndex;
@@ -4689,8 +4689,7 @@ export class SceneApp {
   ): Object3D {
     const object = gltf.scene.clone(true);
     object.name = `${assetId}-clone-${placementIndex}`;
-    object.matrix.copy(composePlacementMatrix(placement));
-    object.matrixAutoUpdate = false;
+    setFixedMatrix(object, composePlacementMatrix(placement));
     object.visible = !(placement.hidden ?? false);
     object.userData.assetId = assetId;
     object.userData.placementIndex = placementIndex;
@@ -15168,8 +15167,7 @@ export class SceneApp {
       helper.updateMatrixWorld(true);
       const proxy = new Mesh(this.captureOutlineGeometry, this.selectionOutline.getInvisibleMaterial());
       proxy.name = "reflection-capture-outline-proxy";
-      proxy.matrix.copy(helper.matrixWorld);
-      proxy.matrixAutoUpdate = false;
+      setFixedMatrix(proxy, helper.matrixWorld);
       proxy.frustumCulled = false;
       proxy.castShadow = false;
       proxy.receiveShadow = false;
@@ -15186,8 +15184,7 @@ export class SceneApp {
         this.selectionOutline.getInvisibleMaterial(),
       );
       proxy.name = "light-outline-proxy";
-      proxy.matrix.copy(record.root.matrixWorld);
-      proxy.matrixAutoUpdate = false;
+      setFixedMatrix(proxy, record.root.matrixWorld);
       proxy.frustumCulled = false;
       proxy.castShadow = false;
       proxy.receiveShadow = false;
@@ -15234,8 +15231,7 @@ export class SceneApp {
       if (!isRenderableMesh(object)) return;
       const proxy = new Mesh(object.geometry, outline.getInvisibleMaterial());
       proxy.name = `${object.name || "mesh"}-outline-proxy`;
-      proxy.matrix.copy(placementMatrix).multiply(object.matrixWorld);
-      proxy.matrixAutoUpdate = false;
+      setFixedMatrix(proxy, placementMatrix.clone().multiply(object.matrixWorld));
       proxy.frustumCulled = false;
       proxy.castShadow = false;
       proxy.receiveShadow = false;

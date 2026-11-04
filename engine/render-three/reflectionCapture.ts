@@ -345,6 +345,21 @@ const CAPTURE_GLOBAL_IRRADIANCE_LINE =
   "vec4 envMapColor = textureCubeUV( captureGlobalEnv, envMapRotation * worldNormal, 1.0 );\n" +
   "\t\t\tenvMapColor.rgb *= captureGlobalEnvIntensity / max( envMapIntensity, 0.0001 );";
 
+/**
+ * What the patch needs from three's shaders, public so an engine test can fail on a
+ * three upgrade instead of the probes quietly going back to a plain envMap.
+ */
+export const REFLECTION_CAPTURE_SHADER_ANCHORS = {
+  worldPositionInclude: CAPTURE_WORLDPOS_INCLUDE,
+  fragmentInclude: CAPTURE_FRAGMENT_INCLUDE,
+  reflectLine: CAPTURE_REFLECT_LINE,
+  envColorLine: CAPTURE_ENVCOLOR_LINE,
+  irradianceLine: CAPTURE_IRRADIANCE_LINE,
+} as const;
+
+/** Warned once: every probe material would repeat the same message. */
+let warnedMissingAnchor = false;
+
 /** Forwards the fragment world position the patch needs (parallax + blend score). */
 const CAPTURE_VERTEX_ASSIGN = `${CAPTURE_WORLDPOS_INCLUDE}\n\tvCaptureWorldPos = worldPosition.xyz;`;
 
@@ -409,7 +424,7 @@ const CAPTURE_BLEND_BLOCK = `
  * unexpanded at this point) `#include` directives, and forwards `worldPosition` from
  * the vertex stage. `customProgramCacheKey` encodes the active features so patched
  * programs do not collide. A no-op when neither feature is requested; degrades to a
- * plain envMap if the three.js shader anchors ever move.
+ * plain envMap, with one warning, if the three.js shader anchors ever move.
  */
 function installCaptureShaderPatch(
   material: MeshStandardMaterial,
@@ -449,6 +464,10 @@ function installCaptureShaderPatch(
         (!iblChunk.includes(CAPTURE_ENVCOLOR_LINE) ||
           !iblChunk.includes(CAPTURE_IRRADIANCE_LINE)))
     ) {
+      if (!warnedMissingAnchor) {
+        warnedMissingAnchor = true;
+        console.warn(`[reflection-capture] shader anchors not found on "${material.name || material.type}"; probe parallax and blend are off`);
+      }
       return;
     }
     shader.uniforms.captureProbePosition = { value: probePosition };

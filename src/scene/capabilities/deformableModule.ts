@@ -8,7 +8,10 @@
  * (`DentTarget`), the collider never changes, and a script can dent through the
  * `Deformable.Dent` message (kinematic bodies produce no impacts). A vehicle's
  * wheels stay rigid. A model with sidecar `parts` dents piece by piece: a hit
- * inside a part's zone stays on that part's meshes.
+ * inside a part's zone stays on that part's meshes, and a hard enough hit on a
+ * part with `detach` tears it off as a body of its own, dents included. The piece
+ * leaves at the speed of the spot it was on (`v + ω × r`); the object keeps its
+ * mass and collider, and a save does not know about it yet (contract VM-3).
  *
  * A dent list outlives the render object. Each frame the module compares a dented
  * object with what the shell renders now, so a World Partition cell that returns
@@ -17,12 +20,12 @@
  *
  * Off (module not registered, or no shell host), every object stays rigid.
  */
-import type { Mesh } from "three";
+import type { Mesh, Scene } from "three";
 
 import { assetPath, assetRecordById, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import type { AssetDeformableDef } from "@engine/physics/deformable/deformableTypes";
 import { dentDepthForImpulse, type Dent, type DentVec3 } from "@engine/physics/deformable/impactDeform";
-import { DentTarget, type DentOutcome } from "@engine/render-three/deformableMeshSync";
+import { DentTarget, type DentOutcome, type DetachedPiece } from "@engine/render-three/deformableMeshSync";
 import type { SavedDeformableState } from "@engine/persistence/saveGameState";
 import { readDeformableComponent, readRenderableMeshComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
@@ -46,6 +49,8 @@ export const DEFORMABLE_MODULE_ID = "deformable";
 export const DEFORMABLE_DENT_MESSAGE = "Deformable.Dent";
 /** Broadcast after a hit leaves or deepens a dent. */
 export const DEFORMABLE_DENTED_MESSAGE = "Deformable.Dented";
+/** Broadcast once when a part tears off: `{ entityId, part, pieceId, impulse, instigator? }`. */
+export const DEFORMABLE_PART_DETACHED_MESSAGE = "Deformable.PartDetached";
 const FRACTURE_BROKEN_MESSAGE = "Fracture.Broken";
 
 /**
@@ -56,6 +61,8 @@ const FRACTURE_BROKEN_MESSAGE = "Fracture.Broken";
 const HIT_EPISODE_SECONDS = 0.25;
 /** Fracture chunks are debris, not hits. */
 const FRACTURE_CHUNK_PREFIX = "fracture:";
+/** A torn-off part is debris too: it dents nothing, its own car included. */
+const DETACHED_PIECE_PREFIX = "detached:";
 /** Hits waiting for their frame; a pile-up past this is dropped. */
 const MAX_QUEUED_HITS = 16;
 
@@ -104,6 +111,10 @@ export function createDeformableModule(): CapabilityModule {
   const entries = new Map<string, DentEntry>();
   /** Object → part → its running collision; "" = the body. */
   const episodes = new Map<string, Map<string, { startedAt: number; depth: number }>>();
+  /** Torn-off parts by body id; they live until the level ends (VM-3 adds a budget). */
+  const pieces = new Map<string, DetachedPiece>();
+  let pieceSerial = 0;
+  let scene: Scene | null = null;
   /** Sidecars already reported for parts that match no mesh. */
   const reportedParts = new WeakSet<AssetDeformableDef>();
   const queue: QueuedHit[] = [];
@@ -177,25 +188,79 @@ export function createDeformableModule(): CapabilityModule {
     }
     const part = entry.target.partAt(hit.point, hit.direction, source.def.radius);
     const depth = newDepth(hit.entityId, part, source.def, hit.impulse);
-    if (depth <= 0) return;
     entries.set(hit.entityId, entry);
+    if (depth > 0) dent(hit, source.def, entry.target, depth);
+    // After the dent, so this hit's mark leaves with the part.
+    if (part) tearOff(hit, source.def, entry.target, part);
+  };
+
+  const dent = (hit: QueuedHit, def: AssetDeformableDef, target: DentTarget, depth: number): void => {
     const started = performance.now();
-    const outcome = entry.target.hit(hit.point, hit.direction, depth, source.def);
+    const outcome = target.hit(hit.point, hit.direction, depth, def);
     lastDentMs = performance.now() - started;
     countOutcome(outcome);
-    const unmatched = entry.target.unmatchedParts();
-    if (unmatched.length > 0 && !reportedParts.has(source.def)) {
-      reportedParts.add(source.def);
+    const unmatched = target.unmatchedParts();
+    if (unmatched.length > 0 && !reportedParts.has(def)) {
+      reportedParts.add(def);
       console.warn(`[deformable] parts with no matching mesh, hits fall back to the body: ${unmatched.join(", ")}`);
     }
     if (outcome !== "dented") return;
-    const landed = entry.target.lastPart;
+    const landed = target.lastPart;
     services?.resolve(scriptMessageBusService)?.emit(DEFORMABLE_DENTED_MESSAGE, hit.entityId, {
       entityId: hit.entityId,
       ...(hit.instigator ? { instigator: hit.instigator } : {}),
       ...(landed ? { part: landed } : {}),
       impulse: hit.impulse,
       depth,
+    });
+  };
+
+  /** Gives a part a body of its own if this hit was hard enough; a part goes only once. */
+  const tearOff = (hit: QueuedHit, def: AssetDeformableDef, target: DentTarget, partId: string): void => {
+    const detach = def.parts?.find((part) => part.id === partId)?.detach;
+    if (!detach || hit.impulse < detach.impulse || !host || !scene) return;
+    const piece = target.detachPart(partId);
+    if (!piece) return;
+    const pieceId = `${DETACHED_PIECE_PREFIX}${hit.entityId}:${partId}:${pieceSerial++}`;
+    host.physics.addEntities([{
+      id: pieceId,
+      components: {
+        // Colliders are pre-scaled (physics never applies Transform.scale).
+        Transform: { position: [...piece.position], rotation: [...piece.rotation], scale: [1, 1, 1] },
+        Collider: {
+          shape: "box",
+          size: [1, 1, 1],
+          isStatic: false,
+          isSensor: false,
+          simulatePhysics: true,
+          massKg: detach.massKg,
+          primitives: [{ shape: "convex", size: [1, 1, 1], points: piece.hull.map((point) => [...point]) }],
+        },
+      },
+    } as unknown as Entity]);
+    // It starts inside the object's collider.
+    host.physics.passThroughUntilApart(pieceId, hit.entityId);
+    // The solver already took the hit off the object, so its velocity is the one
+    // after impact; a further impulse here would count the crash twice.
+    const velocity = host.physics.pointVelocity(hit.entityId, piece.position) ?? [0, 0, 0];
+    host.physics.setBodyVelocity(
+      pieceId,
+      [
+        velocity[0] + piece.outward[0] * detach.kick,
+        velocity[1] + piece.outward[1] * detach.kick,
+        velocity[2] + piece.outward[2] * detach.kick,
+      ],
+      host.physics.angularVelocityOf(hit.entityId) ?? [0, 0, 0],
+    );
+    scene.add(piece.object);
+    host.attachDynamicObject(pieceId, piece.object);
+    pieces.set(pieceId, piece);
+    services?.resolve(scriptMessageBusService)?.emit(DEFORMABLE_PART_DETACHED_MESSAGE, hit.entityId, {
+      entityId: hit.entityId,
+      part: partId,
+      pieceId,
+      impulse: hit.impulse,
+      ...(hit.instigator ? { instigator: hit.instigator } : {}),
     });
   };
 
@@ -290,8 +355,20 @@ export function createDeformableModule(): CapabilityModule {
     }));
   };
 
+  const removePieces = (): void => {
+    if (pieces.size === 0) return;
+    host?.physics.removeEntities([...pieces.keys()]);
+    for (const [id, piece] of pieces) {
+      host?.attachDynamicObject(id, null);
+      piece.object.removeFromParent();
+      piece.dispose();
+    }
+    pieces.clear();
+  };
+
   const teardown = (): void => {
     generation += 1;
+    removePieces();
     // An actor that streamed out has dents and no source.
     for (const id of new Set([...sources.keys(), ...entries.keys()])) forget(id);
     for (const unsubscribe of unsubscribes.splice(0)) unsubscribe();
@@ -318,7 +395,7 @@ export function createDeformableModule(): CapabilityModule {
             if (count > 0) dented += 1;
             dents += count;
           }
-          return { deformable: sources.size, dented, dents, missed, skipped, lastDentMs };
+          return { deformable: sources.size, dented, dents, missed, skipped, lastDentMs, detached: pieces.size };
         },
         captureState,
         restoreState,
@@ -345,6 +422,7 @@ export function createDeformableModule(): CapabilityModule {
       const hostRef = levelContext.resolve(deformableHostService);
       if (!hostRef) return;
       host = hostRef;
+      scene = levelContext.scene;
       for (const group of levelContext.layout.instances) {
         const def = hostRef.deformableDef(group.assetId);
         if (!def) continue;
@@ -371,6 +449,7 @@ export function createDeformableModule(): CapabilityModule {
       teardown();
       pendingRestore.clear();
       host = null;
+      scene = null;
     },
 
     update(deltaSeconds) {
@@ -381,7 +460,7 @@ export function createDeformableModule(): CapabilityModule {
         for (const [entityId, other, sign] of [[impact.a, impact.b, -1], [impact.b, impact.a, 1]] as const) {
           const source = sources.get(entityId);
           if (!source || impact.impulse < source.def.dentImpulse || !impact.point) continue;
-          if (other.startsWith(FRACTURE_CHUNK_PREFIX)) continue;
+          if (other.startsWith(FRACTURE_CHUNK_PREFIX) || other.startsWith(DETACHED_PIECE_PREFIX)) continue;
           enqueue({
             entityId,
             point: impact.point,
@@ -398,6 +477,7 @@ export function createDeformableModule(): CapabilityModule {
     dispose() {
       teardown();
       host = null;
+      scene = null;
       services = null;
     },
   };

@@ -43,6 +43,30 @@ const twoPieceObject = (): { root: Group; body: Mesh; door: Mesh } => {
   return { root, body, door };
 };
 
+const worldPoint = (root: Object3D, point: DentVec3): DentVec3 => {
+  root.updateWorldMatrix(true, false);
+  const value = new Vector3(...point).applyMatrix4(root.matrixWorld);
+  return [value.x, value.y, value.z];
+};
+
+const worldDirection = (root: Object3D, direction: DentVec3): DentVec3 => {
+  root.updateWorldMatrix(true, false);
+  const value = new Vector3(...direction).transformDirection(root.matrixWorld);
+  return [value.x, value.y, value.z];
+};
+
+const worldVertices = (mesh: Mesh): number[] => {
+  mesh.updateWorldMatrix(true, false);
+  const position = mesh.geometry.getAttribute("position");
+  const vertex = new Vector3();
+  const values: number[] = [];
+  for (let index = 0; index < position.count; index += 1) {
+    vertex.fromBufferAttribute(position, index).applyMatrix4(mesh.matrixWorld);
+    values.push(vertex.x, vertex.y, vertex.z);
+  }
+  return values;
+};
+
 const DOOR_PART: DentPart = { id: "door", nodes: ["Door"], zone: { min: [0, -2, -1], max: [4, 2, 1] } };
 
 /** Deepest world-space push of a mesh below the plane its rest geometry lies in. */
@@ -163,6 +187,74 @@ export function registerDeformableMeshSyncTests(check: (label: string, run: () =
     new DentTarget(replayed.root, { parts: [DOOR_PART] }).restore(target.dentList, params);
     assert.deepEqual(positionsOf(replayed.door.geometry), positionsOf(live.door.geometry));
     assert.deepEqual(positionsOf(replayed.body.geometry), positionsOf(live.body.geometry));
+  });
+
+  check("deformable mesh: a detached part keeps its dented shape and its world pose", () => {
+    const car = twoPieceObject();
+    car.root.position.set(10, 1, -3);
+    car.root.rotation.y = Math.PI / 2;
+    const target = new DentTarget(car.root, { parts: [DOOR_PART] });
+    target.hit(worldPoint(car.root, [1, 0, 0.1]), worldDirection(car.root, INTO), 0.1, params);
+    car.root.updateWorldMatrix(true, true);
+    const before = worldVertices(car.door);
+    const dentedGeometry = car.door.geometry;
+
+    const piece = target.detachPart("door")!;
+    assert.equal(car.door.geometry, dentedGeometry, "the live mesh leaves, not a clean copy");
+    assert.notEqual(car.door.parent!.parent, car.root);
+    assert.equal(car.door.parent!.parent, piece.object);
+    piece.object.updateMatrixWorld(true);
+    worldVertices(car.door).forEach((value, index) => assert.ok(Math.abs(value - before[index]!) < 1e-5, `vertex value ${index}`));
+  });
+
+  check("deformable mesh: a detached part's box, pose and outward direction", () => {
+    const car = twoPieceObject();
+    car.root.position.set(10, 1, -3);
+    car.root.rotation.y = Math.PI / 2;
+    const piece = new DentTarget(car.root, { parts: [DOOR_PART] }).detachPart("door")!;
+    // The door spans x 0..4 at z = 0; a quarter turn sends local +X to world -Z.
+    assert.ok(Math.abs(piece.position[0] - 10) < 1e-5 && Math.abs(piece.position[1] - 1) < 1e-5 && Math.abs(piece.position[2] - -5) < 1e-5, String(piece.position));
+    assert.ok(Math.abs(piece.rotation[1] - 90) < 1e-4);
+    assert.ok(Math.abs(piece.outward[2] - -1) < 1e-5 && Math.abs(piece.outward[0]) < 1e-5, String(piece.outward));
+    assert.equal(piece.hull.length, 8);
+    assert.deepEqual(new Set(piece.hull.map((corner) => Math.round(Math.abs(corner[0]) * 1000))), new Set([2000]));
+    assert.deepEqual(new Set(piece.hull.map((corner) => Math.round(Math.abs(corner[1]) * 1000))), new Set([2000]));
+  });
+
+  check("deformable mesh: a detached part goes once, then hits land on what is left", () => {
+    const car = twoPieceObject();
+    const target = new DentTarget(car.root, { parts: [DOOR_PART] });
+    const piece = target.detachPart("door")!;
+    const doorGeometry = car.door.geometry;
+    assert.equal(target.detachPart("door"), null);
+    assert.deepEqual(target.unmatchedParts(), [], "a part that left is not a broken sidecar");
+    assert.equal(target.hit([0.1, 0, 0.1], INTO, 0.1, params), "dented");
+    assert.equal(target.lastPart, null);
+    assert.equal(car.door.geometry, doorGeometry);
+    target.dispose();
+    assert.equal(car.door.geometry, doorGeometry, "the piece's mesh is no longer the target's");
+    piece.dispose();
+  });
+
+  check("deformable mesh: a piece frees the dented copy, never the shared model", () => {
+    const shared = twoPieceObject();
+    const target = new DentTarget(shared.root, { parts: [DOOR_PART] });
+    const original = shared.door.geometry;
+    let freed = 0;
+    original.addEventListener("dispose", () => { freed += 1; });
+    target.hit([1, 0, 0.1], INTO, 0.1, params);
+    let copyFreed = 0;
+    shared.door.geometry.addEventListener("dispose", () => { copyFreed += 1; });
+    target.detachPart("door")!.dispose();
+    assert.equal(copyFreed, 1);
+    assert.equal(freed, 0);
+
+    const undented = twoPieceObject();
+    const clean = new DentTarget(undented.root, { parts: [DOOR_PART] });
+    let cleanFreed = 0;
+    undented.door.geometry.addEventListener("dispose", () => { cleanFreed += 1; });
+    clean.detachPart("door")!.dispose();
+    assert.equal(cleanFreed, 0);
   });
 
   check("deformable mesh: a saved dent of a removed part stays on the body", () => {

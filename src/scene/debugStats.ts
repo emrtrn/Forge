@@ -500,10 +500,11 @@ function fractureText(app: RuntimeStatsApp): string {
 ${formatFractureDebug(snapshot)}` : "";
 }
 
-/** `deform: objects 2 dented 1 dents 3 missed 0 skipped 0 last 0.42 ms` (smoke tests parse it); "" with nothing deformable. */
+/** `deform: objects 2 dented 1 dents 3 missed 0 skipped 0 last 0.42 ms detached 1` (smoke tests parse it); "" with nothing deformable. */
 export function formatDeformableDebug(snapshot: DeformableDebugSnapshot): string {
   return `deform: objects ${snapshot.deformable} dented ${snapshot.dented} dents ${snapshot.dents}`
-    + ` missed ${snapshot.missed} skipped ${snapshot.skipped} last ${snapshot.lastDentMs.toFixed(2)} ms`;
+    + ` missed ${snapshot.missed} skipped ${snapshot.skipped} last ${snapshot.lastDentMs.toFixed(2)} ms`
+    + (snapshot.detached > 0 ? ` detached ${snapshot.detached}` : "");
 }
 
 function deformableText(app: RuntimeStatsApp): string {

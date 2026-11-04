@@ -1618,6 +1618,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         setImpactEventThreshold: (entityId, minImpulse) =>
           this.physicsSubsystem.setImpactEventThreshold(entityId, minImpulse, "deformable"),
         impacts: () => this.physicsSubsystem.impacts(),
+        addEntities: (entities) => this.physicsSubsystem.addEntities(entities),
+        removeEntities: (entityIds) => this.physicsSubsystem.removeEntities(entityIds),
+        pointVelocity: (entityId, point) => this.physicsSubsystem.pointVelocity(entityId, point),
+        angularVelocityOf: (entityId) => this.physicsSubsystem.angularVelocityOf(entityId),
+        setBodyVelocity: (entityId, linear, angular) => this.physicsSubsystem.setBodyVelocity(entityId, linear, angular),
+        passThroughUntilApart: (entityId, other) => this.physicsSubsystem.passThroughUntilApart(entityId, other),
+      },
+      attachDynamicObject: (entityId, object) => {
+        if (object) this.dynamicRenderObjects.set(entityId, object);
+        else this.dynamicRenderObjects.delete(entityId);
       },
       deformableDef: (assetId) => this.deformableDefs.get(assetId) ?? null,
       dentsPerFrame: () => this.qualitySettings.deformableDentsPerFrame,

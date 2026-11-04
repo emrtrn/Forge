@@ -411,7 +411,21 @@ export interface DeformableHost {
     setImpactEventThreshold(entityId: string, minImpulse: number | null): void;
     /** The latest frame's impacts (all opted-in pairs). */
     impacts(): readonly PhysicsImpact[];
+    addEntities(entities: readonly Entity[]): number;
+    removeEntities(entityIds: readonly string[]): void;
+    /** World velocity of a point carried by the body; null = it does not simulate. */
+    pointVelocity(entityId: string, point: readonly [number, number, number]): readonly [number, number, number] | null;
+    angularVelocityOf(entityId: string): readonly [number, number, number] | null;
+    setBodyVelocity(
+      entityId: string,
+      linear: readonly [number, number, number],
+      angular: readonly [number, number, number],
+    ): void;
+    /** The two pass through each other until they are apart. */
+    passThroughUntilApart(entityId: string, other: string): void;
   };
+  /** Renders `object` at the entity's interpolated physics pose (null detaches). */
+  attachDynamicObject(entityId: string, object: Object3D | null): void;
   /** The enabled sidecar of a placed asset, loaded with the level; null = rigid. */
   deformableDef(assetId: string): AssetDeformableDef | null;
   /** What renders the entity now: an actor's object or a placement's clone; null while unbuilt. */
@@ -437,6 +451,8 @@ export interface DeformableDebugSnapshot {
   readonly skipped: number;
   /** Time of the last dent, ms. */
   readonly lastDentMs: number;
+  /** Parts torn off and loose in the level. */
+  readonly detached: number;
 }
 
 /** The debug readout. Provided by: `deformableModule`. */

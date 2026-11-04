@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  DEFORMABLE_DEFAULTS, DEFORMABLE_LIMITS, DEFORMABLE_MAX_PARTS, createAssetDeformable, deformableSidecarPath, normalizeAssetDeformable,
+  DEFORMABLE_DEFAULTS, DEFORMABLE_DETACH_LIMITS, DEFORMABLE_LIMITS, DEFORMABLE_MAX_PARTS, createAssetDeformable, deformableSidecarPath, normalizeAssetDeformable,
   type AssetDeformableDef,
 } from "../../engine/physics/deformable/deformableTypes";
 import { validateSaveDeformablePayload } from "../../tools/saveValidator";
@@ -9,7 +9,10 @@ import { collectDroppedFields } from "../../tools/droppedFields";
 const maximal: AssetDeformableDef = {
   version: 1, enabled: false, mode: "impact", dentImpulse: 500000, fullImpulse: 2000000,
   radius: 10, maxDepth: 2, plasticity: 1, maxDents: 64, collisionPolicy: "visual_only",
-  parts: [{ id: "door_left", nodes: ["Door_L", "Door_L_Trim"], zone: { min: [0.7, 0.4, -0.6], max: [1.3, 2.6, 0.45] } }],
+  parts: [{
+    id: "door_left", nodes: ["Door_L", "Door_L_Trim"], zone: { min: [0.7, 0.4, -0.6], max: [1.3, 2.6, 0.45] },
+    detach: { impulse: 1000000, massKg: 100000, kick: 50 },
+  }],
 };
 
 /** Registers deformable sidecar normalization and save allowlist checks. */
@@ -66,6 +69,18 @@ export function registerDeformableAssetTests(check: (label: string, run: () => v
     const sent = { ...maximal, parts: [{ ...good, futureField: 1 }] };
     const saved = validateSaveDeformablePayload({ path: "assets/Panel.deformable.json", deformable: sent });
     assert.deepEqual(collectDroppedFields(sent, saved.deformable).paths, ["parts[0].futureField"]);
+  });
+
+  check("deformable asset: a part's detach needs an impulse and stays in bounds", () => {
+    const part = { id: "door", nodes: ["Door"], zone: { min: [0, 0, 0], max: [1, 1, 1] } };
+    const read = (detach: unknown) => normalizeAssetDeformable({ parts: [{ ...part, detach }] })!.parts![0]!.detach;
+    assert.deepEqual(read({ impulse: 500 }), { impulse: 500, massKg: 20, kick: 1 });
+    assert.deepEqual(read({ impulse: -1, massKg: 0, kick: 99 }), {
+      impulse: 0, massKg: DEFORMABLE_DETACH_LIMITS.massKg[0], kick: DEFORMABLE_DETACH_LIMITS.kick[1],
+    });
+    for (const broken of [{ massKg: 5 }, { impulse: "hard" }, { impulse: Number.NaN }, null, 3, []]) {
+      assert.equal(read(broken), undefined, "the part stays, it just never tears off");
+    }
   });
 
   check("deformable asset: the sidecar sits beside its model", () => {

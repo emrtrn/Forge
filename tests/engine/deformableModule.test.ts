@@ -83,6 +83,11 @@ function harness(
 ) {
   const services = createRuntimeServiceHost({ syncEntityTransform: () => {} });
   const thresholds = new Map<string, number>();
+  const bodies = new Map<string, Entity>();
+  const velocities = new Map<string, { linear: readonly number[]; angular: readonly number[] }>();
+  const passing: [string, string][] = [];
+  const dynamicObjects = new Map<string, Object3D>();
+  const scene = new Scene();
   const impacts: PhysicsImpact[] = [];
   const objects = new Map<string, Object3D | null>();
   const fractured = new Set<string>();
@@ -93,6 +98,26 @@ function harness(
         else thresholds.set(id, threshold);
       },
       impacts: () => impacts,
+      addEntities(entities) {
+        for (const entity of entities) bodies.set(entity.id, entity);
+        return entities.length;
+      },
+      removeEntities(entityIds) {
+        for (const id of entityIds) bodies.delete(id);
+      },
+      // The source moves at 3 m/s along +X, turning about +Y at 2 rad/s around the origin.
+      pointVelocity: (_id, point) => [3 + 2 * point[2], 0, -2 * point[0]],
+      angularVelocityOf: () => [0, 2, 0],
+      setBodyVelocity(id, linear, angular) {
+        velocities.set(id, { linear, angular });
+      },
+      passThroughUntilApart(id, other) {
+        passing.push([id, other]);
+      },
+    },
+    attachDynamicObject(id, object) {
+      if (object) dynamicObjects.set(id, object);
+      else dynamicObjects.delete(id);
     },
     deformableDef: (assetId) => assetId === ASSET_ID ? { ...createAssetDeformable(), ...TEST_DEF, ...defPatch } : null,
     renderObject: (id) => objects.get(id) ?? null,
@@ -116,7 +141,7 @@ function harness(
   const context = createRuntimeContext({
     mode: "runtime",
     levelPath: "layouts/deformable-test.level.json",
-    scene: new Scene(),
+    scene,
     camera: new PerspectiveCamera(),
     engineApp: {} as unknown as EngineApp,
     assetLoader: {} as unknown as AssetLoader,
@@ -132,6 +157,7 @@ function harness(
   objects.set(second, panelObject());
   return {
     module, services, loaded, commands, thresholds, impacts, objects, fractured, sent, send, first, second,
+    bodies, velocities, passing, dynamicObjects, scene,
     /** One frame with `list` as its impacts. */
     frame(list: PhysicsImpact[] = [], seconds = DT) {
       impacts.length = 0;
@@ -171,7 +197,7 @@ export function registerDeformableModuleTests(check: (label: string, run: () => 
     assert.equal(geometryOf(test.objects.get(test.second)!), shared);
     assert.deepEqual(
       { ...test.commands.snapshot(), lastDentMs: 0 },
-      { deformable: 2, dented: 1, dents: 1, missed: 0, skipped: 0, lastDentMs: 0 },
+      { deformable: 2, dented: 1, dents: 1, missed: 0, skipped: 0, lastDentMs: 0, detached: 0 },
     );
     const message = test.sent.find((item) => item.topic === "Deformable.Dented");
     assert.equal(message?.target, test.first);
@@ -230,6 +256,88 @@ export function registerDeformableModuleTests(check: (label: string, run: () => 
     assert.equal(test.commands.snapshot().dents, 2);
     const saved = test.commands.captureState();
     assert.deepEqual(saved[0]!.dents.map((dent) => dent.part), ["door", undefined]);
+    test.module.dispose!();
+  });
+
+  check("deformable module: a hard hit tears a part off once, at the speed of the spot it was on", () => {
+    const parts: AssetDeformablePart[] = [{
+      id: "door", nodes: ["Door"], zone: { min: [0, -2, -1], max: [4, 2, 1] },
+      detach: { impulse: 800, massKg: 40, kick: 1.5 },
+    }];
+    const test = harness(undefined, undefined, undefined, { parts });
+    const { root, door } = partedObject();
+    test.objects.set(test.first, root);
+    const onDoor = (impulse: number): PhysicsImpact => ({ ...hitOn(test.first, impulse), point: [1, 0, 0.05] });
+
+    test.frame([onDoor(700)]);
+    assert.equal(test.bodies.size, 0, "a dent, but not hard enough to tear it off");
+    assert.equal(door.parent!.parent, root);
+    const dented = door.geometry;
+
+    test.frame([], 0.3);
+    test.frame([onDoor(900)]);
+    assert.equal(door.geometry, dented, "the dented mesh leaves, not a clean one");
+    assert.notEqual(door.parent!.parent, root);
+    assert.equal(test.commands.snapshot().detached, 1);
+    assert.equal(test.commands.snapshot().dents, 1, "the second hit deepened the same dent before it left");
+
+    assert.equal(test.bodies.size, 1);
+    const [pieceId, body] = [...test.bodies][0]!;
+    assert.ok(pieceId.startsWith(`detached:${test.first}:door:`));
+    const collider = body.components.Collider as unknown as { massKg: number; simulatePhysics: boolean; primitives: { points: unknown[] }[] };
+    assert.equal(collider.massKg, 40);
+    assert.equal(collider.simulatePhysics, true);
+    assert.equal(collider.primitives[0]!.points.length, 8);
+    assert.deepEqual(test.passing, [[pieceId, test.first]]);
+    assert.equal(test.dynamicObjects.has(pieceId), true);
+    assert.equal(test.dynamicObjects.get(pieceId)!.parent, test.scene);
+
+    // The fake source's spot velocity at the piece's centre, plus the kick away from the object.
+    const { linear, angular } = test.velocities.get(pieceId)!;
+    const [x, , z] = (body.components.Transform as unknown as { position: [number, number, number] }).position;
+    const length = Math.hypot(x, z);
+    assert.ok(Math.abs(linear[0]! - (3 + 2 * z + 1.5 * x / length)) < 1e-5, String(linear));
+    assert.ok(Math.abs(linear[2]! - (-2 * x + 1.5 * z / length)) < 1e-5, String(linear));
+    assert.equal(linear[1], 0);
+    assert.deepEqual(angular, [0, 2, 0]);
+    const message = test.sent.filter((item) => item.topic === "Deformable.PartDetached");
+    assert.equal(message.length, 1);
+    assert.deepEqual(message[0]!.payload, { entityId: test.first, part: "door", pieceId, impulse: 900, instigator: "car" });
+
+    test.frame([], 0.3);
+    test.frame([onDoor(5000)]);
+    test.frame([onDoor(5000), onDoor(5000)]);
+    assert.equal(test.bodies.size, 1, "a part goes only once");
+    assert.equal(test.sent.filter((item) => item.topic === "Deformable.PartDetached").length, 1);
+    test.module.dispose!();
+    assert.equal(test.bodies.size, 0, "the level end takes the piece away");
+    assert.equal(test.dynamicObjects.size, 0);
+    assert.equal(test.scene.children.length, 0);
+  });
+
+  check("deformable module: a piece hitting its own car leaves no dent, one hit can dent and tear", () => {
+    const parts: AssetDeformablePart[] = [{ id: "door", nodes: ["Door"], zone: { min: [0, -2, -1], max: [4, 2, 1] }, detach: { impulse: 800, massKg: 40, kick: 0 } }];
+    const test = harness(undefined, undefined, undefined, { parts });
+    const { root, door } = partedObject();
+    test.objects.set(test.first, root);
+    const shared = door.geometry;
+    test.frame([{ ...hitOn(test.first, 900), point: [1, 0, 0.05] }]);
+    assert.notEqual(door.geometry, shared, "the tearing hit left its dent on the part first");
+    const dents = test.commands.snapshot().dents;
+    test.frame([], 0.3);
+    test.frame([{ ...hitOn(test.first, 900, "detached:other:door:0"), point: [-1, 0, 0.05] }]);
+    assert.equal(test.commands.snapshot().dents, dents);
+    test.module.dispose!();
+  });
+
+  check("deformable module: a part without detach stays on, however hard the hit", () => {
+    const parts: AssetDeformablePart[] = [{ id: "door", nodes: ["Door"], zone: { min: [0, -2, -1], max: [4, 2, 1] } }];
+    const test = harness(undefined, undefined, undefined, { parts });
+    const { root, door } = partedObject();
+    test.objects.set(test.first, root);
+    test.frame([{ ...hitOn(test.first, 100000), point: [1, 0, 0.05] }]);
+    assert.equal(test.bodies.size, 0);
+    assert.equal(door.parent!.parent, root);
     test.module.dispose!();
   });
 

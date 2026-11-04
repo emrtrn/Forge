@@ -9,7 +9,8 @@
  *
  * `parts` splits a model into pieces that take their own dents (a car's doors).
  * A hit inside a part's zone lands on that part's meshes alone; every mesh outside
- * the parts is the body. A model without parts dents as one surface.
+ * the parts is the body. A model without parts dents as one surface. A part with
+ * `detach` tears off under a hard enough hit and carries its dents with it.
  */
 
 /** Current deformable sidecar version. */
@@ -26,6 +27,16 @@ export interface DeformablePartZone {
   max: DeformableVec3;
 }
 
+/** How a part tears off its object. */
+export interface DeformablePartDetach {
+  /** A hit on the part at least this hard tears it off, N·s. */
+  impulse: number;
+  /** Mass of the loose piece, kg. The object keeps its own mass. */
+  massKg: number;
+  /** Speed added away from the object when it tears off, m/s. */
+  kick: number;
+}
+
 /** A separately denting piece of a model. */
 export interface AssetDeformablePart {
   /** Unique in the model and stable across model revisions. */
@@ -38,6 +49,8 @@ export interface AssetDeformablePart {
    * point. On a car that surface can be a wider panel than the part itself.
    */
   zone: DeformablePartZone;
+  /** Omitted: the part stays on, however hard the hit. */
+  detach?: DeformablePartDetach;
 }
 
 export interface AssetDeformableDef {
@@ -72,6 +85,15 @@ export const DEFORMABLE_LIMITS = {
   maxDents: [1, 64],
 } as const;
 
+export const DEFORMABLE_DETACH_LIMITS = {
+  impulse: [0, 1000000],
+  massKg: [0.1, 100000],
+  kick: [0, 50],
+} as const;
+
+/** Starting values of a part's `detach` for the fields a sidecar leaves out. */
+const DETACH_DEFAULTS = { massKg: 20, kick: 1 } as const;
+
 /** Defaults of a new sidecar; starting values, not measured ones. */
 export const DEFORMABLE_DEFAULTS: Readonly<AssetDeformableDef> = {
   version: DEFORMABLE_ASSET_VERSION,
@@ -103,6 +125,18 @@ function readVec3(value: unknown): DeformableVec3 | null {
     : null;
 }
 
+/** `impulse` is the one required field: without it nothing would ever tear off. */
+function normalizeDetach(value: unknown): DeformablePartDetach | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  if (typeof input.impulse !== "number" || !Number.isFinite(input.impulse)) return null;
+  return {
+    impulse: bounded(input.impulse, 0, DEFORMABLE_DETACH_LIMITS.impulse),
+    massKg: bounded(input.massKg, DETACH_DEFAULTS.massKg, DEFORMABLE_DETACH_LIMITS.massKg),
+    kick: bounded(input.kick, DETACH_DEFAULTS.kick, DEFORMABLE_DETACH_LIMITS.kick),
+  };
+}
+
 function normalizePart(value: unknown): AssetDeformablePart | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
@@ -115,7 +149,8 @@ function normalizePart(value: unknown): AssetDeformablePart | null {
   const max = readVec3(zone?.max);
   if (!id || nodes.length === 0 || !min || !max) return null;
   if (min[0] > max[0] || min[1] > max[1] || min[2] > max[2]) return null;
-  return { id, nodes, zone: { min, max } };
+  const detach = normalizeDetach(input.detach);
+  return { id, nodes, zone: { min, max }, ...(detach ? { detach } : {}) };
 }
 
 /** Valid parts only, the first of a repeated id wins. */

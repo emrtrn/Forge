@@ -11,12 +11,17 @@
  *   on a quantized mesh whose node matrix carries a large scale.
  * - A model with parts dents piece by piece: a hit in a part's zone only touches
  *   that part's meshes. If it finds no surface there it lands on the body.
+ * - A part that tears off moves as it is: its live nodes change parent, so the
+ *   dents, materials and world pose carry over. Nothing is swapped for a clean copy.
  */
 import {
   BufferGeometry,
+  Euler,
   Float32BufferAttribute,
+  Group,
   Matrix3,
   Matrix4,
+  Quaternion,
   Vector3,
   type BufferAttribute,
   type InterleavedBufferAttribute,
@@ -42,6 +47,22 @@ import {
 const DEFORM_CLONE_FLAG = "forgeDeformClone";
 /** A mesh-paint clone already belongs to its placement and is freed with it. */
 const MESH_PAINT_CLONE_FLAG = "forgeMeshPaintClone";
+
+/** A part that left its object, ready for the caller to give it a body. */
+export interface DetachedPiece {
+  /** Holds the part's live nodes; not in any scene yet. */
+  readonly object: Group;
+  /** World centre of the part, which is the body's origin. */
+  readonly position: DentVec3;
+  /** Euler degrees, XYZ order. */
+  readonly rotation: DentVec3;
+  /** Corners of the part's box around `position`, in body axes, metres. */
+  readonly hull: readonly DentVec3[];
+  /** World unit vector away from the object, level with its base; zero at its centre. */
+  readonly outward: DentVec3;
+  /** Frees the dented geometry; call after the object leaves the scene. */
+  dispose(): void;
+}
 
 /** What a hit did. */
 export type DentOutcome = "dented" | "skipped" | "missed";
@@ -94,6 +115,7 @@ export class DentTarget {
   private readonly dents: Dent[] = [];
   private moved = 0;
   private landedOn: string | null = null;
+  private readonly detached = new Set<string>();
 
   constructor(
     private readonly root: Object3D,
@@ -130,7 +152,60 @@ export class DentTarget {
   /** Parts that matched no mesh of the model: their node names are wrong. */
   unmatchedParts(): string[] {
     const meshes = this.ensureMeshes();
-    return (this.options.parts ?? []).flatMap(({ id }) => meshes.some((item) => item.part === id) ? [] : [id]);
+    return (this.options.parts ?? []).flatMap(({ id }) => this.detached.has(id) || meshes.some((item) => item.part === id) ? [] : [id]);
+  }
+
+  /** Takes a part off the object with its dents; null when it has nothing left to take. */
+  detachPart(id: string): DetachedPiece | null {
+    const meshes = this.ensureMeshes();
+    const items = meshes.filter((item) => item.part === id);
+    if (items.length === 0) return null;
+
+    const min = new Vector3(Infinity, Infinity, Infinity);
+    const max = new Vector3(-Infinity, -Infinity, -Infinity);
+    for (const { surface: { positions } } of items) {
+      for (let offset = 0; offset < positions.length; offset += 3) {
+        SCRATCH.fromArray(positions, offset);
+        min.min(SCRATCH);
+        max.max(SCRATCH);
+      }
+    }
+    const centre = min.clone().add(max).multiplyScalar(0.5);
+    const half = max.clone().sub(centre);
+    const hull: DentVec3[] = [];
+    for (const x of [-half.x, half.x]) {
+      for (const y of [-half.y, half.y]) {
+        for (const z of [-half.z, half.z]) hull.push([x, y, z]);
+      }
+    }
+
+    const dentToWorld = this.worldToDent().invert();
+    const quaternion = this.root.getWorldQuaternion(new Quaternion());
+    const object = new Group();
+    object.name = `detached-${id}`;
+    object.position.copy(centre).applyMatrix4(dentToWorld);
+    object.quaternion.copy(quaternion);
+    object.updateMatrixWorld(true);
+    for (const node of new Set(items.map((item) => this.partNode(item.mesh)?.node ?? item.mesh))) object.attach(node);
+
+    this.meshes = meshes.filter((item) => item.part !== id);
+    this.detached.add(id);
+    const outward = new Vector3(centre.x, 0, centre.z);
+    if (outward.lengthSq() > 0) outward.normalize().applyQuaternion(quaternion);
+    const euler = new Euler().setFromQuaternion(quaternion, "XYZ");
+    const degrees = 180 / Math.PI;
+    return {
+      object,
+      position: [object.position.x, object.position.y, object.position.z],
+      rotation: [euler.x * degrees, euler.y * degrees, euler.z * degrees],
+      hull,
+      outward: [outward.x, outward.y, outward.z],
+      dispose: () => {
+        for (const { written } of items) {
+          if (written?.userData[DEFORM_CLONE_FLAG] === true) written.dispose();
+        }
+      },
+    };
   }
 
   /** Dents the object where an impact landed. `direction` is a world unit vector, into the object. */
@@ -282,14 +357,14 @@ export class DentTarget {
     return meshes;
   }
 
-  /** The part of the nearest named node at or above a mesh. */
-  private partOf(mesh: Mesh): string | null {
+  /** The nearest part node at or above a mesh, and its part. */
+  private partNode(mesh: Mesh): { node: Object3D; id: string } | null {
     const parts = this.options.parts;
     if (!parts?.length) return null;
     for (let node: Object3D | null = mesh; node; node = node === this.root ? null : node.parent) {
       const name = node.name;
       const part = parts.find(({ nodes }) => nodes.includes(name));
-      if (part) return part.id;
+      if (part) return { node, id: part.id };
     }
     return null;
   }
@@ -326,7 +401,7 @@ export class DentTarget {
     const elements = dentToLocal.elements;
     return {
       mesh,
-      part: this.partOf(mesh),
+      part: this.partNode(mesh)?.id ?? null,
       original: geometry,
       surface: createDentSurface({ positions: rest, normals: restNormals, indices: index ? index.array : null }),
       restLocal,

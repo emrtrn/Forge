@@ -7,7 +7,8 @@
  * that one object: its render object gets its own geometry on the first dent
  * (`DentTarget`), the collider never changes, and a script can dent through the
  * `Deformable.Dent` message (kinematic bodies produce no impacts). A vehicle's
- * wheels stay rigid.
+ * wheels stay rigid. A model with sidecar `parts` dents piece by piece: a hit
+ * inside a part's zone stays on that part's meshes.
  *
  * A dent list outlives the render object. Each frame the module compares a dented
  * object with what the shell renders now, so a World Partition cell that returns
@@ -101,7 +102,10 @@ export function createDeformableModule(): CapabilityModule {
   let host: DeformableHost | null = null;
   const sources = new Map<string, DeformableSource>();
   const entries = new Map<string, DentEntry>();
-  const episodes = new Map<string, { startedAt: number; depth: number }>();
+  /** Object → part → its running collision; "" = the body. */
+  const episodes = new Map<string, Map<string, { startedAt: number; depth: number }>>();
+  /** Sidecars already reported for parts that match no mesh. */
+  const reportedParts = new WeakSet<AssetDeformableDef>();
   const queue: QueuedHit[] = [];
   const unsubscribes: Array<() => void> = [];
   /**
@@ -132,7 +136,7 @@ export function createDeformableModule(): CapabilityModule {
     }
     if (entry.target || !object || !source) return;
     const wheelNodes = new Set(host?.wheelNodes(entityId) ?? []);
-    entry.target = new DentTarget(object, { exclude: (mesh) => isWheelMesh(mesh, wheelNodes) });
+    entry.target = new DentTarget(object, { exclude: (mesh) => isWheelMesh(mesh, wheelNodes), parts: source.def.parts });
     entry.target.restore(entry.dents, source.def);
   };
 
@@ -141,17 +145,22 @@ export function createDeformableModule(): CapabilityModule {
     else if (outcome === "skipped") skipped += 1;
   };
 
-  /** How much a hit adds, after the rest of its collision; 0 = nothing new. */
-  const newDepth = (entityId: string, def: AssetDeformableDef, impulse: number): number => {
+  /**
+   * How much a hit adds, after the rest of its collision; 0 = nothing new. Each
+   * part has its own collision: a scrape along a door and a mirror dents both.
+   */
+  const newDepth = (entityId: string, part: string | null, def: AssetDeformableDef, impulse: number): number => {
     const depth = dentDepthForImpulse(def, impulse);
-    const episode = episodes.get(entityId);
+    const parts = episodes.get(entityId) ?? new Map<string, { startedAt: number; depth: number }>();
+    episodes.set(entityId, parts);
+    const episode = parts.get(part ?? "");
     if (episode && clock - episode.startedAt < HIT_EPISODE_SECONDS) {
       const extra = depth - episode.depth;
       if (extra <= 0) return 0;
       episode.depth = depth;
       return extra;
     }
-    episodes.set(entityId, { startedAt: clock, depth });
+    parts.set(part ?? "", { startedAt: clock, depth });
     return depth;
   };
 
@@ -159,8 +168,6 @@ export function createDeformableModule(): CapabilityModule {
     const source = sources.get(hit.entityId);
     if (!source || !host) return;
     if (services?.resolve(fractureCommandsService)?.isFractured(hit.entityId)) return;
-    const depth = newDepth(hit.entityId, source.def, hit.impulse);
-    if (depth <= 0) return;
     const entry = entries.get(hit.entityId) ?? { dents: [], target: null };
     syncTarget(hit.entityId, entry);
     if (!entry.target) {
@@ -168,15 +175,25 @@ export function createDeformableModule(): CapabilityModule {
       skipped += 1;
       return;
     }
+    const part = entry.target.partAt(hit.point, hit.direction, source.def.radius);
+    const depth = newDepth(hit.entityId, part, source.def, hit.impulse);
+    if (depth <= 0) return;
     entries.set(hit.entityId, entry);
     const started = performance.now();
     const outcome = entry.target.hit(hit.point, hit.direction, depth, source.def);
     lastDentMs = performance.now() - started;
     countOutcome(outcome);
+    const unmatched = entry.target.unmatchedParts();
+    if (unmatched.length > 0 && !reportedParts.has(source.def)) {
+      reportedParts.add(source.def);
+      console.warn(`[deformable] parts with no matching mesh, hits fall back to the body: ${unmatched.join(", ")}`);
+    }
     if (outcome !== "dented") return;
+    const landed = entry.target.lastPart;
     services?.resolve(scriptMessageBusService)?.emit(DEFORMABLE_DENTED_MESSAGE, hit.entityId, {
       entityId: hit.entityId,
       ...(hit.instigator ? { instigator: hit.instigator } : {}),
+      ...(landed ? { part: landed } : {}),
       impulse: hit.impulse,
       depth,
     });

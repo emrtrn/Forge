@@ -13,7 +13,7 @@ import {
 } from "three";
 
 import { DentTarget } from "../../engine/render-three/deformableMeshSync";
-import type { DentParams, DentVec3 } from "../../engine/physics/deformable/impactDeform";
+import type { DentParams, DentPart, DentVec3 } from "../../engine/physics/deformable/impactDeform";
 
 const params: DentParams = { dentImpulse: 100, fullImpulse: 1100, radius: 0.5, maxDepth: 0.2, plasticity: 0.5, maxDents: 8 };
 const INTO: DentVec3 = [0, 0, -1];
@@ -28,6 +28,22 @@ const objectWith = (geometry: BufferGeometry): { root: Group; mesh: Mesh } => {
 };
 
 const positionsOf = (geometry: BufferGeometry): number[] => Array.from(geometry.getAttribute("position").array as ArrayLike<number>);
+
+/** A body panel left of x = 0, and right of it a "Door" node holding a panel. */
+const twoPieceObject = (): { root: Group; body: Mesh; door: Mesh } => {
+  const root = new Group();
+  const body = new Mesh(panel(4));
+  body.position.x = -2;
+  const doorNode = new Group();
+  doorNode.name = "Door";
+  doorNode.position.x = 2;
+  const door = new Mesh(panel(4));
+  doorNode.add(door);
+  root.add(body, doorNode);
+  return { root, body, door };
+};
+
+const DOOR_PART: DentPart = { id: "door", nodes: ["Door"], zone: { min: [0, -2, -1], max: [4, 2, 1] } };
 
 /** Deepest world-space push of a mesh below the plane its rest geometry lies in. */
 function deepestWorld(mesh: Mesh, axis: "x" | "y" | "z" = "z"): number {
@@ -75,6 +91,92 @@ export function registerDeformableMeshSyncTests(check: (label: string, run: () =
     assert.equal(first.mesh.geometry.userData.forgeDeformClone, true);
     assert.ok(Math.abs(deepestWorld(first.mesh) - 0.1) < 1e-5);
     assert.equal(deepestWorld(second.mesh), 0);
+  });
+
+  check("deformable mesh: a hit in a part's zone stays on that part, however close the body is", () => {
+    const car = twoPieceObject();
+    const target = new DentTarget(car.root, { parts: [DOOR_PART] });
+    const bodyGeometry = car.body.geometry;
+    assert.equal(target.hit([0.1, 0, 0.1], INTO, 0.1, params), "dented");
+    assert.equal(target.lastPart, "door");
+    assert.equal(car.body.geometry, bodyGeometry, "the body sits inside the radius and keeps the shared model");
+    assert.ok(Math.abs(deepestWorld(car.door) - 0.1) < 0.02, `door ${deepestWorld(car.door)}`);
+    assert.equal(target.dentList[0]!.part, "door");
+  });
+
+  check("deformable mesh: a hit outside every zone stays on the body", () => {
+    const car = twoPieceObject();
+    const target = new DentTarget(car.root, { parts: [DOOR_PART] });
+    const doorGeometry = car.door.geometry;
+    assert.equal(target.partAt([-0.1, 0, 0.1], INTO, params.radius), null);
+    assert.equal(target.hit([-0.1, 0, 0.1], INTO, 0.1, params), "dented");
+    assert.equal(target.lastPart, null);
+    assert.equal(car.door.geometry, doorGeometry);
+    assert.ok(deepestWorld(car.body) > 0.05);
+    assert.equal("part" in target.dentList[0]!, false);
+  });
+
+  check("deformable mesh: a zone is read in object space, so it follows a moved, scaled object", () => {
+    const car = twoPieceObject();
+    car.root.position.set(100, 0, 0);
+    car.root.rotation.y = Math.PI;
+    car.root.scale.setScalar(2);
+    const target = new DentTarget(car.root, { parts: [{ ...DOOR_PART, zone: { min: [0, -9, -9], max: [9, 9, 9] } }] });
+    const facing: DentVec3 = [0, 0, 1];
+    assert.equal(target.partAt([95, 0, -0.1], facing, params.radius), "door", "the door side faces -X after the half turn");
+    assert.equal(target.partAt([105, 0, -0.1], facing, params.radius), null);
+  });
+
+  check("deformable mesh: a contact point off the surface still counts for the part under it", () => {
+    const car = twoPieceObject();
+    const thin = { ...DOOR_PART, zone: { min: [0, -2, -0.1], max: [4, 2, 0.1] } as DentPart["zone"] };
+    const target = new DentTarget(car.root, { parts: [thin] });
+    assert.equal(target.partAt([1, 0, 0.6], INTO, params.radius), "door");
+    assert.equal(target.hit([1, 0, 0.6], INTO, 0.1, params), "dented");
+    assert.equal(target.lastPart, "door");
+  });
+
+  check("deformable mesh: a surface point outside the zone stays off the part behind it", () => {
+    const car = twoPieceObject();
+    const behind = { ...DOOR_PART, zone: { min: [0, -2, -3], max: [4, 2, -1] } as DentPart["zone"] };
+    const target = new DentTarget(car.root, { parts: [behind] });
+    assert.equal(target.partAt([1, 0, 0.1], INTO, params.radius), null);
+  });
+
+  check("deformable mesh: a zone with no surface along the hit falls back to the body", () => {
+    const car = twoPieceObject();
+    const target = new DentTarget(car.root, { parts: [{ ...DOOR_PART, zone: { min: [-9, -9, -9], max: [9, 9, 9] } }] });
+    assert.equal(target.partAt([-3, 0, 0.1], INTO, params.radius), "door");
+    assert.equal(target.hit([-3, 0, 0.1], INTO, 0.1, params), "dented");
+    assert.equal(target.lastPart, null);
+    assert.deepEqual(target.dentList.map((dent) => dent.part), [undefined]);
+  });
+
+  check("deformable mesh: neighbouring dents on two parts stay separate, and replay on their own meshes", () => {
+    const live = twoPieceObject();
+    const target = new DentTarget(live.root, { parts: [DOOR_PART] });
+    target.hit([0.05, 0, 0.1], INTO, 0.05, params);
+    target.hit([-0.05, 0, 0.1], INTO, 0.05, params);
+    assert.deepEqual(target.dentList.map((dent) => dent.part), ["door", undefined]);
+
+    const replayed = twoPieceObject();
+    new DentTarget(replayed.root, { parts: [DOOR_PART] }).restore(target.dentList, params);
+    assert.deepEqual(positionsOf(replayed.door.geometry), positionsOf(live.door.geometry));
+    assert.deepEqual(positionsOf(replayed.body.geometry), positionsOf(live.body.geometry));
+  });
+
+  check("deformable mesh: a saved dent of a removed part stays on the body", () => {
+    const car = twoPieceObject();
+    const doorGeometry = car.door.geometry;
+    new DentTarget(car.root, { parts: [DOOR_PART] }).restore([{ point: [-0.1, 0, 0], direction: INTO, depth: 0.1, part: "gone" }], params);
+    assert.equal(car.door.geometry, doorGeometry);
+    assert.ok(deepestWorld(car.body) > 0.05);
+  });
+
+  check("deformable mesh: a part whose nodes are not in the model is reported", () => {
+    const car = twoPieceObject();
+    const target = new DentTarget(car.root, { parts: [DOOR_PART, { ...DOOR_PART, id: "hood", nodes: ["Hood"] }] });
+    assert.deepEqual(target.unmatchedParts(), ["hood"]);
   });
 
   check("deformable mesh: a miss or a skip leaves the shared geometry in place", () => {

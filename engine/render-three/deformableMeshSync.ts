@@ -9,6 +9,8 @@
  * - Dent space is the object's root space with its scale applied (see
  *   `impactDeform.ts`), so a radius means world metres on a scaled placement and
  *   on a quantized mesh whose node matrix carries a large scale.
+ * - A model with parts dents piece by piece: a hit in a part's zone only touches
+ *   that part's meshes. If it finds no surface there it lands on the body.
  */
 import {
   BufferGeometry,
@@ -27,9 +29,11 @@ import {
   createDentSurface,
   locateDent,
   planDent,
+  resolveDentPart,
   type Dent,
   type DentChange,
   type DentParams,
+  type DentPart,
   type DentSurface,
   type DentVec3,
 } from "../physics/deformable/impactDeform";
@@ -45,10 +49,14 @@ export type DentOutcome = "dented" | "skipped" | "missed";
 export interface DentTargetOptions {
   /** Meshes left rigid, such as a vehicle's wheels. */
   readonly exclude?: (mesh: Mesh) => boolean;
+  /** The object's parts; without them it dents as one surface. */
+  readonly parts?: readonly DentPart[] | undefined;
 }
 
 interface DentMesh {
   readonly mesh: Mesh;
+  /** The part it belongs to; null = the body. */
+  readonly part: string | null;
   /** The geometry to give back on dispose. */
   readonly original: BufferGeometry;
   readonly surface: DentSurface;
@@ -85,6 +93,7 @@ export class DentTarget {
   private meshes: DentMesh[] | null = null;
   private readonly dents: Dent[] = [];
   private moved = 0;
+  private landedOn: string | null = null;
 
   constructor(
     private readonly root: Object3D,
@@ -101,9 +110,27 @@ export class DentTarget {
     return this.moved;
   }
 
+  /** The part the latest hit landed on; null = the body. */
+  get lastPart(): string | null {
+    return this.landedOn;
+  }
+
   /** The object this target writes to; a rebuilt clone needs a new target. */
   get object(): Object3D {
     return this.root;
+  }
+
+  /** The part a world-space hit lands on; null = the body. */
+  partAt(point: DentVec3, direction: DentVec3, radius: number): string | null {
+    if (!this.options.parts?.length) return null;
+    const hit = this.toDentSpace(point, direction);
+    return this.zonePart(hit.point, hit.direction, radius);
+  }
+
+  /** Parts that matched no mesh of the model: their node names are wrong. */
+  unmatchedParts(): string[] {
+    const meshes = this.ensureMeshes();
+    return (this.options.parts ?? []).flatMap(({ id }) => meshes.some((item) => item.part === id) ? [] : [id]);
   }
 
   /** Dents the object where an impact landed. `direction` is a world unit vector, into the object. */
@@ -111,14 +138,22 @@ export class DentTarget {
     if (!(depth > 0)) return "skipped";
     const meshes = this.ensureMeshes();
     if (meshes.length === 0) return "missed";
-    const worldToDent = this.worldToDent();
-    const localPoint = SCRATCH.fromArray(point).applyMatrix4(worldToDent);
-    const hitPoint: DentVec3 = [localPoint.x, localPoint.y, localPoint.z];
-    const localDirection = SCRATCH.fromArray(direction).transformDirection(worldToDent);
-    const dentDirection: DentVec3 = [localDirection.x, localDirection.y, localDirection.z];
-    const centre = locateDent(meshes.map((item) => item.surface), hitPoint, dentDirection, params.radius);
+    const { point: hitPoint, direction: dentDirection } = this.toDentSpace(point, direction);
+    const locate = (part: string | null): DentVec3 | null => locateDent(
+      meshes.filter((item) => item.part === part).map((item) => item.surface),
+      hitPoint,
+      dentDirection,
+      params.radius,
+    );
+    let part = this.zonePart(hitPoint, dentDirection, params.radius);
+    let centre = locate(part);
+    if (!centre && part !== null) {
+      part = null;
+      centre = locate(null);
+    }
     if (!centre) return "missed";
-    const plan = planDent(this.dents, centre, dentDirection, depth, params);
+    this.landedOn = part;
+    const plan = planDent(this.dents, centre, dentDirection, depth, params, part);
     if (plan.kind === "skip") return "skipped";
     if (plan.kind === "add") {
       this.dents.push(plan.dent);
@@ -150,9 +185,33 @@ export class DentTarget {
     this.dents.length = 0;
   }
 
+  private toDentSpace(point: DentVec3, direction: DentVec3): { point: DentVec3; direction: DentVec3 } {
+    // worldToDent() uses SCRATCH, so it has to run first.
+    const worldToDent = this.worldToDent();
+    const localPoint = SCRATCH.fromArray(point).applyMatrix4(worldToDent);
+    const hitPoint: DentVec3 = [localPoint.x, localPoint.y, localPoint.z];
+    const localDirection = SCRATCH.fromArray(direction).transformDirection(worldToDent);
+    return { point: hitPoint, direction: [localDirection.x, localDirection.y, localDirection.z] };
+  }
+
+  /**
+   * Zones hold surface points, not contact points. A contact lies on the collider
+   * and the body has moved since (measured 0.24 m off a truck's side), so the hit
+   * is first placed on the model along its line.
+   */
+  private zonePart(hitPoint: DentVec3, direction: DentVec3, radius: number): string | null {
+    if (!this.options.parts?.length) return null;
+    const surfacePoint = locateDent(this.ensureMeshes().map((item) => item.surface), hitPoint, direction, radius);
+    return surfacePoint ? resolveDentPart(this.options.parts, surfacePoint) : null;
+  }
+
   private push(dent: Dent, params: DentParams): void {
     this.moved = 0;
-    for (const item of this.ensureMeshes()) {
+    const meshes = this.ensureMeshes();
+    // A saved dent can name a part the sidecar no longer has; it stays on the body.
+    const part = meshes.some((item) => item.part === dent.part) ? dent.part : null;
+    for (const item of meshes) {
+      if (item.part !== part) continue;
       const change = applyDent(item.surface, dent, params);
       if (change.moved === 0) continue;
       this.moved += change.moved;
@@ -223,6 +282,18 @@ export class DentTarget {
     return meshes;
   }
 
+  /** The part of the nearest named node at or above a mesh. */
+  private partOf(mesh: Mesh): string | null {
+    const parts = this.options.parts;
+    if (!parts?.length) return null;
+    for (let node: Object3D | null = mesh; node; node = node === this.root ? null : node.parent) {
+      const name = node.name;
+      const part = parts.find(({ nodes }) => nodes.includes(name));
+      if (part) return part.id;
+    }
+    return null;
+  }
+
   private readMesh(mesh: Mesh, worldToDent: Matrix4): DentMesh | null {
     const geometry = mesh.geometry;
     const position = geometry.getAttribute("position");
@@ -255,6 +326,7 @@ export class DentTarget {
     const elements = dentToLocal.elements;
     return {
       mesh,
+      part: this.partOf(mesh),
       original: geometry,
       surface: createDentSurface({ positions: rest, normals: restNormals, indices: index ? index.array : null }),
       restLocal,

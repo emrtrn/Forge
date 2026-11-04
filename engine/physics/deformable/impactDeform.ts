@@ -27,6 +27,15 @@ export interface Dent {
   readonly direction: DentVec3;
   /** How far the centre was pushed, metres. */
   readonly depth: number;
+  /** The part it landed on; omitted on the body. */
+  readonly part?: string;
+}
+
+/** A separately denting piece of an object; see `AssetDeformablePart`. */
+export interface DentPart {
+  readonly id: string;
+  readonly nodes: readonly string[];
+  readonly zone: { readonly min: DentVec3; readonly max: DentVec3 };
 }
 
 export interface DentParams {
@@ -165,6 +174,20 @@ function weldVertices(rest: Float32Array, normals: Float32Array, vertexCount: nu
   return { groupOf, groupStart, groupMembers };
 }
 
+/** The first part whose zone holds a dent-space surface point; null = the body. */
+export function resolveDentPart(parts: readonly DentPart[] | undefined, point: DentVec3): string | null {
+  for (const { id, zone: { min, max } } of parts ?? []) {
+    if (
+      point[0] >= min[0] && point[0] <= max[0] &&
+      point[1] >= min[1] && point[1] <= max[1] &&
+      point[2] >= min[2] && point[2] <= max[2]
+    ) {
+      return id;
+    }
+  }
+  return null;
+}
+
 /** How deep one hit dents: nothing below `dentImpulse`, full at `fullImpulse`. */
 export function dentDepthForImpulse(params: DentParams, impulse: number): number {
   if (!Number.isFinite(impulse) || impulse < params.dentImpulse) return 0;
@@ -216,13 +239,22 @@ export type DentPlan =
 /**
  * Keeps the list bounded: a hit on an existing dent deepens it, one elsewhere
  * adds a dent while there is room. A full list still takes hits near a dent,
- * further out it stops changing.
+ * further out it stops changing. Dents of another part never merge with this
+ * hit, however close: they sit on different meshes.
  */
-export function planDent(dents: readonly Dent[], point: DentVec3, direction: DentVec3, depth: number, params: DentParams): DentPlan {
+export function planDent(
+  dents: readonly Dent[],
+  point: DentVec3,
+  direction: DentVec3,
+  depth: number,
+  params: DentParams,
+  part: string | null = null,
+): DentPlan {
   if (!(depth > 0)) return { kind: "skip" };
   let nearest = -1;
   let nearestSquared = Number.POSITIVE_INFINITY;
   dents.forEach((dent, index) => {
+    if ((dent.part ?? null) !== part) return;
     if (dent.direction[0] * direction[0] + dent.direction[1] * direction[1] + dent.direction[2] * direction[2] <= 0) return;
     const x = dent.point[0] - point[0];
     const y = dent.point[1] - point[1];
@@ -239,7 +271,7 @@ export function planDent(dents: readonly Dent[], point: DentVec3, direction: Den
     const extra = Math.min(depth, params.maxDepth - dents[nearest]!.depth);
     return extra > 0 ? { kind: "deepen", index: nearest, extra } : { kind: "skip" };
   }
-  return room ? { kind: "add", dent: { point, direction, depth } } : { kind: "skip" };
+  return room ? { kind: "add", dent: { point, direction, depth, ...(part ? { part } : {}) } } : { kind: "skip" };
 }
 
 /** Result of a dent on one surface. */

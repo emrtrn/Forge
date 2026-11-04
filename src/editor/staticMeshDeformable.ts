@@ -130,7 +130,7 @@ export class StaticMeshDeformable {
     const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
     const impulse = this.hitImpulse ?? def.fullImpulse;
     const depth = dentDepthForImpulse(def, impulse);
-    const target = this.target ?? new DentTarget(preview);
+    const target = this.target ?? new DentTarget(preview, { parts: def.parts });
     this.target = target;
     const outcome = target.hit([hit.point.x, hit.point.y, hit.point.z], [-normal.x, -normal.y, -normal.z], depth, def);
     if (outcome === "dented") {

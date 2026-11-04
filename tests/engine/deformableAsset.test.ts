@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  DEFORMABLE_DEFAULTS, DEFORMABLE_LIMITS, createAssetDeformable, deformableSidecarPath, normalizeAssetDeformable,
+  DEFORMABLE_DEFAULTS, DEFORMABLE_LIMITS, DEFORMABLE_MAX_PARTS, createAssetDeformable, deformableSidecarPath, normalizeAssetDeformable,
   type AssetDeformableDef,
 } from "../../engine/physics/deformable/deformableTypes";
 import { validateSaveDeformablePayload } from "../../tools/saveValidator";
@@ -9,6 +9,7 @@ import { collectDroppedFields } from "../../tools/droppedFields";
 const maximal: AssetDeformableDef = {
   version: 1, enabled: false, mode: "impact", dentImpulse: 500000, fullImpulse: 2000000,
   radius: 10, maxDepth: 2, plasticity: 1, maxDents: 64, collisionPolicy: "visual_only",
+  parts: [{ id: "door_left", nodes: ["Door_L", "Door_L_Trim"], zone: { min: [0.7, 0.4, -0.6], max: [1.3, 2.6, 0.45] } }],
 };
 
 /** Registers deformable sidecar normalization and save allowlist checks. */
@@ -42,6 +43,29 @@ export function registerDeformableAssetTests(check: (label: string, run: () => v
     assert.equal(normalizeAssetDeformable({ radius: "wide" })!.radius, DEFORMABLE_DEFAULTS.radius);
     const inverted = normalizeAssetDeformable({ dentImpulse: 900, fullImpulse: 100 })!;
     assert.ok(inverted.fullImpulse > inverted.dentImpulse);
+  });
+
+  check("deformable asset: broken parts are left out and the save reports them", () => {
+    const good = { id: "door", nodes: ["Door"], zone: { min: [0, 0, 0], max: [1, 1, 1] } };
+    const parts = [
+      good,
+      { ...good },
+      { ...good, id: "" },
+      { ...good, id: "no-nodes", nodes: [] },
+      { ...good, id: "inverted", zone: { min: [2, 0, 0], max: [1, 1, 1] } },
+      { ...good, id: "no-zone", zone: null },
+      { ...good, id: "short", zone: { min: [0, 0], max: [1, 1, 1] } },
+      { ...good, id: "nan", zone: { min: [Number.NaN, 0, 0], max: [1, 1, 1] } },
+      "door",
+    ];
+    assert.deepEqual(normalizeAssetDeformable({ parts })!.parts, [good]);
+    assert.equal("parts" in normalizeAssetDeformable({ parts: [] })!, false, "an old sidecar stays as it was");
+    assert.equal("parts" in normalizeAssetDeformable({ parts: "door" })!, false);
+    const many = Array.from({ length: DEFORMABLE_MAX_PARTS + 5 }, (_, index) => ({ ...good, id: `part-${index}` }));
+    assert.equal(normalizeAssetDeformable({ parts: many })!.parts!.length, DEFORMABLE_MAX_PARTS);
+    const sent = { ...maximal, parts: [{ ...good, futureField: 1 }] };
+    const saved = validateSaveDeformablePayload({ path: "assets/Panel.deformable.json", deformable: sent });
+    assert.deepEqual(collectDroppedFields(sent, saved.deformable).paths, ["parts[0].futureField"]);
   });
 
   check("deformable asset: the sidecar sits beside its model", () => {

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { BufferGeometry, Group, Mesh, PerspectiveCamera, PlaneGeometry, Scene, type Object3D } from "three";
 
 import type { EngineApp } from "../../engine/core/EngineApp";
-import { createAssetDeformable } from "../../engine/physics/deformable/deformableTypes";
+import { createAssetDeformable, type AssetDeformableDef, type AssetDeformablePart } from "../../engine/physics/deformable/deformableTypes";
 import type { PhysicsImpact } from "../../engine/physics/impactEvents";
 import type { SavedDeformableState } from "../../engine/persistence/saveGameState";
 import type { AssetManifest } from "../../engine/assets/manifest";
@@ -61,10 +61,25 @@ const panelObject = (): Object3D => {
 };
 const geometryOf = (object: Object3D): BufferGeometry => (object.children[0] as Mesh).geometry;
 
+/** A body panel left of x = 0, and right of it a "Door" node holding a panel. */
+const partedObject = (): { root: Group; body: Mesh; door: Mesh } => {
+  const root = new Group();
+  const body = new Mesh(new PlaneGeometry(4, 4, 40, 40));
+  body.position.x = -2;
+  const doorNode = new Group();
+  doorNode.name = "Door";
+  doorNode.position.x = 2;
+  const door = new Mesh(new PlaneGeometry(4, 4, 40, 40));
+  doorNode.add(door);
+  root.add(body, doorNode);
+  return { root, body, door };
+};
+
 function harness(
   placements: LayoutPlacement[] = [{ position: [0, 0, 0] }, { position: [9, 0, 0] }],
   actors: Entity[] = [],
   beforeLoad?: (commands: DeformableCommands) => void,
+  defPatch: Partial<AssetDeformableDef> = {},
 ) {
   const services = createRuntimeServiceHost({ syncEntityTransform: () => {} });
   const thresholds = new Map<string, number>();
@@ -79,7 +94,7 @@ function harness(
       },
       impacts: () => impacts,
     },
-    deformableDef: (assetId) => assetId === ASSET_ID ? { ...createAssetDeformable(), ...TEST_DEF } : null,
+    deformableDef: (assetId) => assetId === ASSET_ID ? { ...createAssetDeformable(), ...TEST_DEF, ...defPatch } : null,
     renderObject: (id) => objects.get(id) ?? null,
     dentsPerFrame: () => 4,
     wheelNodes: () => ["wheel-front"],
@@ -193,6 +208,46 @@ export function registerDeformableModuleTests(check: (label: string, run: () => 
     test.frame([], 0.3);
     test.frame([hitOn(test.first, 1100)]);
     assert.ok(Math.abs(dentDepth(object) - 0.2) < 1e-3, "a new collision adds up");
+    test.module.dispose!();
+  });
+
+  check("deformable module: a part keeps its dent, names it, and has its own collision", () => {
+    const parts: AssetDeformablePart[] = [{ id: "door", nodes: ["Door"], zone: { min: [0, -2, -1], max: [4, 2, 1] } }];
+    const test = harness(undefined, undefined, undefined, { parts });
+    const { root, body, door } = partedObject();
+    test.objects.set(test.first, root);
+    const bodyGeometry = body.geometry;
+    const doorGeometry = door.geometry;
+    test.frame([{ ...hitOn(test.first, 1100), point: [1, 0, 0.05] }]);
+    assert.equal(body.geometry, bodyGeometry, "the door's dent stays off the body");
+    assert.notEqual(door.geometry, doorGeometry);
+    const message = test.sent.find((item) => item.topic === "Deformable.Dented");
+    assert.equal((message?.payload as { part?: string }).part, "door");
+
+    // Same collision, same frame budget: the body still takes its own first hit.
+    test.frame([{ ...hitOn(test.first, 1100), point: [-1, 0, 0.05] }]);
+    assert.notEqual(body.geometry, bodyGeometry);
+    assert.equal(test.commands.snapshot().dents, 2);
+    const saved = test.commands.captureState();
+    assert.deepEqual(saved[0]!.dents.map((dent) => dent.part), ["door", undefined]);
+    test.module.dispose!();
+  });
+
+  check("deformable module: a part that matches no mesh warns once and the hit lands on the body", () => {
+    const parts: AssetDeformablePart[] = [{ id: "hood", nodes: ["Hood"], zone: { min: [-9, -9, -9], max: [9, 9, 9] } }];
+    const test = harness(undefined, undefined, undefined, { parts });
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (message: string) => warnings.push(message);
+    try {
+      test.frame([hitOn(test.first, 1100)]);
+      test.frame([], 0.3);
+      test.frame([hitOn(test.first, 1100)]);
+    } finally {
+      console.warn = warn;
+    }
+    assert.deepEqual(warnings, ["[deformable] parts with no matching mesh, hits fall back to the body: hood"]);
+    assert.ok(dentDepth(test.objects.get(test.first)!) > 0.05);
     test.module.dispose!();
   });
 

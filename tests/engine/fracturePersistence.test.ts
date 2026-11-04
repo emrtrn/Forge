@@ -48,6 +48,12 @@ export function registerFracturePersistenceTests(check: (label: string, fn: () =
     const long = applySaveState({ activeLevelPath: "a", deformables: [{ entityId: "a", dents: Array(90).fill({ ...dent, direction: [0, 0, -2] }) }] })!;
     assert.equal(long.deformables[0]!.dents.length, 64);
     assert.deepEqual(long.deformables[0]!.dents[0]!.direction, [0, 0, -1], "directions stay unit");
+
+    const parted = applySaveState({
+      activeLevelPath: "a",
+      deformables: [{ entityId: "car", dents: [{ ...dent, part: "door_left" }, { ...dent, part: "" }, { ...dent, part: 7 }, dent] }],
+    })!;
+    assert.deepEqual(parted.deformables[0]!.dents, [{ ...dent, part: "door_left" }, dent, dent, dent], "a dent keeps its part, a bad one lands on the body");
   });
 
   check("fracture persistence: malformed masks decode to null", () => {

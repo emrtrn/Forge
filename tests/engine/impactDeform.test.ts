@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {
-  applyDent, createDentSurface, dentDepthForImpulse, locateDent, planDent,
+  applyDent, createDentSurface, dentDepthForImpulse, locateDent, planDent, resolveDentPart,
   type Dent, type DentParams, type DentSurface, type DentSurfaceInput, type DentVec3,
 } from "../../engine/physics/deformable/impactDeform";
 
@@ -190,6 +190,29 @@ export function registerImpactDeformTests(check: (label: string, run: () => void
     const item = { point, direction: INTO, depth: 0.1 };
     assert.ok(applyDent(front, item, params).moved > 0);
     assert.equal(applyDent(back, item, params).moved, 0);
+  });
+
+  check("impact deform: a point resolves to the first zone holding it, or the body", () => {
+    const zone = (min: DentVec3, max: DentVec3) => ({ min, max });
+    const parts = [
+      { id: "mirror", nodes: ["Mirror"], zone: zone([0, 1, 0], [1, 2, 1]) },
+      { id: "door", nodes: ["Door"], zone: zone([0, 0, 0], [1, 2, 1]) },
+    ];
+    assert.equal(resolveDentPart(parts, [0.5, 1.5, 0.5]), "mirror", "an earlier zone wins the overlap");
+    assert.equal(resolveDentPart(parts, [0.5, 0.5, 0.5]), "door");
+    assert.equal(resolveDentPart(parts, [1, 2, 1]), "mirror", "the box is inclusive");
+    assert.equal(resolveDentPart(parts, [1.1, 0.5, 0.5]), null);
+    assert.equal(resolveDentPart(undefined, [0, 0, 0]), null);
+  });
+
+  check("impact deform: a dent only merges with dents of its own part", () => {
+    const onDoor = { ...dent(0, 0, 0.05), part: "door" };
+    assert.deepEqual(planDent([onDoor], [0.1, 0, 0], INTO, 0.05, params, "door"), { kind: "deepen", index: 0, extra: 0.05 });
+    assert.equal(planDent([onDoor], [0.1, 0, 0], INTO, 0.05, params).kind, "add", "the body beside it is a new dent");
+    const added = planDent([dent(0, 0, 0.05)], [0.1, 0, 0], INTO, 0.05, params, "door");
+    assert.ok(added.kind === "add" && added.dent.part === "door");
+    const body = planDent([], [0, 0, 0], INTO, 0.05, params);
+    assert.ok(body.kind === "add" && !("part" in body.dent), "a body dent saves as it always did");
   });
 
   check("impact deform: the dent list stays bounded", () => {

@@ -78,6 +78,8 @@ export interface SavedDent {
   readonly direction: readonly [number, number, number];
   /** Metres at the centre. */
   readonly depth: number;
+  /** The sidecar part it landed on; omitted on the body. */
+  readonly part?: string;
 }
 
 /** A dented placement or actor: replaying `dents` gives its shape back. */
@@ -281,7 +283,12 @@ function normalizeDent(value: unknown): SavedDent | null {
   const direction = normalizeVec3(value.direction);
   const length = direction ? Math.hypot(direction[0], direction[1], direction[2]) : 0;
   if (!point || !direction || length === 0 || !isFiniteNumber(value.depth) || value.depth <= 0) return null;
-  return { point, direction: [direction[0] / length, direction[1] / length, direction[2] / length], depth: value.depth };
+  return {
+    point,
+    direction: [direction[0] / length, direction[1] / length, direction[2] / length],
+    depth: value.depth,
+    ...(typeof value.part === "string" && value.part.length > 0 ? { part: value.part } : {}),
+  };
 }
 
 /** Valid entries only, one per entity (the first wins), sorted by entity id; an entry with no valid dent is nothing to restore. */

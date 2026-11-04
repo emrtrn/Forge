@@ -16118,6 +16118,7 @@ check("game save serializer: collects level, player facing, and persistent state
     vehicles: [],
     drivingVehicleId: null,
     destructibles: [],
+    deformables: [],
   });
   assert.deepEqual(applySaveState(state), {
     levelPath: "Levels/Playground.level.json",
@@ -16129,6 +16130,7 @@ check("game save serializer: collects level, player facing, and persistent state
     vehicles: [],
     drivingVehicleId: null,
     destructibles: [],
+    deformables: [],
   });
 });
 
@@ -16206,6 +16208,7 @@ check("game save serializer: rejects bad player transforms and drops non-json fl
       vehicles: [],
       drivingVehicleId: null,
       destructibles: [],
+      deformables: [],
     },
   );
 });

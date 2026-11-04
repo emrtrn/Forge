@@ -95,6 +95,8 @@ const RAW_JOINT_AXIS_ANG_Y = 4;
 const RAW_JOINT_AXIS_ANG_Z = 5;
 
 export const PHYSICS_SUBSYSTEM_ID = "physics";
+/** Bodies this close still count as touching; a pair is released past it, metres. */
+const PASS_THROUGH_MARGIN = 0.05;
 /** Collider surface defaults when no physical material is assigned. */
 const DEFAULT_FRICTION = 0.8;
 const DEFAULT_RESTITUTION = 0;
@@ -264,6 +266,20 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   private readonly fixedStepListeners = new Set<(deltaSeconds: number) => void>();
   /** Opt-in impact sources: entity → owner → minimum slice impulse (N·s); see {@link setImpactEventThreshold}. */
   private readonly impactThresholds = new Map<EntityId, Map<string, number>>();
+  /**
+   * Bodies that pass through each other until they drift apart: entity → the
+   * bodies it ignores. See {@link passThroughUntilApart}.
+   */
+  private readonly passThrough = new Map<EntityId, Set<EntityId>>();
+  private readonly passThroughHooks = {
+    filterContactPair: (collider1: number, collider2: number): number | null => {
+      const a = this.rapierColliderToEntity.get(collider1);
+      const b = this.rapierColliderToEntity.get(collider2);
+      if (a !== undefined && b !== undefined && (this.passThrough.get(a)?.has(b) || this.passThrough.get(b)?.has(a))) return null;
+      return this.rapierModule!.SolverFlags.COMPUTE_IMPULSE;
+    },
+    filterIntersectionPair: (): boolean => true,
+  };
   private rapierEventQueue: RapierEventQueue | null = null;
   private readonly impactAccumulator = new ImpactAccumulator();
   private frameImpacts: readonly PhysicsImpact[] = [];
@@ -1255,6 +1271,71 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
   }
 
   /**
+   * World velocity of a point carried by a simulated body: its linear velocity
+   * plus `ω × r` around the centre of mass. Null when the entity is not one.
+   */
+  pointVelocity(entityId: EntityId, point: readonly [number, number, number]): readonly [number, number, number] | null {
+    const record = this.rapierBodies.get(entityId);
+    if (!record || !this.bodiesById.get(entityId)?.collider.simulatePhysics) return null;
+    const v = record.body.velocityAtPoint({ x: point[0], y: point[1], z: point[2] });
+    return [v.x, v.y, v.z];
+  }
+
+  /** World angular velocity of a simulated body, rad/s; null when the entity is not one. */
+  angularVelocityOf(entityId: EntityId): readonly [number, number, number] | null {
+    const record = this.rapierBodies.get(entityId);
+    if (!record || !this.bodiesById.get(entityId)?.collider.simulatePhysics) return null;
+    const w = record.body.angvel();
+    return [w.x, w.y, w.z];
+  }
+
+  /** Sets a simulated body's velocities directly, unlike an impulse; wakes it. No-op on anything else. */
+  setBodyVelocity(
+    entityId: EntityId,
+    linear: readonly [number, number, number],
+    angular: readonly [number, number, number],
+  ): void {
+    const record = this.rapierBodies.get(entityId);
+    if (!record || !this.bodiesById.get(entityId)?.collider.simulatePhysics) return;
+    record.body.setLinvel({ x: linear[0], y: linear[1], z: linear[2] }, true);
+    record.body.setAngvel({ x: angular[0], y: angular[1], z: angular[2] }, true);
+  }
+
+  /**
+   * Lets two overlapping bodies pass through each other until they are apart,
+   * then they collide again. A piece torn off a car starts inside the car's
+   * collider, and the solver would otherwise throw the two apart. Only this pair
+   * is affected; `entityId` keeps colliding with everything else.
+   */
+  passThroughUntilApart(entityId: EntityId, other: EntityId): void {
+    const record = this.rapierBodies.get(entityId);
+    const RAPIER = this.rapierModule;
+    if (!record || !RAPIER) return;
+    for (const collider of record.colliders) collider.setActiveHooks(RAPIER.ActiveHooks.FILTER_CONTACT_PAIRS);
+    const others = this.passThrough.get(entityId) ?? new Set<EntityId>();
+    others.add(other);
+    this.passThrough.set(entityId, others);
+  }
+
+  /** Drops the pairs that have drifted apart, or whose bodies are gone. */
+  private releasePassThrough(): void {
+    for (const [entityId, others] of this.passThrough) {
+      const record = this.rapierBodies.get(entityId);
+      for (const other of others) {
+        const colliders = this.rapierBodies.get(other)?.colliders;
+        const touching = record && colliders?.some((collider) =>
+          record.colliders.some((own) => own.contactCollider(collider, PASS_THROUGH_MARGIN) !== null));
+        if (!touching) others.delete(other);
+      }
+      if (others.size > 0) continue;
+      this.passThrough.delete(entityId);
+      // A flagged collider on a step without hooks is a fatal Rapier error.
+      const RAPIER = this.rapierModule;
+      if (record && RAPIER) for (const collider of record.colliders) collider.setActiveHooks(RAPIER.ActiveHooks.NONE);
+    }
+  }
+
+  /**
    * Applies an instantaneous linear impulse to a simulated (dynamic) body
    * (A6 AddImpulse / knockback). No-op unless Rapier is live and the entity is a
    * `simulatePhysics` body — static/kinematic bodies (including the character
@@ -1416,9 +1497,11 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           // The queue only goes in when someone opted in, so a level without
           // impact sources steps exactly as before. It is drained per slice:
           // a manifold only reflects the slice that just ran.
-          const queue = this.impactThresholds.size > 0 ? this.rapierEventQueue : null;
+          // Rapier only reads hooks on a step that has an event queue.
+          const hooks = this.passThrough.size > 0 ? this.passThroughHooks : undefined;
+          const queue = this.impactThresholds.size > 0 || hooks ? this.rapierEventQueue : null;
           if (queue) {
-            this.rapierWorld.step(queue);
+            this.rapierWorld.step(queue, hooks);
             this.collectImpactSamples(queue);
           } else {
             this.rapierWorld.step();
@@ -1427,6 +1510,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
           for (const listener of this.fixedStepListeners) listener(this.stepClock.step);
         }
         this.updateRapierContacts();
+        this.releasePassThrough();
         const frame = this.impactAccumulator.takeFrame();
         this.frameImpacts = frame.impacts;
         this.frameImpactsOverBudget = frame.overBudget;
@@ -1494,6 +1578,7 @@ export class PhysicsSubsystem implements Subsystem, PhysicsQuery {
     this.contacts = [];
     this.collisionDisabled.clear();
     this.suspendedDynamicBodies.clear();
+    this.passThrough.clear();
     this.impactThresholds.clear();
     this.impactAccumulator.clear();
     this.frameImpacts = [];

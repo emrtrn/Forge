@@ -71,7 +71,75 @@ function run(app: EngineApp, physics: PhysicsSubsystem, frameSeconds: number, sl
 const strongest = (frames: PhysicsImpact[][]): PhysicsImpact | null =>
   frames.flat().reduce<PhysicsImpact | null>((best, impact) => (!best || impact.impulse > best.impulse ? impact : best), null);
 
+/** A 1 m dynamic box; the motion checks below turn gravity off. */
+function freeBox(id: string, position: [number, number, number], massKg = 10): Entity {
+  return {
+    id,
+    components: {
+      Transform: { position, rotation: [0, 0, 0], scale: [1, 1, 1] },
+      Collider: { shape: "box", size: [1, 1, 1], isStatic: false, isSensor: false, simulatePhysics: true, massKg },
+    },
+  } as unknown as Entity;
+}
+
+const weightless = (physics: PhysicsSubsystem): void => physics.setGravity([0, 0, 0]);
+
 export async function registerPhysicsImpactTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("physics motion: a point on a spinning body moves at v + ω × r, and a set velocity holds", () => withQuietRapier(async () => {
+    const { physics, app } = await world([freeBox("box", [0, 5, 0])], weightless);
+    physics.setBodyVelocity("box", [1, 0, 0], [0, 0, 2]);
+    assert.deepEqual(physics.angularVelocityOf("box"), [0, 0, 2]);
+    // r = (0, 1, 0): ω × r = (-2, 0, 0).
+    const point = physics.pointVelocity("box", [0, 6, 0])!;
+    assert.ok(Math.abs(point[0] - -1) < 1e-5 && Math.abs(point[1]) < 1e-5, JSON.stringify(point));
+    assert.equal(physics.pointVelocity("missing", [0, 0, 0]), null);
+    assert.equal(physics.angularVelocityOf("missing"), null);
+    physics.setBodyVelocity("missing", [1, 0, 0], [0, 0, 0]);
+    await app.dispose();
+  }));
+
+  await checkAsync("physics pass-through: an overlapping pair stays calm where the solver would throw it apart", () => withQuietRapier(async () => {
+    const overlap = (): Entity[] => [freeBox("shell", [0, 0, 0], 1000), freeBox("piece", [0.2, 0, 0])];
+    const free = await world(overlap(), weightless);
+    run(free.app, free.physics, STEP, 6);
+    const thrown = Math.abs(free.physics.velocityOf("piece")![0]);
+    await free.app.dispose();
+    assert.ok(thrown > 0.5, `the overlap alone is pushed out: ${thrown}`);
+
+    const calm = await world(overlap(), weightless);
+    calm.physics.passThroughUntilApart("piece", "shell");
+    run(calm.app, calm.physics, STEP, 6);
+    assert.ok(Math.abs(calm.physics.velocityOf("piece")![0]) < 1e-6, "nothing moved the pair");
+    await calm.app.dispose();
+  }));
+
+  await checkAsync("physics pass-through: a pair collides again once apart, and a removed body ends it", () => withQuietRapier(async () => {
+    const entries = (physics: PhysicsSubsystem): number => (physics as unknown as { passThrough: Map<string, unknown> }).passThrough.size;
+    // The impact opt-in matters: it steps with an event queue, and such a step
+    // fails on a collider still flagged for hooks.
+    const { physics, app } = await world([freeBox("shell", [0, 0, 0], 1000), freeBox("piece", [0.2, 0, 0])], (subsystem) => {
+      weightless(subsystem);
+      subsystem.setImpactEventThreshold("piece", 1);
+    });
+    physics.passThroughUntilApart("piece", "shell");
+    assert.equal(entries(physics), 1);
+    physics.setBodyVelocity("piece", [12, 0, 0], [0, 0, 0]);
+    run(app, physics, STEP, 12);
+    assert.equal(entries(physics), 0, "12 m/s for 0.2 s leaves the shell behind");
+    // Sent back, it now stops against the shell instead of passing through.
+    physics.setBodyVelocity("piece", [-12, 0, 0], [0, 0, 0]);
+    run(app, physics, STEP, 30);
+    assert.ok(physics.velocityOf("piece")![0] > -6, "the shell is solid again");
+    await app.dispose();
+
+    const gone = await world([freeBox("shell", [0, 0, 0], 1000), freeBox("piece", [0.2, 0, 0])], weightless);
+    gone.physics.passThroughUntilApart("piece", "shell");
+    gone.physics.removeEntity("shell");
+    run(gone.app, gone.physics, STEP, 1);
+    assert.equal(entries(gone.physics), 0);
+    await gone.app.dispose();
+  }));
+
   await checkAsync("physics impacts: a 10 kg crate dropped 2 m reports ≈ m·v at the floor", () => withQuietRapier(async () => {
     const { physics, app } = await world([floor(), crate(2)], (p) => p.setImpactEventThreshold("floor", 5));
     const frames = run(app, physics, STEP, 120);

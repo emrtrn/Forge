@@ -216,7 +216,11 @@ engine/editor.
   belong to the save-game. A missing sidecar means the asset never dents. Placements of such
   an asset render as clones, never instanced; an actor opts in with a `Deformable`
   component. `BufferGeometry.clone()` shares `userData` with its source: give a
-  clone its own object before flagging it.
+  clone its own object before flagging it. Optional `parts` (`id`, `nodes`,
+  `zone`) make a model dent piece by piece: a hit is placed on the model's surface
+  first, because a contact point can sit well off it, and the zone is checked with
+  that surface point, so it must hold the outer surface at the part. Meshes
+  outside the parts are the body; a dent's `part` goes to the save-game.
 
 - **World Partition cell files:** with `worldSettings.partition.enabled`, the
   editor saves a level as a persistent level (`worldCells` index) plus

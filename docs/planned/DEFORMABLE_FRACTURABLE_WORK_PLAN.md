@@ -1104,11 +1104,13 @@ Her madde kendi tüketici ihtiyacıyla açılır.
       parçalı GLB. Düğüm adlandırma kuralı, pivot/origin denetimi, hull'lar
       editörde üretilir.
 - [ ] `detach`: alt düğümü (tampon, tabela) eşikte ayrı dinamik body yap.
-      **Sıradaki iş (2026-11-04), tüketici Gaz-52:** önce parça filtreli göçük
-      (VM-1), sonra aynı deforme mesh'in kopması (VM-2), sonra kalıcılık ve
-      temizlik (VM-3). Gaz-52'de ayrı tampon düğümü yok; deneme kapı ve aynayla,
-      yan darbeyle yapılır. Sözleşme:
-      `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md` v0.2.
+      **Sıradaki iş, tüketici Gaz-52:** parça filtreli göçük (VM-1) TAMAM
+      (2026-11-04): sidecar `parts` (`id`, `nodes`, `zone`), darbe yüzeye oturtulup
+      bölge o noktayla sorgulanır, kayıt `part` taşır, smoke `deformable-parts`.
+      Sırada aynı deforme mesh'in kopması (VM-2), sonra kalıcılık ve temizlik
+      (VM-3). Gaz-52'de ayrı tampon düğümü yok; deneme kapı ve aynayla, yan
+      darbeyle yapılır. Sözleşme:
+      `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md` v0.3.
 - [ ] `swap-mesh`: hasarlı/kırık modele geçiş (uzak detay, ucuz kırılma).
 - [ ] `joint-break`: parçalar sabit joint'le bağlı başlar, joint gerilmesi
       eşiği aşınca kopar (çit, ileride köprü). Joint gerilmesi Rapier'dan

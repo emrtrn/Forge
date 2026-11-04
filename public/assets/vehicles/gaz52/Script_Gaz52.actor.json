@@ -51,6 +51,12 @@
       "parent": "root"
     },
     {
+      "id": "dents",
+      "component": "Deformable",
+      "props": {},
+      "parent": "root"
+    },
+    {
       "id": "light",
       "component": "Light",
       "props": {

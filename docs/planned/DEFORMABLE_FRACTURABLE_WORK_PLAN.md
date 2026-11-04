@@ -1103,16 +1103,18 @@ Her madde kendi tüketici ihtiyacıyla açılır.
 - [ ] `source: "imported"`: dışarıda (ör. Blender Cell Fracture) üretilmiş
       parçalı GLB. Düğüm adlandırma kuralı, pivot/origin denetimi, hull'lar
       editörde üretilir.
-- [ ] `detach`: alt düğümü (tampon, tabela) eşikte ayrı dinamik body yap.
+- [x] `detach`: alt düğümü (tampon, tabela) eşikte ayrı dinamik body yap.
       **Sıradaki iş, tüketici Gaz-52:** parça filtreli göçük (VM-1) TAMAM
       (2026-11-04): sidecar `parts` (`id`, `nodes`, `zone`), darbe yüzeye oturtulup
       bölge o noktayla sorgulanır, kayıt `part` taşır, smoke `deformable-parts`.
       Aynı deforme mesh'in kopması (VM-2) TAMAM (2026-11-04): `detach`
       (`impulse`, `massKg`, `kick`), canlı düğüm taşınır, hız `v + ω × r`, parça ve
-      araç ayrılana kadar birbirinden geçer. Sırada kalıcılık ve temizlik (VM-3):
-      kopan parça henüz kaydedilmez, yeniden kurulumda geri gelir. Gaz-52'de ayrı
-      tampon düğümü yok; deneme kapı ve aynayla, yan darbeyle yapılır. Sözleşme:
-      `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md` v0.4.
+      araç ayrılana kadar birbirinden geçer. Kalıcılık ve temizlik (VM-3) TAMAM:
+      `detachedParts` kayda girer, yeniden kurulumda parça dönmez, eski kayıt
+      yüklenince geri takılır, 16 gevşek parça bütçesi. Gaz-52'de ayrı tampon
+      düğümü yok; deneme kapı ve aynayla, yan darbeyle yapıldı. Kullanıcı oyunda
+      doğruladı. Açık: kararlı aktör kimliği, `parts` için editör arayüzü. Sözleşme:
+      `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md` v0.5.
 - [ ] `swap-mesh`: hasarlı/kırık modele geçiş (uzak detay, ucuz kırılma).
 - [ ] `joint-break`: parçalar sabit joint'le bağlı başlar, joint gerilmesi
       eşiği aşınca kopar (çit, ileride köprü). Joint gerilmesi Rapier'dan

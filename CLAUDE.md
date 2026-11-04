@@ -222,8 +222,9 @@ engine/editor.
   that surface point, so it must hold the outer surface at the part. Meshes
   outside the parts are the body; a dent's `part` goes to the save-game. A part's
   `detach` (`impulse`, `massKg`, `kick`) tears its live nodes off into a body of
-  their own, dents included; loose parts are not saved yet. Such a piece starts
-  inside its car, so the pair passes through until apart
+  their own, dents included. The save-game keeps which parts are gone
+  (`detachedParts`), not the loose piece; loading a save from before the hit puts
+  the part back. Such a piece starts inside its car, so the pair passes through until apart
   (`PhysicsSubsystem.passThroughUntilApart`): Rapier reads hooks only on a step
   with an event queue, and a hook-flagged collider on a step without hooks locks
   the world for good.

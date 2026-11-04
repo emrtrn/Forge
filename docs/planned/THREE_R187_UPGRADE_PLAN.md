@@ -1,8 +1,7 @@
 # Three.js r184 → r187 Yükseltme Planı
 
-> Durum: **uygulanıyor** (başlangıç 2026-11-04; planlama 2026-11-03).
-> Forge bugün `three@0.184.0` + `@types/three@^0.184.0` kullanıyor
-> (`package.json`). Hedef `three@0.187.0`; `@types/three@0.187.0` npm'de var.
+> Durum: **kod tamam, kullanıcı görsel kabulü ve bir maliyet kararı bekliyor**
+> (uygulama 2026-11-04). Forge `three@0.187.0` + `@types/three@^0.187.0` kullanıyor.
 >
 > Kaynaklar: three.js wiki *Migration Guide* (184→185, 185→186, 186→187
 > bölümleri) ve r185 / r186 / r187 sürüm notları. Aşağıdaki "doğrulandı"
@@ -117,56 +116,50 @@ Bugün de doğru olan, yükseltmeyi küçülten değişiklikler.
 
 Bump → 0.187.0 sonrası derleme kırılır; bu faz tek dilimde kapanır.
 
-- [ ] **3-1 Su ortam örneklemesi (`waterEnvironment.ts`):** Kopyalanmış
-  CubeUV atlas kodu (`cubeUV` sabiti, `atlasSize` parametreleri) silinir.
-  `waterEnvironment` / `waterProbe` `samplerCube` olur; örnekleme three'nin
-  kendi yoluyla aynı: `textureLod(map, dir, roughnessToMip(roughness))`
-  (mip hesabı r187 `envmap_physical_pars_fragment` ve
-  `envmap_common_pars_fragment`'tan alınır, kopyalanmaz; mümkünse chunk
-  include edilir). `waterEnvironmentSize` / `waterProbeSize` yerine mip
-  sayısı uniform'u (gerekirse).
-- [ ] **3-2 `bindMap` geçerlilik kontrolü:** `mapping === CubeUVReflectionMapping`
-  yerine PMREM çıktısını tanıyan bir kontrol (`isCubeTexture` + PMREM
-  işareti; r187 PMREMGenerator'ın texture'a ne koyduğuna bakılır).
-- [ ] **3-3 `lakeWater.ts` / `riverWater.ts`:** `WATER_ENVIRONMENT_GLSL`
-  tüketicileri yeni uniform tiplerine uyar.
-- [ ] **3-4 `reflectionCapture.ts`:** `SphereReflectionCaptureBake.target`
-  → `WebGLCubeRenderTarget`. Patch hedefleri r187 satırlarına göre yeniden
-  yazılır (`ENVMAP_TYPE_PMREM`, `textureLod(envMap, envMapRotation * reflectVec, roughnessToMip( roughness ))`,
-  irradiance `ENVMAP_MAX_LOD`). Blend yolundaki `captureGlobalEnv`
-  `samplerCube` olur. Parallax bloğu yön hesabına dokunduğu için aynen kalmalı;
-  doğrulanır.
-  **r184'ten kalan hata, burada düzeltilir:** `captureGlobalEnv` probe'un
-  `CUBEUV_*` sabitleriyle okunuyor, gök capture'ı probe'dan farklı boyuttaysa
-  yanlış texel gelir ve probe içindeki diffuse söner (64 px probe + 256 px gökte
-  mavi kanal 0; ikisi 256 iken 0.986). r187'de `ENVMAP_MAX_LOD` de probe'un olur:
-  gök kendi LOD sayısıyla örneklenmeli. `reflection-capture.spec.ts` bu düzeltmede
-  uyumsuz boyutu da kapsar (bugün yalnız varsayılan 256 ile çalışıyor).
-- [ ] **3-5 `reflection.ts`:** `fromScene` dönüş tipi; `scene.environment`
-  bağlama ve `userData.waterSkySunDirection` korunur.
-- [ ] **3-6 (K3) Reversed-Z bias:** `shadowDepthBias()` artık iki modda da
-  aynı işareti döner (three çeviriyor). `depthMode` açıklaması ve S5 notu
-  güncellenir. Reversed-Z smoke'unda gölge lekesi ve peter-panning kontrolü.
-- [ ] **3-7 (K7):** `_reversedDepth` private alan yazımının r187'de hâlâ
-  gerekli olup olmadığına bakılır; three kamerayı kendi yönetiyorsa kaldırılır.
-- [ ] **3-8 Testler:** `terrainRiverWater.test.ts` CubeUV sabiti yerine
-  küp hedef kullanır; reflection capture ve su ortamı testleri yeni tiplere
-  göre güncellenir.
-- [ ] **3-9 Bellek ve maliyet:** Küp PMREM ile atlas'ın GPU belleği ve
-  bake süresi karşılaştırılır (64 px yerel capture, 256 px gökyüzü). Perf
-  bütçesine (`?debug`) yansıması not edilir.
-- [ ] Kapı + smoke.
+- [x] **3-1 Su ortam örneklemesi:** Atlas kopyası silindi; `waterEnvironment` /
+  `waterProbe` `samplerCube`, örnekleme `textureLod`. `roughnessToMip` tek bir
+  `ENVMAP_MAX_LOD` okuduğu için su `waterMip(roughness, maxLod)` kullanıyor ve her
+  haritanın kendi `waterEnvironmentMaxLod` / `waterProbeMaxLod` uniform'u var. Formül
+  kopya olduğundan `shaderChunkAnchors` three'nin satırını izliyor.
+- [x] **3-2 `bindMap`:** `texture.isPMREMTexture === true`; LOD = `mipmaps.length - 1`.
+- [x] **3-3 `lakeWater.ts` / `riverWater.ts`:** değişiklik gerekmedi, GLSL ortak.
+- [x] **3-4 `reflectionCapture.ts`:** Bake hedefi `WebGLCubeRenderTarget`; hedef
+  satırlar r187'ye göre. Gök `roughnessToMip(r) / ENVMAP_MAX_LOD * captureGlobalEnvMaxLod`
+  ile örnekleniyor, r184'ten kalan boyut uyumsuzluğu hatası kapandı (smoke 512 px
+  probe + 256 px gök ile doğruluyor). Parallax bloğuna dokunulmadı, smoke yeşil.
+- [x] **3-5 `reflection.ts`:** dönüş tipi `WebGLCubeRenderTarget`; `scene.environment` aynı.
+- [x] **3-6 (K3):** `SHADOW_DEPTH_BIAS` tek işaret (negatif), `shadowDepthBias()` silindi.
+  Üç yer (lights, sunCascadeShadow, sunFollowShadow) sabiti kullanıyor. `far-view`
+  güncellendi; `shaderChunkAnchors` three'nin çevirme satırını izliyor.
+- [x] **3-7 (K7):** `_reversedDepth` yazımı kalıyor: r187 de kamerayı yalnız `true` yapıyor.
+- [x] **3-8 Testler:** `terrainRiverWater`, `engine-tests` capture testi güncellendi.
+- [x] **3-9 Maliyet:** r187 PMREM boyutu **en az 256** (`MIN_SIZE`). Küçük capture yok.
+  Süre, yazılım GPU'su (Chromium headless), kare başına ortalama (r184 → r187):
+  gök 256 1475 → 1100 ms, gök 128 542 → 1034 ms, probe 256 1380 → 927 ms,
+  probe 64 239 → 920 ms. Bellek hesabı: 256 için atlas 6,2 MB → küp 5,2 MB; 64 px
+  probe 0,6 MB → 5,2 MB. Gerçek GPU'da ölçülmedi.
+  **Açık karar:** `DYNAMIC_CAPTURE_SIZE = 128` artık etkisiz; hareketli güneşte her
+  capture 256 kadar pahalı. Dinamik saat kullanan sahnelerde gerçek GPU'da ölçülmeli;
+  gerekirse capture sıklığı düşürülür (`?debug`, bütçe).
+- [x] Kapı yeşil. Smoke: r184'te de kırık dört test dışında yeşil (Faz 4).
 
 ### Faz 4 — Doğrulama ve kabul
 
-- [ ] Smoke: `terrain-water`, `world-environment-moon`, `world-environment-night`,
-  reflection capture / reflective surface, reversed-Z gölge, game-starter
-  parity seviyesi (`tests/smoke/game-starter.spec.ts`).
-- [ ] Faz 0-4 referans görüntüleriyle yan yana karşılaştırma; farklar
-  K8 kaynaklıysa kabul, değilse hata.
+- [x] Smoke (89 test): 85 yeşil. Kırık dördü r184'te de aynı şekilde kırık, yükseltmeden
+  bağımsız, ayrı iş: `river-water-optics:301`, `sun-cascaded-shadows:92`,
+  `world-environment:24`, `vehicle:602` (readout boş, r184 worktree'sinde doğrulandı).
+  Reflective surface'ı render eden smoke yok; capture için `reflection-capture` eklendi.
+- [x] Referans karşılaştırması (`Forge-Archive/three-r187-baseline`, 123 görüntü,
+  `r184-vs-r187.json`): hiçbirinde piksellerin %1'i 24/255'ten fazla değişmedi; 69'u
+  birebir aynı. Birebir aynı olanlar düz renk ortam girdili sabit sahneler, gerçek göğü
+  sınamıyor. Gerçek gök altında en büyük fark GAZ-52 sahnesi, ortalama 5,5/255 (K8).
 - [ ] Kullanıcı görsel kabulü (su, gökyüzü yansıması, probe'lar, gölgeler).
-- [ ] `CLAUDE.md` ve ilgili mimari notlar (reversed-Z S5, su ortam
-  örneklemesi) güncellenir; plan `Forge-Archive`'e taşınır.
+- [x] Mimari not: reversed-Z S5 ve su örneklemesi kod açıklamalarında güncel;
+  `CLAUDE.md`'de bu konuda madde yoktu.
+- [ ] Görsel kabulden sonra plan `Forge-Archive`'e taşınır.
+- Smoke'larda three: `page.evaluate` içinde `/tests/smoke/pages/engineThree.ts` import
+  edilir. `/node_modules/.vite/deps/three.js` smoke sunucusunun değil, eski bir dev
+  oturumunun bundle'ıdır; farklı three sürümü yükleyebilir.
 
 ---
 
@@ -176,11 +169,8 @@ Bump → 0.187.0 sonrası derleme kırılır; bu faz tek dilimde kapanır.
    fonksiyonlarının adını değiştiriyor (`transformDirectionByInverseViewMatrix`,
    `transformNormalByInverseViewMatrix`); `textureCubeUV` ve `ENVMAP_TYPE_CUBE_UV`
    r187'ye kadar duruyor. r186 ayrıca retroreflective blok ekliyor.
-2. `roughnessToMip` ve `ENVMAP_MAX_LOD` su shader'ına include ile mi alınır,
-   yoksa mip sayısı uniform'u mu gerekir? İki farklı boyuttaki (64 / 256)
-   küp aynı shader'da örneklendiği için bu karar 3-1'i belirler.
+2. **Kapandı.** Uniform: mip sayısı boyuta göre değişiyor, bkz. 3-1.
 3. **Kapandı.** r187 PMREM çıktısı `texture.isPMREMTexture === true` taşıyor
    (`PMREMGenerator._allocateTarget`); three'nin kendisi de buna bakıyor. 3-2 bunu
    kullanır. `envMapMaxLod` = mip sayısı − 1, program parametresi olarak geliyor.
-4. "Remove code deprecated in r177" (#34517) ve diğer "Remove deprecated code"
-   PR'ları maddeleştirilmemiş. Bump sonrası `tsc` ne gösterirse o.
+4. **Kapandı.** `tsc` yalnız `Matrix4.isMatrix4` ve `override` uyarılarını gösterdi.

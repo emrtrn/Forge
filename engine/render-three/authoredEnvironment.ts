@@ -74,7 +74,10 @@ import {
 import { shouldRecapture, skyLightCompensation, type CaptureRecord } from "../environment/recapturePolicy";
 import { applyMoonDisc } from "./moonDisc";
 
-/** Sky Light capture size while the clock runs; ambient bounce and sky reflections are low-frequency. */
+/**
+ * Requested Sky Light capture size while the clock runs. Since r187 three floors a
+ * PMREM at 256, so this currently captures at the same size as a static sky.
+ */
 export const DYNAMIC_CAPTURE_SIZE = 128;
 import { normalizeWorldEnvironment, resolveWorldEnvironment } from "../environment/worldEnvironment";
 import type { ResolvedHeightFog } from "../scene/heightFog";

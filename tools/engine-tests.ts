@@ -1138,6 +1138,7 @@ import { registerFractureSupportTests } from "../tests/engine/fractureSupport.te
 import { registerFracturePersistenceTests } from "../tests/engine/fracturePersistence.test";
 import { registerFractureAssetTests } from "../tests/engine/fractureAsset.test";
 import { registerDeformableAssetTests } from "../tests/engine/deformableAsset.test";
+import { registerImpactDeformTests } from "../tests/engine/impactDeform.test";
 import { registerFractureGeometryTests } from "../tests/engine/fractureGeometry.test";
 import { registerFractureRuntimeTests } from "../tests/engine/fractureRuntime.test";
 import { registerTerrainLodTests } from "../tests/engine/terrainLod.test";
@@ -1326,6 +1327,7 @@ registerFractureSupportTests(check);
 registerFracturePersistenceTests(check);
 registerFractureAssetTests(check);
 registerDeformableAssetTests(check);
+registerImpactDeformTests(check);
 registerFractureGeometryTests(check);
 registerFractureRuntimeTests(check);
 registerTerrainLodTests(check);

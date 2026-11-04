@@ -176,9 +176,11 @@ export function registerTerrainWaterTests(check: (name: string, fn: () => void) 
     source.addConsumer(proxy); proxy.updateMatrixWorld(true);
     const target = new WebGLRenderTarget(1, 1);
     let current = target;
+    let currentFace = 2; // A probe bake enters from inside a cube face, and must get it back.
     let calls = 0;
     const fake = { xr: { enabled: true }, shadowMap: { autoUpdate: true }, toneMapping: 4, autoClear: true,
-      getRenderTarget: () => current, setRenderTarget: (value: WebGLRenderTarget) => { current = value; },
+      getRenderTarget: () => current, getActiveCubeFace: () => currentFace, getActiveMipmapLevel: () => 0,
+      setRenderTarget: (value: WebGLRenderTarget, face = 0) => { current = value; currentFace = face; },
       clearColor: 0x336699, clearAlpha: 1,
       getClearColor(color: Color) { return color.setHex(this.clearColor); },
       getClearAlpha() { return this.clearAlpha; },
@@ -195,6 +197,7 @@ export function registerTerrainWaterTests(check: (name: string, fn: () => void) 
       assert.equal(source.hasCapture, false);
       source.update(fake, new Scene(), camera);
       assert.equal(calls, 1); assert.equal(source.hasCapture, true);
+      assert.equal(currentFace, 2, "the active cube face is restored");
       assert.equal(proxy.visible, true); assert.equal(current, target);
       assert.equal(fake.xr.enabled, true); assert.equal(fake.shadowMap.autoUpdate, true); assert.equal(fake.toneMapping, 4);
       assert.equal(fake.clearColor, 0x336699); assert.equal(fake.clearAlpha, 1, "the renderer's clear colour is restored");

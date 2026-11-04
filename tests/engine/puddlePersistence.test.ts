@@ -254,7 +254,7 @@ export async function registerPuddlePersistenceTests(check: (label: string, fn: 
     scene.updateMatrixWorld(true);
     let target: WebGLRenderTarget | null = null, alpha = 1, captures = 0;
     const renderer = { xr: { enabled: false }, shadowMap: { autoUpdate: true }, toneMapping: 0, autoClear: true,
-      getRenderTarget: () => target, setRenderTarget: (value: WebGLRenderTarget | null) => { target = value; },
+      getRenderTarget: () => target, getActiveCubeFace: () => 0, getActiveMipmapLevel: () => 0, setRenderTarget: (value: WebGLRenderTarget | null) => { target = value; },
       getClearColor: (out: Color) => out.set(0), getClearAlpha: () => alpha, setClearColor: (_value: unknown, a: number) => { alpha = a; },
       state: { buffers: { depth: { setMask() {} } } }, render: () => { captures++; assert.ok(surfaces.every(surface => !surface.visible)); },
     } as unknown as WebGLRenderer;

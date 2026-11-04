@@ -18,7 +18,7 @@ function strip(heights: number[]): RiverReflectionMesh {
 function fakeRenderer(render: (scene: Scene, camera: PerspectiveCamera) => void) {
   let target: WebGLRenderTarget | null = null, clear = new Color(), alpha = 1;
   return { xr: { enabled: false }, shadowMap: { autoUpdate: true }, toneMapping: 0, autoClear: true,
-    getRenderTarget: () => target, setRenderTarget: (value: WebGLRenderTarget | null) => { target = value; },
+    getRenderTarget: () => target, getActiveCubeFace: () => 0, getActiveMipmapLevel: () => 0, setRenderTarget: (value: WebGLRenderTarget | null) => { target = value; },
     getClearColor: (out: Color) => out.copy(clear), getClearAlpha: () => alpha,
     setClearColor: (value: Color | number, a: number) => { clear = new Color(value); alpha = a; },
     state: { buffers: { depth: { setMask() {} } } }, render,

@@ -198,11 +198,30 @@ export function cloneUngroupedCharacter(character: LayoutCharacter): LayoutChara
   return clone;
 }
 
+/**
+ * Gives every actor a unique id: those without one, and the later of two that
+ * share one (a hand-copied level). The first keeps it, so saves stay matched.
+ */
+export function ensureActorIds(actors: LayoutActorInstance[] | undefined): void {
+  if (!actors) return;
+  const taken = new Set<string>();
+  const missing: LayoutActorInstance[] = [];
+  for (const actor of actors) {
+    if (actor.id === undefined || taken.has(actor.id)) missing.push(actor);
+    else taken.add(actor.id);
+  }
+  for (const actor of missing) {
+    actor.id = uniqueEditorId("act", taken);
+    taken.add(actor.id);
+  }
+}
+
 export function cloneActorInstance(actor: LayoutActorInstance): LayoutActorInstance {
   const clone: LayoutActorInstance = {
     classRef: actor.classRef,
     position: [...actor.position],
   };
+  if (actor.id !== undefined) clone.id = actor.id;
   if (actor.name !== undefined) clone.name = actor.name;
   if (actor.spatiallyLoaded !== undefined) clone.spatiallyLoaded = actor.spatiallyLoaded;
   if (actor.hidden !== undefined) clone.hidden = actor.hidden;
@@ -228,8 +247,10 @@ export function cloneActorInstance(actor: LayoutActorInstance): LayoutActorInsta
   return clone;
 }
 
+/** A duplicate is a new actor: the next save mints its id. */
 export function cloneUngroupedActorInstance(actor: LayoutActorInstance): LayoutActorInstance {
   const clone = cloneActorInstance(actor);
+  delete clone.id;
   delete clone.groupId;
   return clone;
 }

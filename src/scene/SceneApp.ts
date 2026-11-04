@@ -646,6 +646,7 @@ import {
   cloneWorldWidget,
   lightActorsEqual,
   transformsEqual,
+  ensureActorIds,
 } from "@editor/core/layoutSnapshots";
 import {
   writeRotation,
@@ -4373,6 +4374,8 @@ export class SceneApp {
       return null;
     });
     this.layout = await loadRoomLayout(this.activeProject.manifest.editor.defaultScene);
+    // Before any undo snapshot, so undoing past the next save cannot lose an id.
+    ensureActorIds(this.layout.actors);
     // A reopened level shows its World Environment defaults, never the last preview.
     this.resetWorldEnvironmentPreview();
     this.meshPaintData = await loadMeshPaintData(this.activeProject.manifest.editor.defaultScene);

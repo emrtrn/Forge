@@ -377,6 +377,7 @@ import {
   type ColliderTransformSource,
 } from "@engine/scene/legacyRoomLayoutAdapter";
 import { actorInstanceEntityId, actorInstanceToEntity, actorInstanceTransform } from "@engine/scene/actorInstance";
+import { createSaveEntityKeys, rekeyEntries } from "@engine/persistence/saveEntityKeys";
 import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/actorScript";
 import { createCharacterSceneObject, entityCharacterItem, tintedMaterial } from "@engine/render-three/models";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
@@ -1321,15 +1322,24 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.runtimeServices.provide(gameplaySaveStateService, {
       capture: () => this.collectCurrentSaveState(),
       restore: (request) => {
-        this.behaviorSubsystem.applyPersistentStateSnapshot(request.persistentState);
+        const keys = createSaveEntityKeys(this.layout?.actors ?? []);
+        const gone = new Set<string>();
+        const toRuntime = (saved: string): string | null => {
+          const entityId = keys.toRuntime(saved);
+          if (entityId === null) gone.add(saved);
+          return entityId;
+        };
+        const drivingVehicleId = request.drivingVehicleId ? toRuntime(request.drivingVehicleId) : null;
+        this.behaviorSubsystem.applyPersistentStateSnapshot(rekeyEntries(request.persistentState, toRuntime));
         // Broken objects first: the car and the pawn are then placed in the world as it was saved.
-        this.runtimeServices.resolve(fractureCommandsService)?.restoreState(request.destructibles);
-        this.runtimeServices.resolve(deformableCommandsService)?.restoreState(request.deformables);
+        this.runtimeServices.resolve(fractureCommandsService)?.restoreState(rekeyEntries(request.destructibles, toRuntime));
+        this.runtimeServices.resolve(deformableCommandsService)?.restoreState(rekeyEntries(request.deformables, toRuntime));
         // The car the player was driving must exist to be boarded, loaded cell or not.
-        if (request.drivingVehicleId) this.activateStreamedActor(request.drivingVehicleId);
-        const restoredVehicles = this.applySavedVehicles(request.vehicles);
+        if (drivingVehicleId) this.activateStreamedActor(drivingVehicleId);
+        const restoredVehicles = this.applySavedVehicles(rekeyEntries(request.vehicles, toRuntime));
+        if (gone.size > 0) console.warn(`[save] actors no longer in this level: ${[...gone].join(", ")}`);
         if (request.player) this.applySavedPlayerTransform(request.player, restoredVehicles);
-        if (request.drivingVehicleId) this.applySavedVehicleRide(request.drivingVehicleId);
+        if (drivingVehicleId) this.applySavedVehicleRide(drivingVehicleId);
       },
     });
     this.runtimeServices.provide(levelTravelService, (levelPath) =>
@@ -3913,14 +3923,16 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (!this.activeLevelPath) return null;
     const pawnId = this.gameModeSession?.playerState.pawnEntityId ?? null;
     const playerTransform = pawnId ? this.transformForEntity(pawnId) : null;
+    const { toSaved } = createSaveEntityKeys(this.layout?.actors ?? []);
+    const drivingVehicleId = this.gameModeSession?.drivingVehicleId ?? null;
     return collectSaveState({
       activeLevelPath: this.activeLevelPath,
       playerTransform,
-      persistentState: this.behaviorSubsystem.getPersistentStateSnapshot(),
-      vehicles: this.collectSavedVehicles(),
-      drivingVehicleId: this.gameModeSession?.drivingVehicleId ?? null,
-      destructibles: this.runtimeServices.resolve(fractureCommandsService)?.captureState() ?? [],
-      deformables: this.runtimeServices.resolve(deformableCommandsService)?.captureState() ?? [],
+      persistentState: rekeyEntries(this.behaviorSubsystem.getPersistentStateSnapshot(), toSaved),
+      vehicles: rekeyEntries(this.collectSavedVehicles(), toSaved),
+      drivingVehicleId: drivingVehicleId === null ? null : toSaved(drivingVehicleId),
+      destructibles: rekeyEntries(this.runtimeServices.resolve(fractureCommandsService)?.captureState() ?? [], toSaved),
+      deformables: rekeyEntries(this.runtimeServices.resolve(deformableCommandsService)?.captureState() ?? [], toSaved),
     });
   }
 

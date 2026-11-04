@@ -594,6 +594,10 @@ export function validateActorInstance(value: unknown): Record<string, unknown> {
     classRef: entry.classRef,
     position: entry.position.map((item) => Number(item.toFixed(3))),
   };
+  if (entry.id !== undefined) {
+    if (!isPlacementId(entry.id)) throw new Error("invalid actor instance id");
+    actor.id = entry.id;
+  }
   if (typeof entry.name === "string") actor.name = entry.name;
   const spatiallyLoaded = validateSpatiallyLoaded(entry.spatiallyLoaded, "actor instance");
   if (spatiallyLoaded !== undefined) actor.spatiallyLoaded = spatiallyLoaded;

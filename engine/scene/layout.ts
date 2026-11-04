@@ -239,6 +239,12 @@ export interface LayoutModelInstances {
  * level, not to a reusable Actor Script class.
  */
 export interface LayoutActorInstance {
+  /**
+   * Stable identity, unique per level: what a save calls this actor, because its
+   * index moves with every edit (`engine/persistence/saveEntityKeys.ts`). Minted by
+   * the editor; a duplicate gets its own.
+   */
+  id?: string;
   /** false keeps it in the persistent level when the level is World Partitioned (OPEN_WORLD_PLAN Faz 5) */
   spatiallyLoaded?: boolean;
   /** Path to the `*.actor.json` class-asset, relative to the public root. */

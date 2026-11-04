@@ -1448,8 +1448,7 @@ export class EditorSceneController {
     if (selection.kind === "actor") {
       const actor = layout.actors?.[selection.index];
       if (!actor) return null;
-      const snapshot = cloneActorInstance(actor);
-      delete snapshot.groupId;
+      const snapshot = cloneUngroupedActorInstance(actor);
       delete snapshot.nodeId;
       const duplicateIndex = selection.index + 1;
       const duplicateSelection: Selection = { kind: "actor", index: duplicateIndex };

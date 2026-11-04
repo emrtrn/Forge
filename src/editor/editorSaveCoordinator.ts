@@ -1,3 +1,4 @@
+import { ensureActorIds } from "@editor/core/layoutSnapshots";
 import { foliageDataPath, type LayoutFoliageData } from "@engine/scene/foliage";
 import { meshPaintDataPath, type LayoutMeshPaintData } from "@engine/scene/meshPaint";
 import type { LayoutSavePayload, LayoutSaver, LayoutSaveResult } from "@/scene/SceneApp";
@@ -164,6 +165,8 @@ export class EditorSaveSession {
       // every caller already queued for this turn observes the same result.
       started();
       const source = this.source();
+      // A save names actors by id, so whatever reaches disk has one.
+      ensureActorIds(source.layout.actors);
       // Capture the whole batch before awaiting the first response. Later edits
       // belong to a later save, even for sidecars not written yet.
       const payload = structuredClone({ layout: source.layout, editor: source.editor, scenePath: source.scenePath });

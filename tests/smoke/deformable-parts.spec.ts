@@ -24,6 +24,8 @@ async function truckState(page: Page): Promise<{
   pieces: Record<string, number[]>;
   /** Left doors in the scene that sit on the truck, not on a piece. */
   doorsOnTruck: number;
+  /** World x of each of them: which truck still has its door. */
+  doorX: number[];
 }> {
   return page.evaluate(() => {
     interface Node {
@@ -35,7 +37,7 @@ async function truckState(page: Page): Promise<{
     const dented = new Set<string>();
     const loose: Record<string, string[]> = {};
     const pieces: Record<string, number[]> = {};
-    const onTruck = new Set<unknown>();
+    const onTruck = new Set<Node>();
     for (const scene of w.__partScenes) {
       scene.traverse((item) => {
         const node = item as Node;
@@ -54,7 +56,10 @@ async function truckState(page: Page): Promise<{
         if (!isLoose && node.name === "Door_L_Gaz-52_0") onTruck.add(node);
       });
     }
-    return { dented: [...dented].sort(), loose, pieces, doorsOnTruck: onTruck.size };
+    return {
+      dented: [...dented].sort(), loose, pieces, doorsOnTruck: onTruck.size,
+      doorX: [...onTruck].map((node) => node.matrixWorld.elements[12]!),
+    };
   });
 }
 
@@ -69,8 +74,10 @@ async function readVehicleKmh(page: Page): Promise<number> {
   return match ? Math.abs(Number(match[1])) : -1;
 }
 
-/** Routes the level and the project, then opens Play; returns the errors seen so far and later. */
-async function play(page: Page, editLevel: (level: Record<string, unknown[]>) => void): Promise<{ errors: string[]; messages: string[] }> {
+/** Routes the level and the project, then opens Play; returns the errors seen so far and later, and how to open it again. */
+async function play(page: Page, editLevel: (level: Record<string, unknown[]>) => void): Promise<{
+  errors: string[]; messages: string[]; open: () => Promise<void>;
+}> {
   const errors: string[] = [];
   const messages: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -79,7 +86,9 @@ async function play(page: Page, editLevel: (level: Record<string, unknown[]>) =>
     if (message.type() === "error") errors.push(message.text());
   });
   await page.context().addInitScript(() => {
-    localStorage.clear();
+    // Once per test: a page opened again must still find the save.
+    if (!sessionStorage.getItem("partSmoke")) localStorage.clear();
+    sessionStorage.setItem("partSmoke", "1");
     const w = window as unknown as { __THREE_DEVTOOLS__: EventTarget; __partScenes: unknown[] };
     w.__partScenes = [];
     w.__THREE_DEVTOOLS__ = new EventTarget();
@@ -101,11 +110,15 @@ async function play(page: Page, editLevel: (level: Record<string, unknown[]>) =>
     project.editor.defaultScene = LEVEL;
     await route.fulfill({ response, json: project });
   });
-  await page.goto(`/?debug&partSmoke=${Date.now()}`);
-  await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
-  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
-  await expect(page.locator("#debug-stats")).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
-  return { errors, messages };
+  const open = async (): Promise<void> => {
+    messages.length = 0;
+    await page.goto(`/?debug&partSmoke=${Date.now()}`);
+    await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
+    await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
+    await expect(page.locator("#debug-stats")).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
+  };
+  await open();
+  return { errors, messages, open };
 }
 
 /** The car stays pawn; the truck stands a quarter turned, so its left side (+X) faces the car driving +Z. */
@@ -259,5 +272,54 @@ test("deformable parts: a save keeps the door off, a load from before the crash 
   await expect.poll(async () => Object.keys((await truckState(page)).pieces), { timeout: 30_000 }).toEqual([]);
   expect((await truckState(page)).doorsOnTruck).toBe(0);
   expect(await readDeform(page)).not.toMatch(/detached/);
+  expect(errors).toEqual([]);
+});
+
+test("deformable parts: a saved loss stays on its own truck after the level renumbers its actors", async ({ page }) => {
+  // Two trucks of one asset: only the id tells them apart once the numbers move.
+  const truck = (id: string, x: number): Record<string, unknown> => ({
+    classRef: TRUCK, id, name: id, position: [x + 0.06, 0, 14], rotation: [0, 90, 0],
+  });
+  let renumbered = false;
+  const { errors, open } = await play(page, (level) => {
+    const extra = { classRef: TRUCK, name: "A new truck, added after the save", position: [-40, 0, -30] };
+    level.actors = [{ ...(level.actors![0] as object), id: "smoke-car" }, ...(renumbered ? [extra] : []), truck("hit-truck", 0), truck("far-truck", 30)];
+    (level as unknown as { worldSettings: Record<string, unknown> }).worldSettings.pauseMenuWidget = "menu";
+  });
+  const stats = page.locator("#debug-stats");
+  const menu = page.locator('[data-ui-id="title"]');
+  await expect(stats).toContainText('save.slots.quick.status = "Empty"', { timeout: 30_000 });
+  await expect.poll(async () => (await truckState(page)).doorsOnTruck, { timeout: 30_000 }).toBe(2);
+
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect.poll(() => readDeform(page), { timeout: 40_000 }).toMatch(/detached 1/);
+  await page.keyboard.up("KeyW");
+  await page.keyboard.press("Escape", { delay: 150 });
+  await expect(menu).toContainText("Save / Load");
+  await page.locator('[data-ui-id="quick-save"]').click();
+  await expect(stats).toContainText(/save\.slots\.quick\.status = "Saved /, { timeout: 10_000 });
+  const saved = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((entry) => entry.startsWith("forge.saveGame.") && entry.endsWith(".slot.quick"));
+    return key ? JSON.parse(localStorage.getItem(key)!).payload.deformables as { entityId: string; detachedParts?: string[] }[] : [];
+  });
+  console.log(`[parts smoke] saved ${JSON.stringify(saved.map((entry) => [entry.entityId, entry.detachedParts]))}`);
+  expect(saved.find((entry) => entry.detachedParts)?.entityId).toBe("actor-id:hit-truck");
+
+  // The hit truck was actor:1 when saved and is actor:2 now; actor:1 is a new truck.
+  renumbered = true;
+  await open();
+  await expect(stats).toContainText(/save\.slots\.quick\.status = "Saved /, { timeout: 30_000 });
+  await expect.poll(async () => (await truckState(page)).doorsOnTruck, { timeout: 30_000 }).toBe(3);
+  await page.keyboard.press("Escape", { delay: 150 });
+  await expect(menu).toContainText("Save / Load");
+  await page.locator('[data-ui-id="quick-load"]').click();
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+
+  await expect.poll(async () => (await truckState(page)).doorsOnTruck, { timeout: 30_000 }).toBe(2);
+  const { doorX } = await truckState(page);
+  console.log(`[parts smoke] doors after load at x ${JSON.stringify(doorX)}`);
+  // The new truck stands at x = -40, the far one near 30: the hit truck, near 0, lost it.
+  expect(doorX.every((x) => Math.abs(x) > 15)).toBe(true);
   expect(errors).toEqual([]);
 });

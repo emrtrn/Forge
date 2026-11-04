@@ -54,6 +54,20 @@ export function registerFracturePersistenceTests(check: (label: string, fn: () =
       deformables: [{ entityId: "car", dents: [{ ...dent, part: "door_left" }, { ...dent, part: "" }, { ...dent, part: 7 }, dent] }],
     })!;
     assert.deepEqual(parted.deformables[0]!.dents, [{ ...dent, part: "door_left" }, dent, dent, dent], "a dent keeps its part, a bad one lands on the body");
+
+    const lost = applySaveState({
+      activeLevelPath: "a",
+      deformables: [
+        { entityId: "car", dents: [], detachedParts: ["door_left", "door_left", "", 7, "mirror_left"], assetId: "truck" },
+        { entityId: "plain", dents: [dent], assetId: 3, detachedParts: "door" },
+        { entityId: "nothing", dents: [], detachedParts: [] },
+      ],
+    })!;
+    assert.deepEqual(lost.deformables, [
+      { entityId: "car", dents: [], detachedParts: ["door_left", "mirror_left"], assetId: "truck" },
+      { entityId: "plain", dents: [dent] },
+    ], "a lost part alone is worth restoring");
+    assert.deepEqual(applySaveState(JSON.parse(JSON.stringify(collectSaveState({ activeLevelPath: "a", deformables: lost.deformables }))))!.deformables, lost.deformables);
   });
 
   check("fracture persistence: malformed masks decode to null", () => {

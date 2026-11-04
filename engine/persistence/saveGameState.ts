@@ -13,7 +13,7 @@
  * on top of this one, not in here.
  */
 import type { PersistentScriptStateEntry } from "../behavior/behaviorSubsystem";
-import { DEFORMABLE_LIMITS } from "../physics/deformable/deformableTypes";
+import { DEFORMABLE_LIMITS, DEFORMABLE_MAX_PARTS } from "../physics/deformable/deformableTypes";
 import { decodeChunkMask, FRACTURE_MASK_MAX_CHUNKS } from "../physics/fracture/fractureMask";
 import type { TransformComponent } from "../scene/components";
 import type { SceneJsonValue } from "../scene/entity";
@@ -86,6 +86,13 @@ export interface SavedDent {
 export interface SavedDeformableState {
   readonly entityId: string;
   readonly dents: readonly SavedDent[];
+  /**
+   * Parts that tore off; the object loads without them. Where a loose part lay
+   * is not saved: it is debris, like a fracture chunk.
+   */
+  readonly detachedParts?: readonly string[];
+  /** The asset this was saved on. Entity ids follow list order, so a changed level can reuse one for another object. */
+  readonly assetId?: string;
 }
 
 export interface GameSaveState {
@@ -291,7 +298,7 @@ function normalizeDent(value: unknown): SavedDent | null {
   };
 }
 
-/** Valid entries only, one per entity (the first wins), sorted by entity id; an entry with no valid dent is nothing to restore. */
+/** Valid entries only, one per entity (the first wins), sorted by entity id; an entry with no dent and no lost part is nothing to restore. */
 function normalizeDeformables(value: unknown): SavedDeformableState[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
@@ -300,9 +307,17 @@ function normalizeDeformables(value: unknown): SavedDeformableState[] {
     if (!isPlainObject(raw) || typeof raw.entityId !== "string" || raw.entityId.length === 0 || !Array.isArray(raw.dents)) continue;
     if (seen.has(raw.entityId)) continue;
     const dents = raw.dents.flatMap((dent) => normalizeDent(dent) ?? []).slice(0, DEFORMABLE_LIMITS.maxDents[1]);
-    if (dents.length === 0) continue;
+    const detachedParts = Array.isArray(raw.detachedParts)
+      ? [...new Set(raw.detachedParts.filter((part): part is string => typeof part === "string" && part.length > 0))].slice(0, DEFORMABLE_MAX_PARTS)
+      : [];
+    if (dents.length === 0 && detachedParts.length === 0) continue;
     seen.add(raw.entityId);
-    entries.push({ entityId: raw.entityId, dents });
+    entries.push({
+      entityId: raw.entityId,
+      dents,
+      ...(detachedParts.length > 0 ? { detachedParts } : {}),
+      ...(typeof raw.assetId === "string" && raw.assetId.length > 0 ? { assetId: raw.assetId } : {}),
+    });
   }
   return entries.sort((a, b) => a.entityId.localeCompare(b.entityId));
 }

@@ -168,6 +168,21 @@ function harness(
   };
 }
 
+const LOOSE_DOOR: AssetDeformablePart[] = [{
+  id: "door", nodes: ["Door"], zone: { min: [0, -2, -1], max: [4, 2, 1] }, detach: { impulse: 800, massKg: 40, kick: 0 },
+}];
+
+/** A harness whose first object has a door that tears off at 800 N·s. */
+function lossyHarness() {
+  const test = harness(undefined, undefined, undefined, { parts: LOOSE_DOOR });
+  const { root, door } = partedObject();
+  test.objects.set(test.first, root);
+  return {
+    ...test, root, door, doorNode: door.parent!,
+    tear: () => test.frame([{ ...hitOn(test.first, 900), point: [1, 0, 0.05] }]),
+  };
+}
+
 /** A hit on `b` from `a`, pushing `b`'s surface towards -Z. */
 const hitOn = (entityId: string, impulse: number, other = "car"): PhysicsImpact => ({
   a: other, b: entityId, point: [0, 0, 0.05], normal: [0, 0, -1], impulse, relativeSpeed: 5,
@@ -279,7 +294,7 @@ export function registerDeformableModuleTests(check: (label: string, run: () => 
     assert.equal(door.geometry, dented, "the dented mesh leaves, not a clean one");
     assert.notEqual(door.parent!.parent, root);
     assert.equal(test.commands.snapshot().detached, 1);
-    assert.equal(test.commands.snapshot().dents, 1, "the second hit deepened the same dent before it left");
+    assert.equal(test.commands.snapshot().dents, 0, "the dent left with the part");
 
     assert.equal(test.bodies.size, 1);
     const [pieceId, body] = [...test.bodies][0]!;
@@ -327,6 +342,85 @@ export function registerDeformableModuleTests(check: (label: string, run: () => 
     test.frame([], 0.3);
     test.frame([{ ...hitOn(test.first, 900, "detached:other:door:0"), point: [-1, 0, 0.05] }]);
     assert.equal(test.commands.snapshot().dents, dents);
+    test.module.dispose!();
+  });
+
+  check("deformable module: a rebuilt object comes without its lost parts, with its other dents", () => {
+    const test = lossyHarness();
+    test.tear();
+    test.frame([{ ...hitOn(test.first, 500), point: [-1, 0, 0.05] }]);
+    assert.equal(test.commands.snapshot().dents, 1);
+
+    test.objects.set(test.first, null);
+    test.frame();
+    const rebuilt = partedObject();
+    test.objects.set(test.first, rebuilt.root);
+    test.frame();
+    assert.equal(rebuilt.door.parent!.parent, null, "the door stays gone");
+    assert.equal(test.commands.snapshot().dents, 1);
+    test.module.dispose!();
+  });
+
+  check("deformable module: a save lists lost parts and the asset, a load without them puts the door back", () => {
+    const test = lossyHarness();
+    const { door, doorNode, root } = test;
+    const shared = door.geometry;
+    test.tear();
+    const saved = test.commands.captureState();
+    assert.deepEqual(saved, [{ entityId: test.first, dents: [], detachedParts: ["door"], assetId: ASSET_ID }]);
+
+    // An older save: the door was on.
+    test.commands.restoreState([]);
+    assert.equal(test.commands.snapshot().detached, 0);
+    assert.equal(test.bodies.size, 0, "the loose piece is gone");
+    assert.equal(doorNode.parent, root);
+    assert.equal(door.geometry, shared);
+    test.frame();
+
+    // The later save: the door was off, and no piece comes back with it.
+    test.commands.restoreState(saved);
+    test.frame();
+    assert.equal(doorNode.parent, null);
+    assert.equal(test.commands.snapshot().detached, 0);
+    assert.deepEqual(test.commands.captureState(), saved, "it stays lost in the next save");
+    test.frame([], 0.3);
+    test.frame([{ ...hitOn(test.first, 5000), point: [1, 0, 0.05] }]);
+    assert.equal(test.bodies.size, 0, "a part that is gone cannot tear off again");
+
+    test.commands.restoreState([]);
+    test.frame();
+    assert.equal(doorNode.parent, root, "a door only a save removed comes back too");
+    test.module.dispose!();
+  });
+
+  check("deformable module: a save entry from another asset is ignored", () => {
+    const test = lossyHarness();
+    const warnings: string[] = [];
+    const warn = console.warn;
+    console.warn = (message: string) => warnings.push(message);
+    try {
+      test.commands.restoreState([{ entityId: test.first, dents: [], detachedParts: ["door"], assetId: "some-other-truck" }]);
+    } finally {
+      console.warn = warn;
+    }
+    test.frame();
+    assert.equal(test.doorNode.parent, test.root);
+    assert.deepEqual(test.commands.captureState(), []);
+    assert.equal(warnings.length, 1);
+    test.module.dispose!();
+  });
+
+  check("deformable module: loose pieces stay under a budget, the oldest goes first", () => {
+    const test = harness(Array.from({ length: 18 }, (_, index) => ({ position: [index * 9, 0, 0] as [number, number, number] })), undefined, undefined, { parts: LOOSE_DOOR });
+    for (let index = 0; index < 18; index += 1) {
+      const id = instanceEntityId(ASSET_ID, index);
+      test.objects.set(id, partedObject().root);
+      test.frame([{ ...hitOn(id, 900), point: [1, 0, 0.05] }]);
+    }
+    assert.equal(test.commands.snapshot().detached, 16);
+    assert.equal(test.dynamicObjects.size, 16);
+    assert.equal(test.scene.children.length, 16);
+    assert.equal([...test.bodies.keys()].some((id) => id.includes(`${instanceEntityId(ASSET_ID, 0)}:`)), false);
     test.module.dispose!();
   });
 
@@ -455,10 +549,10 @@ const actorEntity = (id: string, deformable: EntityComponentData | null): Entity
 }) as unknown as Entity;
 
 /** Serves the actor mesh's sidecar while `run` works. */
-async function withSidecar(run: () => Promise<void>): Promise<void> {
+async function withSidecar(run: () => Promise<void>, sidecar: object = TEST_DEF): Promise<void> {
   const original = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL) => (String(input) === "/Meshes/Sedan.deformable.json"
-    ? { ok: true, status: 200, json: async () => TEST_DEF }
+    ? { ok: true, status: 200, json: async () => sidecar }
     : { ok: false, status: 404, json: async () => ({}) }) as unknown as Response) as typeof globalThis.fetch;
   try {
     await run();
@@ -562,6 +656,32 @@ export async function registerDeformableActorTests(check: (label: string, run: (
     assert.equal(car.rigged.geometry, riggedGeometry);
     test.module.dispose!();
   }));
+
+  await check("deformable module: an actor that streams out takes its loose parts, not its loss", () => withSidecar(async () => {
+    const test = harness([], []);
+    await test.loaded;
+    const entity = actorEntity("actor:car", {} as EntityComponentData);
+    test.services.addEntity(entity);
+    await settle();
+    const first = partedObject();
+    test.objects.set("actor:car", first.root);
+    test.frame([{ ...hitOn("actor:car", 900), point: [1, 0, 0.05] }]);
+    assert.equal(test.commands.snapshot().detached, 1);
+
+    test.services.removeEntity("actor:car");
+    test.objects.set("actor:car", null);
+    test.frame();
+    assert.equal(test.commands.snapshot().detached, 0, "nothing is left lying where nobody goes back");
+    assert.equal(test.scene.children.length, 0);
+
+    test.services.addEntity(entity);
+    await settle();
+    const returned = partedObject();
+    test.objects.set("actor:car", returned.root);
+    test.frame();
+    assert.equal(returned.door.parent!.parent, null);
+    test.module.dispose!();
+  }, { ...TEST_DEF, parts: LOOSE_DOOR }));
 
   await check("deformable module: an actor that streams out comes back with its dents", () => withSidecar(async () => {
     const test = harness([], []);

@@ -11,7 +11,11 @@
  * inside a part's zone stays on that part's meshes, and a hard enough hit on a
  * part with `detach` tears it off as a body of its own, dents included. The piece
  * leaves at the speed of the spot it was on (`v + ω × r`); the object keeps its
- * mass and collider, and a save does not know about it yet (contract VM-3).
+ * mass and collider.
+ *
+ * Which parts an object lost is state, like its dents: it survives a rebuilt
+ * object and goes to the save-game. The loose piece is debris: it is not saved,
+ * it leaves with its owner's cell and under the budget.
  *
  * A dent list outlives the render object. Each frame the module compares a dented
  * object with what the shell renders now, so a World Partition cell that returns
@@ -63,6 +67,8 @@ const HIT_EPISODE_SECONDS = 0.25;
 const FRACTURE_CHUNK_PREFIX = "fracture:";
 /** A torn-off part is debris too: it dents nothing, its own car included. */
 const DETACHED_PIECE_PREFIX = "detached:";
+/** Loose pieces kept in a level; the oldest goes first. */
+const MAX_LOOSE_PIECES = 16;
 /** Hits waiting for their frame; a pile-up past this is dropped. */
 const MAX_QUEUED_HITS = 16;
 
@@ -72,6 +78,7 @@ const VEHICLE_WHEEL_NODE_PREFIX = "VehicleWheel";
 /** An object that can dent. */
 interface DeformableSource {
   readonly def: AssetDeformableDef;
+  readonly assetId: string;
   /** Actors leave with their entity; placements stay known from the layout. */
   readonly actor: boolean;
 }
@@ -80,6 +87,9 @@ interface DeformableSource {
 interface DentEntry {
   dents: readonly Dent[];
   target: DentTarget | null;
+  /** Parts it lost; a rebuilt object comes without them. */
+  readonly detached: Set<string>;
+  readonly assetId: string;
 }
 
 interface QueuedHit {
@@ -111,8 +121,8 @@ export function createDeformableModule(): CapabilityModule {
   const entries = new Map<string, DentEntry>();
   /** Object → part → its running collision; "" = the body. */
   const episodes = new Map<string, Map<string, { startedAt: number; depth: number }>>();
-  /** Torn-off parts by body id; they live until the level ends (VM-3 adds a budget). */
-  const pieces = new Map<string, DetachedPiece>();
+  /** Torn-off parts by body id, oldest first. */
+  const pieces = new Map<string, { readonly piece: DetachedPiece; readonly ownerId: string }>();
   let pieceSerial = 0;
   let scene: Scene | null = null;
   /** Sidecars already reported for parts that match no mesh. */
@@ -148,6 +158,7 @@ export function createDeformableModule(): CapabilityModule {
     if (entry.target || !object || !source) return;
     const wheelNodes = new Set(host?.wheelNodes(entityId) ?? []);
     entry.target = new DentTarget(object, { exclude: (mesh) => isWheelMesh(mesh, wheelNodes), parts: source.def.parts });
+    for (const part of entry.detached) entry.target.removePart(part);
     entry.target.restore(entry.dents, source.def);
   };
 
@@ -179,7 +190,7 @@ export function createDeformableModule(): CapabilityModule {
     const source = sources.get(hit.entityId);
     if (!source || !host) return;
     if (services?.resolve(fractureCommandsService)?.isFractured(hit.entityId)) return;
-    const entry = entries.get(hit.entityId) ?? { dents: [], target: null };
+    const entry = entries.get(hit.entityId) ?? { dents: [], target: null, detached: new Set<string>(), assetId: source.assetId };
     syncTarget(hit.entityId, entry);
     if (!entry.target) {
       // Nothing renders it right now, so there is no surface to land on.
@@ -191,7 +202,7 @@ export function createDeformableModule(): CapabilityModule {
     entries.set(hit.entityId, entry);
     if (depth > 0) dent(hit, source.def, entry.target, depth);
     // After the dent, so this hit's mark leaves with the part.
-    if (part) tearOff(hit, source.def, entry.target, part);
+    if (part) tearOff(hit, source.def, entry, part);
   };
 
   const dent = (hit: QueuedHit, def: AssetDeformableDef, target: DentTarget, depth: number): void => {
@@ -216,11 +227,12 @@ export function createDeformableModule(): CapabilityModule {
   };
 
   /** Gives a part a body of its own if this hit was hard enough; a part goes only once. */
-  const tearOff = (hit: QueuedHit, def: AssetDeformableDef, target: DentTarget, partId: string): void => {
+  const tearOff = (hit: QueuedHit, def: AssetDeformableDef, entry: DentEntry, partId: string): void => {
     const detach = def.parts?.find((part) => part.id === partId)?.detach;
     if (!detach || hit.impulse < detach.impulse || !host || !scene) return;
-    const piece = target.detachPart(partId);
+    const piece = entry.target?.detachPart(partId);
     if (!piece) return;
+    entry.detached.add(partId);
     const pieceId = `${DETACHED_PIECE_PREFIX}${hit.entityId}:${partId}:${pieceSerial++}`;
     host.physics.addEntities([{
       id: pieceId,
@@ -254,7 +266,8 @@ export function createDeformableModule(): CapabilityModule {
     );
     scene.add(piece.object);
     host.attachDynamicObject(pieceId, piece.object);
-    pieces.set(pieceId, piece);
+    pieces.set(pieceId, { piece, ownerId: hit.entityId });
+    if (pieces.size > MAX_LOOSE_PIECES) removePiece(pieces.keys().next().value!);
     services?.resolve(scriptMessageBusService)?.emit(DEFORMABLE_PART_DETACHED_MESSAGE, hit.entityId, {
       entityId: hit.entityId,
       part: partId,
@@ -281,8 +294,18 @@ export function createDeformableModule(): CapabilityModule {
   const applyRestore = (entityId: string): void => {
     const saved = pendingRestore.get(entityId);
     if (!saved || !sources.has(entityId)) return;
+    const source = sources.get(entityId)!;
     pendingRestore.delete(entityId);
-    entries.set(entityId, { dents: saved.dents, target: null });
+    if (saved.assetId && saved.assetId !== source.assetId) {
+      console.warn(`[deformable] save entry for ${saved.assetId} ignored: ${entityId} is ${source.assetId} now`);
+      return;
+    }
+    entries.set(entityId, {
+      dents: saved.dents,
+      target: null,
+      detached: new Set(saved.detachedParts ?? []),
+      assetId: source.assetId,
+    });
   };
 
   const reportUnmatched = (): void => {
@@ -295,13 +318,21 @@ export function createDeformableModule(): CapabilityModule {
     const saved = new Map(pendingRestore);
     for (const [entityId, entry] of entries) {
       const dents = entry.target?.dentList ?? entry.dents;
-      if (dents.length > 0) saved.set(entityId, { entityId, dents: dents.map((dent) => ({ ...dent })) });
+      if (dents.length === 0 && entry.detached.size === 0) continue;
+      saved.set(entityId, {
+        entityId,
+        dents: dents.map((dent) => ({ ...dent })),
+        ...(entry.detached.size > 0 ? { detachedParts: [...entry.detached].sort() } : {}),
+        assetId: entry.assetId,
+      });
     }
     return [...saved.values()];
   };
 
   const restoreState = (restored: readonly SavedDeformableState[]): void => {
-    // The save's dents replace the ones made since, even on an object it does not list.
+    // The save's dents replace the ones made since, even on an object it does not
+    // list, and what tore off since goes back on. A load stays in the live scene.
+    removePieces(true);
     for (const entry of entries.values()) entry.target?.dispose();
     entries.clear();
     episodes.clear();
@@ -328,7 +359,7 @@ export function createDeformableModule(): CapabilityModule {
     const level = generation;
     const def = await actorDef(mesh.assetId);
     if (!def || !host || level !== generation) return;
-    sources.set(entity.id, { def, actor: true });
+    sources.set(entity.id, { def, assetId: mesh.assetId, actor: true });
     host.physics.setImpactEventThreshold(entity.id, def.dentImpulse);
     applyRestore(entity.id);
   };
@@ -355,15 +386,20 @@ export function createDeformableModule(): CapabilityModule {
     }));
   };
 
-  const removePieces = (): void => {
-    if (pieces.size === 0) return;
-    host?.physics.removeEntities([...pieces.keys()]);
-    for (const [id, piece] of pieces) {
-      host?.attachDynamicObject(id, null);
-      piece.object.removeFromParent();
-      piece.dispose();
-    }
-    pieces.clear();
+  /** Removes a piece from the world; `goesBack` returns it to its object first. */
+  const removePiece = (id: string, goesBack = false): void => {
+    const entry = pieces.get(id);
+    if (!entry) return;
+    pieces.delete(id);
+    host?.physics.removeEntities([id]);
+    host?.attachDynamicObject(id, null);
+    if (goesBack) entry.piece.reattach();
+    entry.piece.object.removeFromParent();
+    if (!goesBack) entry.piece.dispose();
+  };
+
+  const removePieces = (goBack = false): void => {
+    for (const id of [...pieces.keys()]) removePiece(id, goBack);
   };
 
   const teardown = (): void => {
@@ -412,6 +448,8 @@ export function createDeformableModule(): CapabilityModule {
           // Its dents stay: an actor of a streamed cell comes back with this id.
           sources.delete(entityId);
           host?.physics.setImpactEventThreshold(entityId, null);
+          // Its loose parts would pile up where nobody goes back to.
+          for (const [id, piece] of [...pieces]) if (piece.ownerId === entityId) removePiece(id);
         },
       });
     },
@@ -429,7 +467,7 @@ export function createDeformableModule(): CapabilityModule {
         group.placements.forEach((placement, index) => {
           if (placement.hidden) return;
           const entityId = instanceEntityId(group.assetId, index);
-          sources.set(entityId, { def, actor: false });
+          sources.set(entityId, { def, assetId: group.assetId, actor: false });
           hostRef.physics.setImpactEventThreshold(entityId, def.dentImpulse);
           applyRestore(entityId);
         });

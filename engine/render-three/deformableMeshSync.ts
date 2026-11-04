@@ -62,6 +62,8 @@ export interface DetachedPiece {
   readonly outward: DentVec3;
   /** Frees the dented geometry; call after the object leaves the scene. */
   dispose(): void;
+  /** Puts the part back where it came from, undented; the piece is finished. */
+  reattach(): void;
 }
 
 /** What a hit did. */
@@ -116,6 +118,8 @@ export class DentTarget {
   private moved = 0;
   private landedOn: string | null = null;
   private readonly detached = new Set<string>();
+  /** Nodes {@link removePart} took away, for {@link dispose} to put back. */
+  private removed: { node: Object3D; parent: Object3D | null }[] = [];
 
   constructor(
     private readonly root: Object3D,
@@ -160,6 +164,10 @@ export class DentTarget {
     const meshes = this.ensureMeshes();
     const items = meshes.filter((item) => item.part === id);
     if (items.length === 0) return null;
+    const nodes = this.partNodes(items);
+    const homes = nodes.map((node) => ({
+      node, parent: node.parent, position: node.position.clone(), quaternion: node.quaternion.clone(), scale: node.scale.clone(),
+    }));
 
     const min = new Vector3(Infinity, Infinity, Infinity);
     const max = new Vector3(-Infinity, -Infinity, -Infinity);
@@ -186,10 +194,9 @@ export class DentTarget {
     object.position.copy(centre).applyMatrix4(dentToWorld);
     object.quaternion.copy(quaternion);
     object.updateMatrixWorld(true);
-    for (const node of new Set(items.map((item) => this.partNode(item.mesh)?.node ?? item.mesh))) object.attach(node);
+    for (const node of nodes) object.attach(node);
 
-    this.meshes = meshes.filter((item) => item.part !== id);
-    this.detached.add(id);
+    this.forgetPart(id);
     const outward = new Vector3(centre.x, 0, centre.z);
     if (outward.lengthSq() > 0) outward.normalize().applyQuaternion(quaternion);
     const euler = new Euler().setFromQuaternion(quaternion, "XYZ");
@@ -205,7 +212,38 @@ export class DentTarget {
           if (written?.userData[DEFORM_CLONE_FLAG] === true) written.dispose();
         }
       },
+      reattach: () => {
+        for (const home of homes) {
+          home.parent?.add(home.node);
+          home.node.position.copy(home.position);
+          home.node.quaternion.copy(home.quaternion);
+          home.node.scale.copy(home.scale);
+        }
+        for (const { mesh, original, written } of items) {
+          if (!written) continue;
+          mesh.geometry = original;
+          if (written.userData[DEFORM_CLONE_FLAG] === true) written.dispose();
+        }
+      },
     };
+  }
+
+  /**
+   * Takes a part off without a piece: it left earlier and this object was built
+   * since, or a save says it is gone. {@link dispose} puts it back.
+   */
+  removePart(id: string): void {
+    const items = this.ensureMeshes().filter((item) => item.part === id);
+    for (const node of this.partNodes(items)) {
+      this.removed.push({ node, parent: node.parent });
+      node.removeFromParent();
+    }
+    for (const item of items) {
+      if (!item.written) continue;
+      item.mesh.geometry = item.original;
+      if (item.written.userData[DEFORM_CLONE_FLAG] === true) item.written.dispose();
+    }
+    this.forgetPart(id);
   }
 
   /** Dents the object where an impact landed. `direction` is a world unit vector, into the object. */
@@ -243,7 +281,8 @@ export class DentTarget {
 
   /** Reapplies a saved dent list on a fresh object; the result equals the live shape. */
   restore(dents: readonly Dent[], params: DentParams): void {
-    for (const dent of dents.slice(0, params.maxDents)) {
+    const present = dents.filter((dent) => !dent.part || !this.detached.has(dent.part));
+    for (const dent of present.slice(0, params.maxDents)) {
       this.dents.push(dent);
       this.push(dent, params);
     }
@@ -256,8 +295,24 @@ export class DentTarget {
       item.mesh.geometry = item.original;
       if (item.written.userData[DEFORM_CLONE_FLAG] === true) item.written.dispose();
     }
+    for (const { node, parent } of this.removed) parent?.add(node);
+    this.removed = [];
     this.meshes = null;
     this.dents.length = 0;
+  }
+
+  /** The part's dents leave with it: they no longer describe this object. */
+  private forgetPart(id: string): void {
+    this.meshes = (this.meshes ?? []).filter((item) => item.part !== id);
+    this.detached.add(id);
+    for (let index = this.dents.length - 1; index >= 0; index -= 1) {
+      if (this.dents[index]!.part === id) this.dents.splice(index, 1);
+    }
+  }
+
+  /** The nodes that carry these meshes, each once. */
+  private partNodes(items: readonly DentMesh[]): Object3D[] {
+    return [...new Set(items.map((item) => this.partNode(item.mesh)?.node ?? item.mesh))];
   }
 
   private toDentSpace(point: DentVec3, direction: DentVec3): { point: DentVec3; direction: DentVec3 } {

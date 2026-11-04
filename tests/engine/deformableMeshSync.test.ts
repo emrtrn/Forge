@@ -257,6 +257,52 @@ export function registerDeformableMeshSyncTests(check: (label: string, run: () =
     assert.equal(cleanFreed, 0);
   });
 
+  check("deformable mesh: a part leaves with its dents, the object's list keeps the rest", () => {
+    const car = twoPieceObject();
+    const target = new DentTarget(car.root, { parts: [DOOR_PART] });
+    target.hit([1, 0, 0.1], INTO, 0.05, params);
+    target.hit([-1, 0, 0.1], INTO, 0.05, params);
+    target.detachPart("door");
+    assert.deepEqual(target.dentList.map((dent) => dent.part), [undefined]);
+  });
+
+  check("deformable mesh: a removed part leaves the object and its old dents stay off the body", () => {
+    const car = twoPieceObject();
+    const doorNode = car.door.parent!;
+    const target = new DentTarget(car.root, { parts: [DOOR_PART] });
+    target.removePart("door");
+    assert.equal(doorNode.parent, null);
+    const bodyGeometry = car.body.geometry;
+    target.restore([{ point: [-0.1, 0, 0], direction: INTO, depth: 0.1, part: "door" }], params);
+    assert.equal(car.body.geometry, bodyGeometry);
+    assert.deepEqual(target.dentList, []);
+    assert.deepEqual(target.unmatchedParts(), []);
+    target.dispose();
+    assert.equal(doorNode.parent, car.root, "the object is whole again for the next owner");
+  });
+
+  check("deformable mesh: a reattached part is back in place, undented", () => {
+    const car = twoPieceObject();
+    car.root.position.set(5, 0, 0);
+    car.root.rotation.y = 1;
+    const doorNode = car.door.parent!;
+    const shared = car.door.geometry;
+    const before = { position: doorNode.position.clone(), quaternion: doorNode.quaternion.clone() };
+    const target = new DentTarget(car.root, { parts: [DOOR_PART] });
+    target.hit(worldPoint(car.root, [1, 0, 0.1]), worldDirection(car.root, INTO), 0.1, params);
+    let copyFreed = 0;
+    car.door.geometry.addEventListener("dispose", () => { copyFreed += 1; });
+    const piece = target.detachPart("door")!;
+    piece.object.position.set(40, 0, 40);
+    piece.reattach();
+    assert.equal(doorNode.parent, car.root);
+    assert.ok(doorNode.position.distanceTo(before.position) < 1e-6);
+    assert.ok(doorNode.quaternion.angleTo(before.quaternion) < 1e-6);
+    assert.equal(car.door.geometry, shared);
+    assert.equal(copyFreed, 1);
+    assert.equal(piece.object.children.length, 0);
+  });
+
   check("deformable mesh: a saved dent of a removed part stays on the body", () => {
     const car = twoPieceObject();
     const doorGeometry = car.door.geometry;

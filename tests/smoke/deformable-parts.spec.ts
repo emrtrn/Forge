@@ -1,8 +1,9 @@
 import { expect, test, type Page, type Route } from "./test";
 
 /**
- * Faz 8 / vehicle damage contract VM-1 and VM-2, on the Gaz-52. A car T-bones the
- * parked truck on its left door, and the truck drives on after losing a door.
+ * Faz 8 / vehicle damage contract VM-1 to VM-3, on the Gaz-52. A car T-bones the
+ * parked truck on its left door, the truck drives on after losing a door, and a
+ * save keeps the loss while a load from before the crash undoes it.
  * Reads `?debug` for the counts and the scene for what happened to the meshes.
  */
 
@@ -21,6 +22,8 @@ async function truckState(page: Page): Promise<{
   loose: Record<string, string[]>;
   /** World position of each torn-off piece. */
   pieces: Record<string, number[]>;
+  /** Left doors in the scene that sit on the truck, not on a piece. */
+  doorsOnTruck: number;
 }> {
   return page.evaluate(() => {
     interface Node {
@@ -32,6 +35,7 @@ async function truckState(page: Page): Promise<{
     const dented = new Set<string>();
     const loose: Record<string, string[]> = {};
     const pieces: Record<string, number[]> = {};
+    const onTruck = new Set<unknown>();
     for (const scene of w.__partScenes) {
       scene.traverse((item) => {
         const node = item as Node;
@@ -41,12 +45,16 @@ async function truckState(page: Page): Promise<{
         }
         if (!node.isMesh || !/Gaz-52_0$/.test(node.name ?? "")) return;
         if (node.geometry?.userData.forgeDeformClone === true) dented.add(node.name!);
+        let isLoose = false;
         for (let parent = node.parent; parent; parent = parent.parent) {
-          if (parent.name?.startsWith("detached-")) (loose[parent.name] ??= []).push(node.name!);
+          if (!parent.name?.startsWith("detached-")) continue;
+          (loose[parent.name] ??= []).push(node.name!);
+          isLoose = true;
         }
+        if (!isLoose && node.name === "Door_L_Gaz-52_0") onTruck.add(node);
       });
     }
-    return { dented: [...dented].sort(), loose, pieces };
+    return { dented: [...dented].sort(), loose, pieces, doorsOnTruck: onTruck.size };
   });
 }
 
@@ -184,5 +192,72 @@ test("deformable parts: a truck that lost a door still drives", async ({ page })
   await expect.poll(() => readVehicleKmh(page), { timeout: 20_000 }).toBeGreaterThan(3);
   await page.keyboard.up("KeyS");
   expect(await readDeform(page)).toMatch(/detached 1/);
+  expect(errors).toEqual([]);
+});
+
+test("deformable parts: a save keeps the door off, a load from before the crash puts it back", async ({ page }) => {
+  const { errors } = await play(page, (level) => {
+    parkTruckBroadside(level);
+    (level as unknown as { worldSettings: Record<string, unknown> }).worldSettings.pauseMenuWidget = "menu";
+  });
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText('save.slots.quick.status = "Empty"', { timeout: 30_000 });
+  await expect.poll(() => readDeform(page), { timeout: 30_000 }).toMatch(/objects 2 dented 0 dents 0/);
+
+  // Input is read per frame: at 10 fps a key tap needs to last a frame.
+  const menu = page.locator('[data-ui-id="title"]');
+  const openMenu = async (): Promise<void> => {
+    await page.keyboard.press("Escape", { delay: 150 });
+    await expect(menu).toContainText("Save / Load");
+  };
+  const closeMenu = async (): Promise<void> => {
+    if (await menu.isVisible()) await page.keyboard.press("Escape", { delay: 150 });
+    await expect(menu).toBeHidden();
+  };
+  const quickSave = async (): Promise<void> => {
+    await page.locator('[data-ui-id="quick-save"]').click();
+    await expect(stats).toContainText(/save\.slots\.quick\.status = "Saved /, { timeout: 10_000 });
+  };
+  const quickLoad = async (): Promise<void> => {
+    await page.locator('[data-ui-id="quick-load"]').click();
+    await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  };
+  const crash = async (): Promise<void> => {
+    await page.locator("#game-canvas").click();
+    await page.keyboard.down("KeyW");
+    await expect.poll(() => readDeform(page), { timeout: 40_000 }).toMatch(/detached 1/);
+    await page.keyboard.up("KeyW");
+  };
+  const savedEntries = (): Promise<{ entityId: string; detachedParts?: string[]; assetId?: string }[] | null> => page.evaluate(() => {
+    const key = Object.keys(localStorage).find((entry) => entry.startsWith("forge.saveGame.") && entry.endsWith(".slot.quick"));
+    return key ? JSON.parse(localStorage.getItem(key)!).payload.deformables : null;
+  });
+
+  // Saved with the door on, then lost: the load undoes the crash.
+  await openMenu();
+  await quickSave();
+  await closeMenu();
+  await crash();
+  expect((await truckState(page)).doorsOnTruck).toBe(0);
+  await openMenu();
+  await quickLoad();
+  await expect.poll(async () => (await truckState(page)).doorsOnTruck, { timeout: 30_000 }).toBe(1);
+  const undone = await truckState(page);
+  expect(undone.loose).toEqual({});
+  expect(undone.dented).not.toContain("Door_L_Gaz-52_0");
+  expect(await readDeform(page)).not.toMatch(/detached/);
+
+  // Lost, then saved: the load keeps it off and brings no loose piece.
+  await closeMenu();
+  await crash();
+  await openMenu();
+  await quickSave();
+  const saved = await savedEntries();
+  console.log(`[parts smoke] saved ${JSON.stringify(saved?.map(({ entityId, detachedParts, assetId }) => [entityId, detachedParts, assetId]))}`);
+  expect(saved?.find((entry) => entry.entityId === "actor:1")).toMatchObject({ detachedParts: ["door_left"], assetId: "gaz-52-base" });
+  await quickLoad();
+  await expect.poll(async () => Object.keys((await truckState(page)).pieces), { timeout: 30_000 }).toEqual([]);
+  expect((await truckState(page)).doorsOnTruck).toBe(0);
+  expect(await readDeform(page)).not.toMatch(/detached/);
   expect(errors).toEqual([]);
 });

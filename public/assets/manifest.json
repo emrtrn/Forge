@@ -22357,6 +22357,29 @@
         "bytes": 429
       },
       "license": "Unknown"
+    },
+    {
+      "id": "mtest-material",
+      "name": "Mtest.Material",
+      "assetType": "material",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/mtest.material.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 679
+      },
+      "license": "Unknown"
     }
   ]
 }

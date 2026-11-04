@@ -62,12 +62,12 @@
         },
         {
           "id": "post-0",
-          "name": "Wood Post 0",
           "position": [
             4,
             0,
             9
           ],
+          "name": "Wood Post 0",
           "scale": [
             0.22,
             1.8,
@@ -79,12 +79,12 @@
         },
         {
           "id": "post-1",
-          "name": "Wood Post 1",
           "position": [
             5,
             0,
             9
           ],
+          "name": "Wood Post 1",
           "scale": [
             0.22,
             1.8,
@@ -96,12 +96,12 @@
         },
         {
           "id": "post-2",
-          "name": "Wood Post 2",
           "position": [
             6,
             0,
             9
           ],
+          "name": "Wood Post 2",
           "scale": [
             0.22,
             1.8,

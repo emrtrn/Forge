@@ -25,5 +25,10 @@
   "receiveShadow": true,
   "collision": false,
   "cullStart": 0,
-  "cullEnd": 0
+  "cullEnd": 0,
+  "sway": {
+    "amplitude": 0.15,
+    "height": 1,
+    "frequency": 0.6
+  }
 }

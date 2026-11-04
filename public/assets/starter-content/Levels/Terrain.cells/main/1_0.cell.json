@@ -5,6 +5,24 @@
   "key": "1_0",
   "instances": [
     {
+      "assetId": "shape:cube",
+      "placements": [
+        {
+          "position": [
+            165.62,
+            0.03,
+            99.56
+          ],
+          "name": "Cube",
+          "scaleLocked": true,
+          "generateOverlapEvents": true,
+          "simulationGeneratesHitEvents": true,
+          "rotationYDeg": 0,
+          "scale": 5
+        }
+      ]
+    },
+    {
       "assetId": "lt-boulder-a",
       "placements": [
         {
@@ -37,10 +55,11 @@
     {
       "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
       "position": [
-        170.63,
-        -0.2,
-        86.08
+        171.45,
+        0,
+        86.53
       ],
+      "id": "act-mw2k5jcv-5rbh",
       "rotationYDeg": 0,
       "rotation": [
         0,

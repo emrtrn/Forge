@@ -50,6 +50,10 @@
     {
       "assetId": "shape:plane",
       "placements": []
+    },
+    {
+      "assetId": "sm-chair-ktx2",
+      "placements": []
     }
   ],
   "characters": [],
@@ -118,7 +122,8 @@
   },
   "worldEnvironment": {
     "time": {
-      "hour": 14.67
+      "hour": 12,
+      "dayLengthMinutes": 0
     },
     "sunPath": {
       "azimuthDeg": 96.947,

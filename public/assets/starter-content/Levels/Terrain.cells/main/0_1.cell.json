@@ -18,18 +18,5 @@
         }
       ]
     }
-  ],
-  "reflectionCaptures": [
-    {
-      "id": "reflection-capture-1",
-      "position": [
-        126.38,
-        0.69,
-        150.8
-      ],
-      "name": "Sphere Reflection Capture",
-      "radius": 20,
-      "parallax": true
-    }
   ]
 }

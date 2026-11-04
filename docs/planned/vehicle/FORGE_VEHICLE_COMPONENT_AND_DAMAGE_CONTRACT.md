@@ -1,9 +1,9 @@
 # FORGE — Vehicle Component & Damage Contract
 
 **Dosya:** `FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`  
-**Sürüm:** v0.8 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, araç hattı sırada  
+**Sürüm:** v0.9 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, araç hattı sırada  
 **Tarih:** 2026-11-04 (Europe/Istanbul)  
-**Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`, ilk oyun tüketicisi Ridgebound `RB-V-001 — Doruk K-180`  
+**Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`; ilk özgün araç henüz seçilmedi, belgedeki `RB-V-001 — Doruk K-180` ve tablolar örnek adaydır  
 **Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattı başlamadı.  
 **Yetki ayrımı:** Forge genel model, deformasyon, kırılma, kopma, kayıt ve editör altyapısını sağlar. Ridgebound hangi parçanın nasıl hasarlanacağını, eşikleri, onarım/ekonomi/oynanış sonuçlarını belirler. 
 
@@ -31,9 +31,10 @@ Bir dosyanın tek GLB olması otomatik olarak ayrı fizik gövdeleri anlamına g
 - **Kalıcılık sözleşmesi:** hasar/kopma mantıksal durumu ve göçük reçetesi korunur. Kopmuş parçanın uzaydaki fiziksel konumunu kaydetmek ayrıca açık profil gerektirir.
 
 **v0.2 kararları (kullanıcı, 2026-11-04):**
-- Konsept form olduğu gibi kalır; ızgara ve kabin özgünleştirilmez. Ortografik ve 3B model kabulü yine ayrı kapıdır.
+- Hangi aracın modelleneceği açık: yeni konsept görseller üretiliyor (§12 `VCD-D15`). Mavi kamyon için verilen "form kalır" kararı (`VCD-D11`) bu seçimi bekliyor.
+- Model Forge'da kalabilir; Ridgebound'a taşımak ayrı karardır.
 - Temel dokuda kalıcı vuruk olmaz; göçükleri runtime sistemi üretir (§3.1).
-- `detach` önce Forge Faz 8 işi olarak **Gaz-52** üzerinde yapılır; `RB-V-001` modellemesi bu işi beklemez ve bu iş de modellemeyi beklemez (§11).
+- `detach` önce Forge Faz 8 işi olarak **Gaz-52** üzerinde yapılır; özgün araç modellemesi bu işi beklemez ve bu iş de modellemeyi beklemez (§11).
 
 ## 1. Uygulanmış ve önerilmiş özelliklerin mevcut durumu
 
@@ -377,7 +378,7 @@ Faz 1 `PhysicsImpact` olayı fiziksel chassis collider'ından gelebilir; **motor
 | **VM-2** | `detach`: aynı deforme mesh'in yeni dynamic body'ye geçişi, `v + ω × r`, tek seferlik geçiş, collision filtreleri | Kapı tek kez kopar; ilk kare form aynı; temiz swap yok; araç sürülebilir (`deformable-parts` smoke) | **[TAMAM — 2026-11-04]** |
 | **VM-3** | Kayıt (`logical` profil), hücre boşalması, temizlik/bütçe, kayıtta `assetId` koruması | Save/load ve aktör yeniden kurulumu sonrası kopan parça araca geri takılmaz; kazadan önceki kayıt kapıyı geri getirir; sahipsiz debris birikmez | **[TAMAM — 2026-11-04]** |
 
-**Araç hattı — `RB-V-001`, motor hattından bağımsız:**
+**Araç hattı — seçilecek özgün araç (tablodaki `RB-V-001` ve ön tampon örnektir), motor hattından bağımsız:**
 
 | Aşama | Yapılacak iş | Çıkış kapısı / doğrulama | Durum |
 |---|---|---|---|
@@ -420,9 +421,10 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 
 | ID | İş | Not |
 |---|---|---|
-| `R-01` | `RB-V-001` greybox (VC-1) | Ridgebound deposunda; başlangıç istemi §13.2'de. Önce `dimensions` onayı gerekir, böyle bir belge henüz yok. |
-| `R-02` | `RB-V-001` için `dent`, `detach`, kayıt (VC-2…VC-4) | R-01'e bağlı; motor hazır, iş veri ve test. |
-| `R-03` | Ridgebound'daki Gaz-52 kopyası | `public/assets/vehicles/gaz52` eski: `Deformable` bileşeni ve `gaz-52_base.deformable.json` yok, kopya orada çalışmaz. Forge'dakiler kopyalanmalı veya Doruk K-180 gelince bu kopya emekli edilmeli. |
+| `R-00` | İlk özgün aracın seçimi (`VCD-D15`) | Yeni konsept görseller üretiliyor; karar kullanıcıda. R-01 bunu bekler. |
+| `R-01` | Seçilen aracın greybox'u (VC-1) | Forge deposunda; başlangıç istemi §13.2'de. Önce ölçü onayı gerekir, ölçü belgesi yok. |
+| `R-02` | Seçilen araç için `dent`, `detach`, kayıt (VC-2…VC-4) | R-01'e bağlı; motor hazır, iş veri ve test. |
+| `R-03` | Ridgebound'daki Gaz-52 kopyası | `public/assets/vehicles/gaz52` orada eski: `Deformable` bileşeni ve `gaz-52_base.deformable.json` yok. Yalnız araç Ridgebound'a taşınacaksa gerekir. |
 
 **Yayımdan önce çözülmeli:**
 
@@ -456,7 +458,7 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 | ID | İş | Not |
 |---|---|---|
 | `R-16` | Drive kopyası | Bu belge Drive'da eski sürümde; Google Drive bağlantısı yetkilendirilmeden güncellenemez. |
-| `R-17` | Konsept panoları | `Ridgebound Doruk K-180` ve `Yamaç P-100` panoları Forge klasöründen alındı; yerleri belgeye yazılmalı. Model için Doruk panosu gerekli. |
+| `R-17` | Konsept görselleri | Seçilen aracın görselinin yeri belgeye yazılmalı. `Doruk K-180` ve `Yamaç P-100` panoları Forge klasöründen alındı. |
 
 ## 12. Teknik açık kararlar (kanon/kod kararı değil)
 
@@ -465,6 +467,7 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 | `VCD-D03` | Part-local/vehicle-local dent koordinat kaydı | `part-local` rest uzayı; source hash/version ile; eski kök uzayı kayıtları okunur | Motor oturumu / test |
 | `VCD-D07` | Cam parçalama mimarisi | Node-seçimli fracture veya Blender'dan ayrık cam asset; camı bütün araç kaynağına bake etme | Motor oturumu + sanat |
 | `VCD-D08` | Kapı/kaput menteşe hareketi | Kopma/hasar ayrı; dinamik joint sonrası | Kullanıcı / öncelik |
+| `VCD-D15` | İlk özgün araç ve konsepti | Yeni görseller gelince seçilir; mavi kamyon için verilen `VCD-D11` de o zaman yeniden değerlendirilir | Kullanıcı |
 | `VCD-D09` | Kopmuş tekerlek ve aktarma bozulması | İlk dilim dışında; wheel visual + raycast mapping korunur | Kullanıcı / fizik |
 
 **Kapanan kararlar:**
@@ -477,7 +480,7 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 | `VCD-D05` | **Bilinçli yaklaşım:** şasi collider'ı değişmez; kapı kopsa da kutu aynı kalır | VM-2, 2026-11-04 |
 | `VCD-D06` | `logical` profil yeterli: kayıp kaydedilir, gevşek parçanın pozu kaydedilmez | VM-3, 2026-11-04 |
 | `VCD-D10` | `Deformable` ve `Fracturable` eşikleri sahip bazlı tutulur; çözüldü | `bce53640` |
-| `VCD-D11` | Konsept form olduğu gibi kalır, özgünleştirilmez; ortografik ve 3B kabul ayrıdır | Kullanıcı, 2026-11-04 |
+| `VCD-D11` | Mavi kamyon formu özgünleştirilmez; yalnız o araç seçilirse geçerlidir (`VCD-D15`) | Kullanıcı, 2026-11-04 |
 | `VCD-D13` | Temel dokuda kalıcı vuruk olmaz; göçükleri runtime üretir | Kullanıcı, 2026-11-04 |
 | `VCD-D12` | Aktöre kalıcı `id`; runtime `actor:<index>` kalır, kayıt sınırında çevrilir | 2026-11-04 |
 | `VCD-D14` | `detach` önce Gaz-52'de, `RB-V-001` modellemesinden bağımsız yapılır | Kullanıcı, 2026-11-04 |
@@ -488,50 +491,51 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 
 VM-1…3, kararlı aktör kimliği ve parça arayüzü kapandı. Kalan işler §11.2'dedir.
 
-### 13.2. `RB-V-001` modelleme oturumu başlangıç istemi
+### 13.2. İlk özgün araç modelleme oturumu başlangıç istemi
 
-Yeni oturumda aşağıdaki metni olduğu gibi yapıştır.
+Araç seçilince `[ARAÇ ADI]` ve `[GÖRSEL YOLU]` alanlarını doldurup yeni oturuma yapıştır.
 
-> Ridgebound'un ilk aracı `RB-V-001 — Doruk K-180` için Blender'da greybox modelleme yapıyoruz. Bu oturumun kapsamı yalnız VC-1: metrik greybox, parça sınırları, Forge'a import. Detaylı model, doku ve hasar ayarı kapsam dışı.
+> İlk özgün aracımız için Blender'da greybox modelleme yapıyoruz. Bu oturumun kapsamı yalnız metrik greybox, parça sınırları ve Forge'a import. Detaylı model, doku ve hasar ayarı kapsam dışı.
 >
-> Çalışma deposu: `C:/Users/emret/Desktop/Games/Ridgebound`. Motor: `C:/Users/emret/Desktop/Forge`.
+> Araç: [ARAÇ ADI]
+> Konsept görseli: [GÖRSEL YOLU]
+> Yukarıdaki iki alan boşsa modellemeye başlama, önce bana sor.
+>
+> Çalışma deposu: `C:/Users/emret/Desktop/Forge`. Model Forge'da kalacak; Ridgebound'a taşımak ayrı bir karardır.
 >
 > Önce oku:
-> 1. Ridgebound `AGENTS.md`, `docs/FORGE_INTEGRATION.md`, `docs/GDD.md` (araçla ilgili kısımlar).
-> 2. Forge `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`: §0, §3, §4, §11 (`11.2` dahil), §12. Sözleşme kanoniktir.
-> 3. Forge `docs/planned/vehicle/Eskitilmiş Mavi Hizmet Kamyonu.png`: form referansı. Kullanıcı daha yeni bir Doruk K-180 panosu verirse o önceliklidir.
-> 4. Referans araç: Forge `public/assets/vehicles/gaz52/` içindeki `Gaz52.vehicle.json`, `Script_Gaz52.actor.json`, `gaz-52_base.deformable.json`.
+> 1. Forge `CLAUDE.md`.
+> 2. Forge `docs/planned/vehicle/FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`: §0, §3, §4, §11 (`11.2` dahil), §12. Sözleşme kanoniktir; §4'teki parça tablosu bir kamyon örneğidir, seçilen araca uyarla.
+> 3. Konsept görselini aç ve incele. Parça sınırlarını, açığa çıkacak yüzeyleri ve §4 tablosuna göre eksik veya fazla parçaları raporla.
+> 4. Referans araç: `public/assets/vehicles/gaz52/` içindeki `Gaz52.vehicle.json`, `Script_Gaz52.actor.json`, `gaz-52_base.deformable.json`.
 >
 > Kesin kararlar, tekrar tartışma:
-> - Konsept form olduğu gibi kalır, özgünleştirilmez.
 > - Temel dokuda kalıcı vuruk olmaz; göçükleri runtime üretir.
 > - Tek master `.blend`, tek ana GLB, modeli üreten deterministik `bpy` script'i.
 >
 > Forge'da doğrulanmış teknik kurallar:
 > - Birim metre. Forge +Y yukarı, +Z ileri, aracın sağı −X. glTF +Y Up dışa aktarımıyla Blender'da aracın önü −Y'ye, solu +X'e, yukarısı +Z'ye bakar.
 > - Blender 5.1: `C:/Program Files/Blender Foundation/Blender 5.1/blender.exe`; `--background --python` ile çalıştır. PATH'te değil.
-> - Nesne adları glTF düğüm adı olur; yalnız ASCII harf, rakam, `_`, `-` kullan. `PART_FRONT_BUMPER` gibi her parça kendi düğümü olsun.
-> - Tekerlekler: dört ayrı düğüm, arka ikiz lastikler taraf başına tek düğümde. `*.vehicle.json` içindeki `wheels[].visualNode` bunlara bağlanır. Dönme ekseni aks olmalı.
-> - Hasar alacak parçalar komşularıyla vertex paylaşmaz. Parça kopunca görünecek yüzeyler modellenir: tampon arkası, şasi uçları, ızgara altı, kapı boşluğu, kabin içi. Çeki kancaları şasidedir, tamponla gitmez.
-> - Kaput, çamurluk ve kapıda göçük için yeterli vertex olsun. Referans ölçüm: Gaz-52 gövdesi 3027 vertex, 0,8 m yarıçaplı göçükte 292 vertex oynuyor. Greybox'ta yoğunluğu kilitleme, yalnız parça sınırını doğru kur.
+> - Nesne adları glTF düğüm adı olur; yalnız ASCII harf, rakam, `_`, `-` kullan. Her parça kendi düğümü olsun.
+> - Tekerlekler: her tekerlek kendi düğümünde; ikiz lastik varsa taraf başına tek düğümde. `*.vehicle.json` içindeki `wheels[].visualNode` bunlara bağlanır. Dönme ekseni aks olmalı.
+> - Hasar alacak parçalar komşularıyla vertex paylaşmaz. Parça kopunca görünecek yüzeyler modellenir: tampon arkası, kapı boşluğu, kabin içi gibi.
+> - Geniş saclarda göçük için yeterli vertex olsun. Referans ölçüm: Gaz-52 gövdesi 3027 vertex, 0,8 m yarıçaplı göçükte 292 vertex oynuyor. Greybox'ta yoğunluğu kilitleme, yalnız parça sınırını doğru kur.
 >
 > Yapılacaklar, bu sırayla:
-> 1. **Dimensions:** sözleşme ölçüleri ayrı bir `dimensions` kaynağından ister, ama böyle bir belge yok. Görselden ölçü alınmaz (oranlar yanıltıcı, aks aralığı / tekerlek çapı ≈ 3,2). Boy, en, yükseklik, aks aralığı, iz genişliği, tekerlek yarıçapı, kasa ölçüleri için bir öneri tablosu çıkar, Gaz-52 ile karşılaştır ve **onayımı al**. Onaysız modellemeye geçme.
-> 2. **Parça listesi:** §4 matrisinden düğüm listesi ve hiyerarşi çıkar, hangi parçanın P0/P1 olduğunu yaz.
+> 1. **Ölçüler:** bu araç için bir ölçü belgesi yok ve görselden ölçü alınmaz. Boy, en, yükseklik, aks aralığı, iz genişliği, tekerlek yarıçapı ve aracın ana ölçüleri için öneri tablosu çıkar, Gaz-52 ile karşılaştır ve **onayımı al**. Onaysız modellemeye geçme.
+> 2. **Parça listesi:** düğüm listesi ve hiyerarşi çıkar, hangi parçanın hemen göçüp kopacağını yaz.
 > 3. **Script:** `bpy` ile greybox üret; basit kutu ve silindir yeterli, oranlar doğru olsun. Aynı girdi aynı çıktıyı versin.
-> 4. **Görsel kontrol:** ön, yan, arka, üst ortografik ve bir ¾ render al, referansla yan yana incele. Render'ları kendin aç ve bak; "render alındı" yetmez.
-> 5. **Import:** GLB'yi Ridgebound `public/assets/vehicles/` altına koy, manifest kaydını, `*.vehicle.json` ve `*.actor.json` dosyalarını Gaz-52 örneğiyle kur. Forge asset sözleşmesini kodla doğrula.
-> 6. **Doğrulama:** `npm.cmd run check`; editörde model doğru ölçek ve eksende; dört tekerlek `[vehicle] Wheel node` uyarısı olmadan bağlı; araç sürülüyor ve ileri +Z'ye gidiyor; Static Mesh Editor `Parts` listesi tüm parça düğümlerini gösteriyor.
+> 4. **Görsel kontrol:** ön, yan, arka, üst ortografik ve bir ¾ render al, görselle yan yana incele. Render'ları kendin aç ve bak; "render alındı" yetmez.
+> 5. **Import:** GLB'yi `public/assets/vehicles/<araç>/` altına koy, manifest kaydını, `*.vehicle.json` ve `*.actor.json` dosyalarını Gaz-52 örneğiyle kur. Asset sözleşmesini kodla doğrula.
+> 6. **Doğrulama:** `npx tsc --noEmit`, `npm run check:assets`; editörde model doğru ölçek ve eksende; tekerlekler `[vehicle] Wheel node` uyarısı olmadan bağlı; araç sürülüyor ve ileri +Z'ye gidiyor; Static Mesh Editor `Parts` listesi tüm parça düğümlerini gösteriyor.
 >
 > Kurallar:
-> - Çalışmaya başlamadan iki deponun `git status` durumuna bak, başkasının dosyalarına dokunma.
-> - Ridgebound'da açık talimatım olmadan commit, push veya merge yapma. Bu Forge'dan farklıdır.
-> - Motorda eksik bulursan Ridgebound'a kopya kurma; eksiği Forge'da düzeltmeyi öner ve bana sor.
+> - Başlamadan `git status` bak; `public/` altındaki açık authoring dosyalarıma dokunma, yalnız kendi yollarını commit'le.
 > - Master `.blend` ve script'in yeri için önce öneri getir: `public/` dışında olmalı, oyunla paketlenmemeli.
 > - Otomatik test ile benim görsel kabulümü ayrı raporla.
-> - Bu oturumda hasar parametresi ayarlama, doku yapma, VC-2'ye geçme.
+> - Bu oturumda hasar parametresi ayarlama, doku yapma, `dent`/`detach` bağlamaya geçme.
 >
-> Bitişte ver: dimensions tablosu, parça düğüm listesi, render'lar, değişen dosyalar, çalıştırılan doğrulamalar ve bir sonraki adım için önerin.
+> Bitişte ver: ölçü tablosu, parça düğüm listesi, render'lar, değişen dosyalar, çalıştırılan doğrulamalar ve bir sonraki adım için önerin.
 
 ## 14. Öncelik, kapsam ve bağlantılar
 
@@ -554,5 +558,6 @@ Yeni oturumda aşağıdaki metni olduğu gibi yapıştır.
 | 2026-11-04 | `VCD-006` / v0.6 | `VCD-D12` kapandı: `LayoutActorInstance.id`, kayıt sınırında çeviri, editörde üretim. Placement sınırı yazıldı | **[TAMAM]** |
 | 2026-11-04 | `VCD-007` / v0.7 | Static Mesh Editor `Parts` listesi, `Fit Zone`, viewport tel kutuları, Test Hit parça bilgisi | **[TAMAM]** |
 | 2026-11-04 | `VCD-008` / v0.8 | Kalan işler §11.2'de toplandı; `RB-V-001` modelleme istemi §13.2'ye yazıldı | **[SIRADA: R-01]** |
+| 2026-11-04 | `VCD-009` / v0.9 | Kullanıcı: araç henüz seçilmedi, yeni konseptler üretiliyor; model Forge'da kalabilir. `R-00` ve `VCD-D15` eklendi, §13.2 aracı seçilebilir hale geldi | **[SIRADA: R-00]** |
 
-**Devam protokolü:** motor hattı kapandı, sıradaki iş `R-01`; `RB-V-001` modellemesi ayrı yürür ve hazır olunca VC-2…VC-4 ile bağlanır. Her aşama sonunda belge sürümü yükseltilir; Drive kopyası varsa **aynı dosya ID'sinde** güncellenir. Uygulama başka bir oturumda gerçekleştirilirse commit/fixture, test sonucunu ve açık riskleri bu belgenin yeni sürüm kaydına ekle.
+**Devam protokolü:** motor hattı kapandı, sıradaki iş `R-00`; özgün araç modellemesi ayrı yürür ve hazır olunca VC-2…VC-4 ile bağlanır. Her aşama sonunda belge sürümü yükseltilir; Drive kopyası varsa **aynı dosya ID'sinde** güncellenir. Uygulama başka bir oturumda gerçekleştirilirse commit/fixture, test sonucunu ve açık riskleri bu belgenin yeni sürüm kaydına ekle.

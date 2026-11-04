@@ -10,8 +10,9 @@
 > çekirdeği tamam** (2026-11-03): static placement'lar oyunda kırılıyor.
 > **Faz 4b, 4c ve 5 tamam** (2026-11-03): actor component, placement
 > override, VFX/ses + debris ayarları, destek grafiği ve kalıcılık.
-> **Faz 6b A kod tarafı tamam** (2026-11-04): static mesh sway; görsel kabul
-> ve B tasarım onayı kullanıcıda.
+> **Faz 6b A kapandı** (2026-11-04): static mesh sway, kullanıcı görsel kabulü.
+> **Faz 6b B beklemede** (kullanıcı kararı, 2026-11-04).
+> **Sıradaki iş Faz 7**: plan hazır, başlanmadı; r187 yükseltmesi bitince başlar.
 >
 > **Kırılma sırası (kullanıcı kararı, 2026-11-03)** — yarım kalırsa buradan
 > devam: (1) ~~Faz 4b-3 kırılma VFX/ses + debris ayarları~~ (tamam) → (2) **Faz 4c destek
@@ -180,8 +181,9 @@ Damage.Apply / script ─────────────────┘    
 - Kalıcı kimlik için mevcut placement `id` (actor için entity id) kullanılır.
   Yeni bir `persistentId` alanı açılmaz.
 - `<Model>.deformable.json` (Faz 7): `mode: "impact"` (Faz 9'da `"cloth"`),
-  `radius`, `maxDepth`, `plasticity`, `collisionPolicy: "visual_only"`,
-  `maxDents`. Bir modun kullanmadığı alanlar editörde görünmez.
+  `dentImpulse`, `fullImpulse`, `radius`, `maxDepth`, `plasticity`,
+  `collisionPolicy: "visual_only"`, `maxDents` (güncel taslak Faz 7'de). Bir
+  modun kullanmadığı alanlar editörde görünmez.
 - Her yeni sidecar **yeni bir allowlist yüzeyidir**: kayıt endpoint'i,
   `tools/saveValidator.ts` içinde normalizer'ı yeniden kullanan validator,
   droppedFields/serializationDrift kapsamı ve `CLAUDE.md` kaydı gerekir.
@@ -868,7 +870,10 @@ Faz 6 kabulünden bağımsız; tüketici ihtiyacıyla açılır.
 
 Dilimler (2026-11-04):
 
-A1–A4 kapandı (2026-11-04), görsel kabul kullanıcıda.
+A1–A4 kapandı (2026-11-04), kullanıcı görsel kabulü verildi.
+
+**B beklemede (kullanıcı kararı, 2026-11-04):** tasarım onaylanmadı, B1 ve
+uygulaması Faz 7'den sonra yeniden değerlendirilir.
 
 - **A1 veri:** `ForgeMaterialDef.sway?` (`normalizeForgeMaterialDef` +
   `validateForgeMaterialDef`, yok = salınmaz), maksimal round-trip testi.
@@ -882,8 +887,7 @@ A1–A4 kapandı (2026-11-04), görsel kabul kullanıcıda.
   spline/landscape spline mesh'leri salınmaz.
 - **A3 editör:** Material Editor "Wind Sway" bölümü.
 - **A4 smoke:** Play GPU derleme + yön, düzenle → kaydet → Play zinciri.
-- **B1 tasarım onayı:** kullanıcıya sunuldu (2026-11-04), onaysız kod yok.
-  Öneri: 4 gövde × 4 iz noktası (doğrusal parçalar; nokta başına konum + yaş,
+- **B1 tasarım onayı:** beklemede, onaysız kod yok. Sunulan öneri: 4 gövde × 4 iz noktası (doğrusal parçalar; nokta başına konum + yaş,
   sabit uniform dizisi); foliage type opt-in `contact`; yarıçap gövdeden
   (kapsül yarıçapı, araç yarı genişliği), güç type'tan; kalite: ultra/high 4,
   medium 2, low 0 gövde; bütçe yoğun sahnede en çok 0.3 ms.
@@ -916,27 +920,136 @@ A1–A4 kapandı (2026-11-04), görsel kabul kullanıcıda.
 
 ### Faz 7 — Kalıcı çarpma göçüğü (`deformableModule`, mode `impact`)
 
-- [ ] `AssetDeformableDef` + normalizer + `/__save-deformable` (8. allowlist
-      yüzeyi) + `CLAUDE.md`.
-- [ ] Geometri sahipliği: ilk göçükte placement geometrisi klonlanır
-      (copy-on-write); deformable asset'ler instancing'den çıkarılır.
-- [ ] `impactDeform.ts`: lokal koordinata dönüştürme (scale/rotation dahil),
-      yarıçap + düşüş eğrisi, `maxDepth`, `plasticity`, çok kısa aralıklı
-      darbelerde birikme sınırı.
-- [ ] Normal, bounding sphere/box ve gölge güncellemesi. Skinned mesh v1'de
-      kapsam dışı.
-- [ ] Araç gövdesi: Vehicle component'li aktörün model düğümlerine
-      uygulanır, tekerlek `visualNode`'ları hariç.
-- [ ] Collision politikası v1'de `visual_only`. Proxy güncellemesi ancak
-      ölçülmüş ihtiyaçla açılır.
-- [ ] Kalıcılık: kompakt göçük listesi (nokta, normal, şiddet; `maxDents`
-      ile sınırlı), Faz 5 `destructibles` yanında.
-- [ ] Editör: Static Mesh Editor "Deformable" bölümü + viewport "test darbesi"
-      aracı (konum, yön, şiddet).
-- [ ] Testler: çakışan iki örnekten yalnız biri değişir, sınır aşılmaz,
-      save/load aynı şekli üretir.
+> **Durum: planlandı, başlanmadı (2026-11-04).** Başlangıç kapısı: Three.js
+> r187 yükseltmesi kapanmış olmalı (`THREE_R187_UPGRADE_PLAN.md` Faz 4). O iş
+> başka oturumda sürüyor ve bu fazın dokunacağı `RuntimeSceneApp.ts` ile
+> `SceneApp.ts` matris yollarını da değiştiriyor. Başlarken aşağıdaki dosya
+> referansları yeniden doğrulanır.
 
-Kabul: D-01 metal panel ve araç gövdesi görsel kabulü, `build:verify` yeşil.
+Hedef: dinamik bir çarpma, sidecar'ı olan static mesh'te ve aracın gövdesinde
+kalıcı görsel göçük bırakır. Yalnız o örnek değişir, collider değişmez, göçük
+save ve hücre dönüşünde korunur.
+
+**Kod taramasının taslağa eklediği bulgular (2026-11-04):**
+
+1. **Impact eşiği tek sahipli.** `physicsSubsystem.impactThresholds` entity
+   başına tek değer tutuyor; `fractureModule` kırılınca `null` yazıyor. Hem
+   kırılır hem göçer bir nesnede modüller birbirinin eşiğini ezer. 7-0'da
+   sahip bazlı olur (en düşük eşik geçerli).
+2. **Vertex verisi doğrudan yazılamaz.** `public/assets` içinde 58 GLB'nin 6'sı
+   `KHR_mesh_quantization` + meshopt kullanıyor, 9'u interleaved. 57 primitive'in
+   `POSITION`'ı float değil. Klon `Float32Array`'e açılmalı; quantize edilmiş
+   mesh'lerde düğüm matrisi ölçek taşıdığı için yarıçap dünya biriminde ölçülür.
+3. **`computeVertexNormals` kullanılamaz.** Tüm mesh'i tarar, authored normalleri
+   siler ve UV dikişinde bölünmüş vertex'lerde çizgi bırakır. Normal yalnız
+   etkilenen vertex'lerde, konum + rest normal açısıyla kaynaklanarak hesaplanır.
+4. **Temas noktası yüzeyde değil, collider'da.** Araç collider'ı kutu; nokta
+   model yüzeyinden yarıçaptan uzak olabilir. Vurulan yüzey, dent yönünde silindir
+   taramasıyla bulunur (striker'a bakan vertex'ler), küre oradan uygulanır.
+   Arka yüzey böylece göçmez.
+5. **`buildInstancedBatch` eşzamanlı.** `asClone` kararı için sidecar, batch'ten
+   önce hazır olmalı; `loadCollisionDefs` deseni izlenir (hücreyle gelen model
+   yolları dahil). Fracture'ın geç yüklemesi burada işe yaramaz.
+6. **Test asset'i yok.** `SM_BreakablePanel` 54 vertex, göçük görünmez; Reference
+   Car gövdesi 1078 vertex, köşeli görünür. Yoğun bir test paneli gerekir.
+   `MercedesSLS` (126 k vertex) en kötü durum ölçümü olur.
+7. **Clone yeniden oluşabilir.** Hücre dönüşü ve muhtemelen probe rebuild,
+   placement clone'unu temiz geometriyle yeniden kurar. Göçükler kaynak yeniden
+   canlanınca yeniden uygulanır; probe yolu 7-4'te doğrulanır.
+
+**Sidecar taslağı** (`<Model>.deformable.json`; sayılar başlangıç değeri, ölçülmüş
+değil):
+
+```jsonc
+{
+  "version": 1,
+  "enabled": true,
+  "mode": "impact",
+  "dentImpulse": 300,       // N·s; altı iz bırakmaz
+  "fullImpulse": 3000,      // N·s; tam şiddet
+  "radius": 0.35,           // m, dünya birimi
+  "maxDepth": 0.12,         // m; vertex başına toplam sınır
+  "plasticity": 0.5,        // 0..1; tek tam darbenin maxDepth payı
+  "maxDents": 32,
+  "collisionPolicy": "visual_only"
+}
+```
+
+Darbe derinliği: `maxDepth × plasticity × saturate((impulse − dentImpulse) /
+(fullImpulse − dentImpulse))`. Düşüş eğrisi v1'de tektir, alan açılmaz. Dent yönü
+impact normalidir (`normal` `a`'dan `b`'ye gider; `a` göçüyorsa işaret çevrilir).
+
+**Dilimler:**
+
+- [ ] **7-0 ön hazırlık:** r187 kapısını ve dosya referanslarını doğrula.
+      `setImpactEventThreshold` sahip bazlı olur (fracture davranışı aynen kalır).
+      Test: iki sahipten biri çıkınca diğerinin eşiği sürer.
+- [ ] **7-1 veri (saf):** `engine/physics/deformable/deformableTypes.ts`
+      (`AssetDeformableDef`, `normalizeAssetDeformable`, `DEFORMABLE_LIMITS`,
+      `deformableSidecarPath`), `src/scene/assetDeformableLoader.ts`,
+      `/__save-deformable` + `validateSaveDeformablePayload` (8. allowlist yüzeyi,
+      endpoint listesi, `dropped[]`), `CLAUDE.md`, maksimal round-trip ve drift
+      testleri. Bilinmeyen `mode` sidecar'ı reddeder.
+- [ ] **7-2 çekirdek (saf, `impactDeform.ts`; Three'sız, Codex'e uygun):**
+      vurulan yüzey taraması (bulgu 4), yarıçap + düşüş, rest pozisyona göre
+      vertex başına `maxDepth` sınırı (sıradan bağımsız sonuç), etkilenen
+      vertex listesi, kaynaklı yerel normal (bulgu 3), dent listesi kuralı: yeni
+      darbe yarıçap içindeki dent'e eklenir, liste doluysa yeni konum atlanır ve
+      sayılır. Testler: sınır aşılmaz, rest'e göre deterministik, ölçekli/dönük
+      mesh'te yarıçap dünya biriminde, arka yüzey etkilenmez, kenarda dikiş yok.
+- [ ] **7-3 geometri (`engine/render-three/deformableMeshSync.ts`):** ilk göçükte
+      copy-on-write: `position` + `normal` `Float32Array`'e açılır (quantize ve
+      interleaved dahil), rest kopyası ve komşuluk mesh başına bir kez kurulur.
+      Mesh paint klonunda (`forgeMeshPaintClone`) ikinci kez klonlanmaz, `color`
+      korunur. Bounding sphere/box güncellenir, gölge aynı geometriyi kullanır.
+      Skinned mesh atlanır + uyarı. Testler: çakışan iki örnekten yalnız biri
+      değişir, gltf geometrisi bayt bayt aynı kalır, dispose sızıntı bırakmaz.
+- [ ] **7-4 runtime, statik:** `deformableModule` + `deformableHostService`
+      (fizik impact'leri, `renderObject(entityId)`, canlılık, hücre olayları).
+      Runtime preload'da sidecar → `asClone` (`buildInstancedBatch` + hücre
+      yolları; level editörü etkilenmez). Kaynak başına kısa vuruş penceresi: aynı
+      çarpışmanın tekrarları (Faz 4c dersi) yalnız derinlik farkı kadar ekler.
+      Kare başına dent bütçesi, fazlası kuyruğa. Enkaz parçaları
+      (`fracture:` öneki) göçük üretmez. O karede kırılan kaynak atlanır; kırılan
+      kaynağın göçükleri ve klonları temizlenir. Parçalar göçüksüz bake'ten gelir
+      (v1 kabul). `Deformable.Dent` mesajı kinematik/script yolu (Faz 0: kinematik ↔
+      sabit olay üretmez), `Deformable.Dented` yayını oyun tarafının kancası.
+      Modül ya da sidecar yoksa davranış değişmez. `?debug` sayaçları: dent, atlanan,
+      vertex, ms. Yoğun test paneli + `PhysicsInteractionTest` yerleşimi; smoke:
+      araç paneli çarpar, yalnız o panel değişir, eşik altı değişmez.
+- [ ] **7-5 actor + araç:** `Deformable` component (`enabled`; `Fracturable`
+      deseni: `readDeformableComponent`, `ACTOR_COMPONENT_KINDS`, coverage kuralı,
+      Actor Script formu). Gerçek hedef `actorObject` altındaki mesh'ler; hareketli
+      kaynakta çarpma anı dünya pozu kullanılır, dent kök uzayında saklanır.
+      Tekerlekler adla (`definition.wheels[].visualNode`) ve üretilmiş `VehicleWheels`
+      grubuyla dışarıda kalır; rig sırasına bağlı değildir. Reference Car'a sidecar +
+      component. Smoke: araç duvara çarpar, gövde değişir, tekerlekler ve başka
+      araçlar aynı kalır; `visualNode` dönüşü bozulmaz.
+- [ ] **7-6 kalıcılık:** `GameSaveState.deformables?: SavedDeformableState[]`
+      (`id`, kök uzayında `{ point, direction, depth }` listesi, `maxDents` sınırlı).
+      Dent bir sonuç kaydıdır, impulse saklanmaz; aynı liste aynı şekli verir.
+      `captureState` / `restoreState`, bekleyen girdi (kayıt sırasından bağımsız),
+      hücre boşalınca bellekte kalır, bilinmeyen id uyarı + atlama, eski save `[]`.
+      `SAVE_GAME_CONTRACT.md`. Testler: save → load aynı şekil, hücre dönüşü, sidecar
+      kapatılmış asset'te güvenli atlama. Smoke: çarp → quick-save → quick-load.
+- [ ] **7-7 editör:** Static Mesh Editor "Deformable" bölümü
+      (`src/editor/staticMeshDeformable.ts` + `assetDeformableStore.ts`, adlar EN,
+      tooltip TR, `paramFields` kuralları). Modele tıklayarak test darbesi (impulse
+      alanı, yön yüzey normali), Reset; darbe yalnız önizlemedir, kayda yazılmaz.
+      Yarıçapa göre mesh seyrekse ipucu. Actor Script formu 7-5'te. Smoke: alanlar →
+      Save → sidecar round-trip, test darbesi önizlemede şekli değiştirir.
+- [ ] **7-8 ölçüm ve kabul:** `MercedesSLS` ve test panelinde dent başına ms,
+      restore süresi, klon bellek farkı; hedef dent başına en çok 2 ms (ölçülecek,
+      aşılırsa bütçe düşer). Kalite profillerine dent bütçesi. `build:verify`
+      yeşil, kullanıcı görsel kabulü: metal panel ve araç gövdesi.
+
+**Kapsam dışı (v1):** collider güncellemesi, skinned mesh, göçüğe özel VFX/ses
+alanları, placement override, göçüğü HLOD'a yansıtma, göçüğü kırılma parçalarına
+yansıtma, hasar haritasıyla doku/çizik.
+
+**Başlarken onaylanacak varsayılanlar:** K-07 ve K-08 (§6).
+
+Kabul: metal panel ve araç gövdesi görsel kabulü, `build:verify` yeşil.
 
 ### Faz 8 — Kırılma modlarını genişletme
 
@@ -995,8 +1108,8 @@ kanıtlanmadan başlanmaz.
 
 ## 6. Açık kararlar
 
-Bütün kararlar 2026-11-02'de kapandı (K-03 ve K-02 teknik, diğerleri
-kullanıcı kararı).
+K-01…K-06 2026-11-02'de kapandı (K-03 ve K-02 teknik, diğerleri kullanıcı
+kararı). K-07 ve K-08 Faz 7 başlamadan onaylanacak öneridir.
 
 | ID | Karar | Sonuç |
 |---|---|---|
@@ -1006,6 +1119,8 @@ kullanıcı kararı).
 | K-04 | Fracture yalnız asset seviyesinde mi, placement/actor override'ı da var mı? | **Kapandı:** üçü birden. Asset sidecar asıl tanımdır; placement override (`enabled`, `breakImpulse`); actor `Fracturable` component aynı sidecar'ı referanslar. |
 | K-05 | Kalıcılık kapsamı: kırık enkazın pozu saklanır mı? | **Kapandı:** yalnız durum. Load'da nesne kırık ve parçasız gelir. Asset başına "kalıcı enkaz" seçeneği ancak somut ihtiyaçla açılır. |
 | K-06 | Rüzgâr kaynağı nerede yaşar? | **Kapandı:** WES rüzgârı (yön, güç, gust; hava/mevsimle değişir). WES'siz level'da World Settings sabit değeri. |
+| K-07 | Actor göçüğü nasıl açılır? | **Öneri, Faz 7 başında onaylanır:** `Fracturable` gibi `Deformable` component. Placement'lar sidecar ile otomatik, placement override yok. |
+| K-08 | Deformable asset'in placement'ları ne zaman instancing'den çıkar? | **Öneri, Faz 7 başında onaylanır:** yüklemede `asClone` (Faz 0 kararı). Göçüksüz örnek de ayrı çizilir; asset başına birkaç kopya varsayılır. İlk göçükte clone'a geçiş daha az draw call verir ama hücre, probe ve culling kayıtlarını çoğaltır. |
 
 ---
 
@@ -1126,3 +1241,6 @@ kullanıcı kararı).
   sorunu editörün foliage type kaydıydı, 23f54cd7).
 - 2026-11-04: Faz 6b A: static mesh materyali `sway` (veri, render, Material
   Editor, smoke); görsel kabul bekliyor. B tasarımı onaya sunuldu.
+- 2026-11-04: Faz 6b A kullanıcı tarafından görsel olarak kabul edildi. B1
+  beklemeye alındı. Faz 7 dilimlere ayrıldı (7-0…7-8); r187 yükseltmesi
+  kapanınca başlar.

@@ -495,7 +495,7 @@ export const TERRAIN_DEFORMATION_COLOR = /* glsl */ `
     float forgeProfileWet = clamp(forgeWet / forgeWeightSum * forgeDeform.y, 0.0, 1.0);
     forgeDeformWetness = max(forgeProfileWet, ${glslFloat(TERRAIN_DEFORMATION_SHORE_WETNESS)} * forgeShoreWet * forgeDeform.y);
     vec3 forgeBase = forgeTerrainLocalNormal();
-    vec3 forgeBaseWorld = inverseTransformDirection(normalize(vTerrainAxisX * forgeBase.x
+    vec3 forgeBaseWorld = transformNormalByInverseViewMatrix(normalize(vTerrainAxisX * forgeBase.x
       + vTerrainAxisY * forgeBase.y + vTerrainAxisZ * forgeBase.z), viewMatrix);
     // Evaluate the dented surface: steep rut walls must remain muddy even on
     // flat authored terrain. The raised rim stays rough, with a soft shoreline.
@@ -526,7 +526,7 @@ roughnessFactor = mix(roughnessFactor, forgePuddleRoughness, forgePuddle);
 export const TERRAIN_DEFORMATION_WATER = /* glsl */ `
 #ifndef USE_ENVMAP
 if (forgePuddle > 0.0) {
-  vec3 forgeReflection = inverseTransformDirection(reflect(-normalize(vViewPosition), normal), viewMatrix);
+  vec3 forgeReflection = transformDirectionByInverseViewMatrix(reflect(-normalize(vViewPosition), normal), viewMatrix);
   vec3 forgeSky = mix(vec3(0.55, 0.62, 0.68), vec3(0.18, 0.35, 0.58), smoothstep(0.0, 0.8, forgeReflection.y));
   float forgeFresnel = 0.02 + 0.98 * pow(1.0 - clamp(dot(normalize(vViewPosition), normal), 0.0, 1.0), 5.0);
   outgoingLight = mix(outgoingLight, forgeSky, forgePuddle * (0.04 + 0.55 * forgeFresnel));
@@ -545,7 +545,7 @@ outgoingLight += vec3(0.50, 0.44, 0.32) * forgeWaterCrest * forgePuddle;
  */
 export const TERRAIN_DEFORMATION_NORMAL = /* glsl */ `
   if (forgeDeform.y > 0.0 || forgeDeform.x > 0.0 || vForgeDeformBerm > 0.0) {
-    normal = mat3(viewMatrix) * forgeDeformedWorldNormal(inverseTransformDirection(normal, viewMatrix));
+    normal = mat3(viewMatrix) * forgeDeformedWorldNormal(transformNormalByInverseViewMatrix(normal, viewMatrix));
     if (forgePuddle > 0.0) {
       forgeSampleWater();
       forgeWaterGradient += forgePuddleMicroGradient(vForgeDeformWorld, uTerrainWaterTime);

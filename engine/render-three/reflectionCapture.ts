@@ -321,7 +321,7 @@ const CAPTURE_WORLDPOS_INCLUDE = "#include <worldpos_vertex>";
 /** Fragment-shader include for the IBL chunk that owns the reflection lookup. */
 const CAPTURE_FRAGMENT_INCLUDE = "#include <envmap_physical_pars_fragment>";
 /** Line inside the IBL chunk where `reflectVec` becomes the world-space reflection dir. */
-const CAPTURE_REFLECT_LINE = "reflectVec = inverseTransformDirection( reflectVec, viewMatrix );";
+const CAPTURE_REFLECT_LINE = "reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );";
 /** Line inside the IBL chunk that samples the probe envMap into `envMapColor`. */
 const CAPTURE_ENVCOLOR_LINE =
   "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * reflectVec, roughness );";

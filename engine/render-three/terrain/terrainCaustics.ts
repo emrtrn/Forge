@@ -238,7 +238,7 @@ void forgePrepareCaustics() {
     energy = dot(directionalLights[ i ].color, vec3(0.2126, 0.7152, 0.0722));
     if (energy > brightest) {
       brightest = energy;
-      forgeCausticSunDirection = inverseTransformDirection(directionalLights[ i ].direction, viewMatrix);
+      forgeCausticSunDirection = transformDirectionByInverseViewMatrix(directionalLights[ i ].direction, viewMatrix);
     }
   }
   #pragma unroll_loop_end
@@ -246,7 +246,7 @@ void forgePrepareCaustics() {
 }
 void forgeCausticDirectionalLightInfo(const in DirectionalLight light, out IncidentLight incident) {
   getDirectionalLightInfo(light, incident);
-  vec3 delta = inverseTransformDirection(incident.direction, viewMatrix) - forgeCausticSunDirection;
+  vec3 delta = transformDirectionByInverseViewMatrix(incident.direction, viewMatrix) - forgeCausticSunDirection;
   if (dot(delta, delta) < 0.00000001) incident.color *= 1.0 + forgeCausticPreparedLight;
 }
 #define getDirectionalLightInfo forgeCausticDirectionalLightInfo

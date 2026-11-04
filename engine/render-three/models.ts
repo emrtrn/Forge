@@ -130,7 +130,7 @@ export function meshBaseScale(mesh: Mesh, instanced: boolean): number {
   let scale = 1;
   if (instanced) {
     const source = mesh.userData.sourceMatrix as Matrix4 | undefined;
-    scale = source?.isMatrix4 ? source.getMaxScaleOnAxis() : 1;
+    scale = source instanceof Matrix4 ? source.getMaxScaleOnAxis() : 1;
   } else {
     let root: Object3D | null = null;
     for (let node = mesh.parent; node; node = node.parent) {

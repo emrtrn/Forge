@@ -83,17 +83,21 @@ Bugün de doğru olan, yükseltmeyi küçülten değişiklikler.
 
 ### Faz 1 — 0.185
 
-- [ ] Bump `three` / `@types/three` → 0.185.0.
-- [ ] Shader adlarındaki geçiş: Forge'un kendi GLSL'inde
+- [x] Bump `three` / `@types/three` → 0.185.0.
+- [x] Shader adlarındaki geçiş: Forge'un kendi GLSL'inde
   `inverseTransformDirection` → `transformDirectionByInverseViewMatrix`
   (yön) / `transformNormalByInverseViewMatrix` (normal):
   `terrainCaustics.ts`, `terrainDeformation.ts`, `reflectionCapture.ts`.
-- [ ] `reflectionCapture.ts` yansıma satırı hedefi r185 chunk'ına göre
-  güncellenir (bu sürümde örnekleme hâlâ `textureCubeUV` olmalı; kaynakta
-  doğrula).
-- [ ] K4'ün davranışı bu sürümde devreye girer: Faz 0-1 yapılmışsa yalnız
-  doğrulama.
-- [ ] Kapı + smoke.
+  Eski ad r187'de hâlâ `#define`; yalnız `reflectionCapture` metin hedefi kırıyordu.
+- [x] `reflectionCapture.ts` yansıma satırı hedefi güncellendi (`textureCubeUV` duruyor).
+- [x] `models.ts`: `Matrix4.isMatrix4` tiplerden çıktı, `instanceof Matrix4`.
+- [x] Standart kapı yeşil. K4 smoke'ları (editor-authoring, hlod, detail-culling,
+  world-partition-statics, fracture-runtime, runtime-parity) yeşil.
+- **r185 hatası, Forge'da düzeltilmez:** r185 ve r185.1 `WebGLRenderLists.sort()`
+  içinde reversed depth'te listeleri koşulsuz `reverse()` ediyor, `renderOrder` da
+  ters dönüyor. `depthTest: false` + `renderOrder = -1` olan Sky son çizilip sahneyi
+  eziyor (`terrain-water-runtime`). r186 bunu geri aldı. Bu yüzden r185 commit'i tek
+  başına push edilmedi; r186 ile birlikte gitti.
 
 ### Faz 2 — 0.186
 

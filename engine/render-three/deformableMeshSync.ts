@@ -177,7 +177,8 @@ export class DentTarget {
     const shared = item.mesh.geometry;
     const owned = shared.userData[MESH_PAINT_CLONE_FLAG] === true;
     const geometry = owned ? shared : shared.clone();
-    if (!owned) geometry.userData[DEFORM_CLONE_FLAG] = true;
+    // `clone()` shares userData with the source: a flag written into it would mark the shared model.
+    if (!owned) geometry.userData = { ...shared.userData, [DEFORM_CLONE_FLAG]: true };
     geometry.setAttribute("position", new Float32BufferAttribute(item.restLocal.slice(), 3));
     geometry.setAttribute("normal", new Float32BufferAttribute(item.restLocalNormals.slice(), 3));
     // Dents stay within maxDepth of rest, so bounds grow once instead of every dent.

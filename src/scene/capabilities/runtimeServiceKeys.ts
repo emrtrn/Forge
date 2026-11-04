@@ -16,6 +16,8 @@
  */
 import type { AnimationMixer, Material, Object3D, Scene, Vector3 } from "three";
 
+import type { AssetDeformableDef } from "@engine/physics/deformable/deformableTypes";
+
 import type { AiDebugSnapshot, AiDistanceUpdateSettings } from "@engine/ai/aiSubsystem";
 import type { AiTaskRegistry } from "@engine/ai/behaviorRunner";
 import type { GroundSurfaceSample } from "@engine/movement/slopeSurface";
@@ -397,6 +399,48 @@ export interface FractureCommands {
 }
 
 export const fractureCommandsService = runtimeServiceKey<FractureCommands>("fracture-commands");
+
+/**
+ * What the deformable capability needs from the shell (DEFORMABLE_FRACTURABLE
+ * Faz 7): impacts, the sidecars it loaded before building batches, and the
+ * render object of an entity.
+ * Provided by: the runtime shell.
+ */
+export interface DeformableHost {
+  readonly physics: {
+    setImpactEventThreshold(entityId: string, minImpulse: number | null): void;
+    /** The latest frame's impacts (all opted-in pairs). */
+    impacts(): readonly PhysicsImpact[];
+  };
+  /** The enabled sidecar of a placed asset, loaded with the level; null = rigid. */
+  deformableDef(assetId: string): AssetDeformableDef | null;
+  /** What renders the entity now: an actor's object or a placement's clone; null while unbuilt. */
+  renderObject(entityId: string): Object3D | null;
+}
+
+export const deformableHostService = runtimeServiceKey<DeformableHost>("deformable-host");
+
+/** Live dent state for `?debug` and browser smokes. */
+export interface DeformableDebugSnapshot {
+  /** Objects that can dent. */
+  readonly deformable: number;
+  /** Objects with at least one dent. */
+  readonly dented: number;
+  readonly dents: number;
+  /** Hits that found no mesh surface near them, summed. */
+  readonly missed: number;
+  /** Hits that left nothing: dent list full, nothing rendered, queue full, summed. */
+  readonly skipped: number;
+  /** Time of the last dent, ms. */
+  readonly lastDentMs: number;
+}
+
+/** The debug readout. Provided by: `deformableModule`. */
+export interface DeformableCommands {
+  snapshot(): DeformableDebugSnapshot;
+}
+
+export const deformableCommandsService = runtimeServiceKey<DeformableCommands>("deformable-commands");
 
 /**
  * The script-message bus: how gameplay triggers a capability ("play-dialogue")

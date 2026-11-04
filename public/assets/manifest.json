@@ -3770,6 +3770,32 @@
       "license": "Unknown"
     },
     {
+      "id": "sm-dent-panel",
+      "name": "Dent Panel",
+      "assetType": "staticMesh",
+      "category": "Destructible",
+      "path": "assets/starter-content/StaticMeshes/Destructible/SM_DentPanel.glb",
+      "tags": [
+        "destructible",
+        "deformable"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Destructible",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 438988
+      },
+      "license": "Unknown"
+    },
+    {
       "id": "sm-breakable-panel",
       "name": "Breakable Panel",
       "assetType": "staticMesh",

@@ -31,7 +31,7 @@ import type {
   VehicleSurfaceDebugSnapshot,
 } from "./RuntimeSceneApp";
 import type { SceneCostSnapshot } from "./runtimeDebugSnapshot";
-import type { FractureDebugSnapshot, TerrainDeformationSnapshot } from "./capabilities/runtimeServiceKeys";
+import type { DeformableDebugSnapshot, FractureDebugSnapshot, TerrainDeformationSnapshot } from "./capabilities/runtimeServiceKeys";
 import type { WorldEnvironmentState } from "@engine/environment/environmentResolve";
 
 const UPDATE_INTERVAL_MS = 500;
@@ -79,6 +79,7 @@ export function attachDebugStats(app: RuntimeStatsApp, element: HTMLElement): vo
       vehicleSurfaceText(app) +
       terrainDeformationText(app) +
       fractureText(app) +
+      deformableText(app) +
       aiDebugText(app) +
       aiInspectorText(app) +
       aiNavDebugText(app) +
@@ -497,6 +498,18 @@ function fractureText(app: RuntimeStatsApp): string {
   const snapshot = app.getFractureSnapshot?.();
   return snapshot && snapshot.fracturable > 0 ? `
 ${formatFractureDebug(snapshot)}` : "";
+}
+
+/** `deform: objects 2 dented 1 dents 3 missed 0 skipped 0 last 0.42 ms` (smoke tests parse it); "" with nothing deformable. */
+export function formatDeformableDebug(snapshot: DeformableDebugSnapshot): string {
+  return `deform: objects ${snapshot.deformable} dented ${snapshot.dented} dents ${snapshot.dents}`
+    + ` missed ${snapshot.missed} skipped ${snapshot.skipped} last ${snapshot.lastDentMs.toFixed(2)} ms`;
+}
+
+function deformableText(app: RuntimeStatsApp): string {
+  const snapshot = app.getDeformableSnapshot?.();
+  return snapshot && snapshot.deformable > 0 ? `
+${formatDeformableDebug(snapshot)}` : "";
 }
 
 function terrainDeformationText(app: RuntimeStatsApp): string {

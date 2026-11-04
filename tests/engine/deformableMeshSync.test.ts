@@ -71,6 +71,8 @@ export function registerDeformableMeshSyncTests(check: (label: string, run: () =
     assert.notEqual(first.mesh.geometry, shared);
     assert.equal(second.mesh.geometry, shared);
     assert.deepEqual(positionsOf(shared), before);
+    assert.deepEqual(shared.userData, {}, "the copy must not mark the model it came from");
+    assert.equal(first.mesh.geometry.userData.forgeDeformClone, true);
     assert.ok(Math.abs(deepestWorld(first.mesh) - 0.1) < 1e-5);
     assert.equal(deepestWorld(second.mesh), 0);
   });

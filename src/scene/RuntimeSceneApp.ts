@@ -82,7 +82,10 @@ import {
   vehicleHostService,
   fractureHostService,
   fractureCommandsService,
+  deformableHostService,
+  deformableCommandsService,
   type FractureDebugSnapshot,
+  type DeformableDebugSnapshot,
   terrainDeformationService,
   terrainSurfaceHostService,
   type TerrainDeformationSnapshot,
@@ -378,6 +381,8 @@ import { normalizeActorScriptDef, type ActorScriptDef } from "@engine/scene/acto
 import { createCharacterSceneObject, entityCharacterItem, tintedMaterial } from "@engine/render-three/models";
 import { isMarkerAssetId, shapeAssetCollisionDef } from "@engine/scene/shapes";
 import { loadAssetCollision } from "@/scene/assetCollisionLoader";
+import { loadAssetDeformable } from "@/scene/assetDeformableLoader";
+import type { AssetDeformableDef } from "@engine/physics/deformable/deformableTypes";
 import { createVehicleAssetLoader, resolveActorVehicleAssets, withVehicleOverrides } from "@/scene/vehicleAssetLoader";
 import {
   applyAssetUvwMapping,
@@ -699,6 +704,8 @@ export interface RuntimeStatsApp {
   getTerrainDeformationSnapshot?(): TerrainDeformationSnapshot | null;
   /** Optional: fracture state; null when the module is off. */
   getFractureSnapshot?(): FractureDebugSnapshot | null;
+  /** Optional: dent state; null when the module is off. */
+  getDeformableSnapshot?(): DeformableDebugSnapshot | null;
   /** Optional: terrain CDLOD nodes refined inside the track window, and the quality's detail levels. */
   getTerrainTrackDetailSnapshot?(): TerrainTrackDetailSnapshot;
   /** Optional: the live World Environment (clock, season, weather); null when the level has none. */
@@ -939,6 +946,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Owns runtime actor spawning: the spawn id counter + spawn orchestration (P2.4). */
   private readonly spawnCoordinator: RuntimeActorSpawnCoordinator;
   private collisionDefs = new Map<string, AssetCollisionDef>();
+  /** Enabled deformable sidecars of placed assets; their placements render as clones (Faz 7). */
+  private deformableDefs = new Map<string, AssetDeformableDef>();
   /** Render-mesh triangle data for `complexAsSimple` assets (static trimesh collider). */
   private complexCollisionMeshes = new Map<string, AssetComplexCollisionMesh>();
   private models = new Map<string, GLTF>();
@@ -1602,6 +1611,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       },
       loadMaterial: async (materialId) => (await this.ensureMaterialLoaded(materialId).catch(() => undefined)) ?? null,
       chunkBudget: () => this.qualitySettings.fractureChunkBudget,
+    });
+    this.runtimeServices.provide(deformableHostService, {
+      physics: {
+        setImpactEventThreshold: (entityId, minImpulse) =>
+          this.physicsSubsystem.setImpactEventThreshold(entityId, minImpulse, "deformable"),
+        impacts: () => this.physicsSubsystem.impacts(),
+      },
+      deformableDef: (assetId) => this.deformableDefs.get(assetId) ?? null,
+      renderObject: (entityId) => {
+        const actor = this.actorObjects.get(entityId);
+        if (actor) return actor;
+        const instance = parseInstanceEntityId(entityId);
+        return instance
+          ? this.instanceOverrideObjects.get(overrideObjectKey(instance.assetId, instance.placementIndex)) ?? null
+          : null;
+      },
     });
     this.runtimeServices.provide(terrainSurfaceHostService, {
       deformationAt: (groundEntityId, contactPoint) =>
@@ -2616,6 +2641,10 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     return this.runtimeServices.resolve(fractureCommandsService)?.snapshot() ?? null;
   }
 
+  getDeformableSnapshot(): DeformableDebugSnapshot | null {
+    return this.runtimeServices.resolve(deformableCommandsService)?.snapshot() ?? null;
+  }
+
   getTerrainTrackDetailSnapshot(): TerrainTrackDetailSnapshot {
     return terrainTrackDetailStats();
   }
@@ -2920,6 +2949,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.behaviorSubsystem.setRegistry(this.createSceneBehaviorRegistry());
     this.layout = await loadRoomLayout(layoutPath);
     this.meshPaintData = await loadMeshPaintData(layoutPath);
+    await this.loadDeformableDefs();
     this.activeLevelPath = layoutPath;
     const worldSettings = resolveSceneWorldSettings(this.layout);
     this.gravityY = worldSettings.gravity[1];
@@ -4507,6 +4537,20 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     );
   }
 
+  /** First thing after the layout: every batch, cell batches included, reads these to pick clones. */
+  private async loadDeformableDefs(): Promise<void> {
+    if (!this.assetLoader || !this.layout) return;
+    const manifest = await this.assetLoader.loadManifest();
+    const defs = new Map<string, AssetDeformableDef>();
+    await Promise.all(this.layout.instances.map(async ({ assetId }) => {
+      const asset = manifest.assets.find((entry) => entry.id === assetId);
+      if (!asset || !isModelAssetType(assetType(asset))) return;
+      const def = await loadAssetDeformable(assetPath(asset));
+      if (def?.enabled) defs.set(assetId, def);
+    }));
+    this.deformableDefs = defs;
+  }
+
   private async loadMissingSceneModels(): Promise<void> {
     if (!this.assetLoader) return;
     const sceneIds = this.eagerSceneModelAssetIds();
@@ -5471,7 +5515,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
         materialSlots,
         bake,
         meshPaint,
-        asClone: Boolean(overrideMaterial) || Boolean(bake) || meshPaint.length > 0,
+        asClone: Boolean(overrideMaterial) || Boolean(bake) || meshPaint.length > 0 || this.deformableDefs.has(assetId),
       };
     });
     const instancedPlacements = decisions.map((decision) =>
@@ -5643,7 +5687,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       if (paint && child.geometry.getAttribute("position")?.count === paint.vertexCount) {
         const geometry = child.geometry.clone();
         geometry.setAttribute("color", new Float32BufferAttribute(paint.colors, 4));
-        geometry.userData.forgeMeshPaintClone = true;
+        // `clone()` shares userData with the source: a flag written into it would mark the shared model.
+        geometry.userData = { ...geometry.userData, forgeMeshPaintClone: true };
         child.geometry = geometry;
       }
       const applyBake = (source: Material): Material => {

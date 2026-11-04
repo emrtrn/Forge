@@ -18,6 +18,7 @@ import type { CapabilityModule } from "./CapabilityModule";
 import { createCharacterMovementModule } from "./characterMovementModule";
 import { createDialogueModule } from "./dialogueModule";
 import { createFractureModule } from "./fractureModule";
+import { createDeformableModule } from "./deformableModule";
 import { createMovingPlatformModule } from "./movingPlatformModule";
 import { createRuntimeUiModule } from "./runtimeUiModule";
 import { createSaveGameModule } from "./saveGameModule";
@@ -52,6 +53,8 @@ export function createDefaultRuntimeModules(): CapabilityModule[] {
     // Pre-baked fracture of static meshes with a .fracture.json; off, they stay
     // ordinary static props.
     createFractureModule(),
+    // Permanent dents on meshes with a .deformable.json; off, they stay rigid.
+    createDeformableModule(),
     // Registered after the platform module purely for readability — the solver
     // resolves platforms per call, and its tick comes from the `movement` slot.
     createCharacterMovementModule(),

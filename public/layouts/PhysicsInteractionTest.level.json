@@ -164,6 +164,39 @@
           ]
         }
       ]
+    },
+    {
+      "assetId": "sm-dent-panel",
+      "placements": [
+        {
+          "id": "dent-a",
+          "position": [
+            16,
+            0,
+            12
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            2,
+            2,
+            0.08
+          ]
+        },
+        {
+          "id": "dent-b",
+          "position": [
+            19,
+            0,
+            12
+          ],
+          "rotationYDeg": 0,
+          "scale": [
+            2,
+            2,
+            0.08
+          ]
+        }
+      ]
     }
   ],
   "characters": [],

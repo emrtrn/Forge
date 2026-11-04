@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "enabled": true,
+  "mode": "impact",
+  "dentImpulse": 300,
+  "fullImpulse": 6000,
+  "radius": 0.5,
+  "maxDepth": 0.25,
+  "plasticity": 0.6,
+  "maxDents": 32,
+  "collisionPolicy": "visual_only"
+}

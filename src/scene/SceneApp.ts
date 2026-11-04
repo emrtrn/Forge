@@ -4713,7 +4713,8 @@ export class SceneApp {
       if (paint && child.geometry.getAttribute("position")?.count === paint.vertexCount) {
         const geometry = child.geometry.clone();
         geometry.setAttribute("color", new Float32BufferAttribute(paint.colors, 4));
-        geometry.userData.forgeMeshPaintClone = true;
+        // `clone()` shares userData with the source: a flag written into it would mark the shared model.
+        geometry.userData = { ...geometry.userData, forgeMeshPaintClone: true };
         child.geometry = geometry;
       }
       const applyBake = (source: Material): Material => {
@@ -9861,7 +9862,8 @@ export class SceneApp {
   private ensureMeshPaintGeometry(object: Mesh): BufferGeometry {
     if (object.geometry.userData.forgeMeshPaintClone === true) return object.geometry;
     const geometry = object.geometry.clone();
-    geometry.userData.forgeMeshPaintClone = true;
+    // `clone()` shares userData with the source: a flag written into it would mark the shared model.
+    geometry.userData = { ...geometry.userData, forgeMeshPaintClone: true };
     object.geometry = geometry;
     return geometry;
   }

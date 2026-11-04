@@ -134,6 +134,7 @@ const COMPONENT_ICONS: Record<ActorComponentKind, string> = {
   Vehicle: "🚗",
   VehicleAiDriver: "AI🚗",
   Fracturable: "✶",
+  Deformable: "◖",
 };
 
 function escapeHtml(value: string): string {
@@ -943,6 +944,7 @@ export class ActorScriptEditor {
     const vehicleField = node.component === "Vehicle" ? this.vehicleFields(node) : "";
     const vehicleAiField = node.component === "VehicleAiDriver" ? vehicleAiDriverFields(node.props) : "";
     const fracturableField = node.component === "Fracturable" ? fracturableFields(node.props) : "";
+    const deformableField = node.component === "Deformable" ? deformableFields(node.props) : "";
     const pos = readVec3Prop(node.props.position, [0, 0, 0]);
     const rot = readVec3Prop(node.props.rotation, [0, 0, 0]);
     const scl = readVec3Prop(node.props.scale, [1, 1, 1]);
@@ -979,7 +981,7 @@ export class ActorScriptEditor {
       ${aiControllerField}
       ${vehicleField}
       ${vehicleAiField}
-      ${fracturableField}
+      ${fracturableField}${deformableField}
       <div class="as-section-label">Transform <small>(preview)</small></div>
       ${transformRows}
       <details class="as-advanced">
@@ -1519,6 +1521,7 @@ export class ActorScriptEditor {
     this.bindAIControllerDetails(node);
     this.bindVehicleDetails(node);
     this.bindFracturableDetails(node);
+    this.bindDeformableDetails(node);
     this.bindNumberProps(node);
     this.detailsHost.querySelectorAll<HTMLElement>("[data-as-vec]").forEach((rowEl) => {
       const key = rowEl.dataset.asVec as "position" | "rotation" | "scale";
@@ -1987,6 +1990,17 @@ export class ActorScriptEditor {
       if (enabled.checked) delete node.props.enabled;
       else node.props.enabled = false;
       commit();
+    });
+  }
+
+  /** Wires the Deformable form (no-op without one); unchecked stores `enabled: false`. */
+  private bindDeformableDetails(node: ComponentTemplateNode): void {
+    const enabled = this.detailsHost.querySelector<HTMLInputElement>("[data-as-deformable-enabled]");
+    enabled?.addEventListener("change", () => {
+      if (enabled.checked) delete node.props.enabled;
+      else node.props.enabled = false;
+      this.markDirty();
+      this.renderDetails();
     });
   }
 
@@ -2915,6 +2929,17 @@ function fracturableFields(props: Record<string, SceneJsonValue>): string {
       <span>Break Impulse</span>
       <input type="number" data-as-fracturable-impulse step="10" min="${min}" max="${max}"
         value="${impulse}" placeholder="Asset" />
+    </label>`;
+}
+
+/** The Deformable Details form: the switch for its mesh's `.deformable.json`. */
+function deformableFields(props: Record<string, SceneJsonValue>): string {
+  return `
+    <div class="as-section-label">Deformable</div>
+    <p class="as-empty">Aktörün mesh'ine kendi .deformable.json dosyasıyla göçük işler (Static Mesh Editor → Deformable). Aktörün bir Collider'ı olmalı.</p>
+    <label class="as-field as-check" title="Kapalıysa aktör, mesh'i göçebilir olsa da sağlam kalır.">
+      <input type="checkbox" data-as-deformable-enabled ${props.enabled === false ? "" : "checked"} />
+      <span>Dents</span>
     </label>`;
 }
 

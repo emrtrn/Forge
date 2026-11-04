@@ -416,6 +416,8 @@ export interface DeformableHost {
   deformableDef(assetId: string): AssetDeformableDef | null;
   /** What renders the entity now: an actor's object or a placement's clone; null while unbuilt. */
   renderObject(entityId: string): Object3D | null;
+  /** Model nodes a vehicle uses as wheels; they spin and stay rigid. Empty for anything else. */
+  wheelNodes(entityId: string): readonly string[];
 }
 
 export const deformableHostService = runtimeServiceKey<DeformableHost>("deformable-host");

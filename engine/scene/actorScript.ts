@@ -142,6 +142,7 @@ export const ACTOR_COMPONENT_KINDS = [
   "Vehicle",
   "VehicleAiDriver",
   "Fracturable",
+  "Deformable",
 ] as const;
 export type ActorComponentKind = (typeof ACTOR_COMPONENT_KINDS)[number];
 

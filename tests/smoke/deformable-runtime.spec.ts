@@ -2,8 +2,8 @@ import { expect, test, type Page } from "./test";
 
 /**
  * DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 7: in Play, driving the Reference Car into
- * a deformable panel dents that panel's own geometry; the panel beside it keeps
- * the shared model and the collider stays. Reads the `deform:` line of `?debug`.
+ * a deformable panel dents that panel's own geometry and the car's body; the panel
+ * beside it and the wheels keep the shared model, and the collider stays. Reads the `deform:` line of `?debug`.
  */
 
 const LEVEL = "layouts/PhysicsInteractionTest.level.json";
@@ -27,8 +27,8 @@ async function readVehicleKmh(page: Page): Promise<number> {
   return match ? Math.abs(Number(match[1])) : -1;
 }
 
-/** The two panel clones: how far their vertices differ, and which one got its own geometry. */
-async function panelState(page: Page): Promise<{ count: number; delta: number; owned: string[] }> {
+/** The two panel clones: how far their vertices differ, and which got their own geometry; same for the car's meshes. */
+async function panelState(page: Page): Promise<{ count: number; delta: number; owned: string[]; car: string[] }> {
   return page.evaluate(() => {
     interface Node {
       name?: string; isMesh?: boolean; parent?: { name?: string };
@@ -36,10 +36,12 @@ async function panelState(page: Page): Promise<{ count: number; delta: number; o
     }
     const w = window as unknown as { __deformScenes: { traverse(visit: (object: unknown) => void): void }[] };
     const panels: Node[] = [];
+    const car: string[] = [];
     for (const scene of w.__deformScenes) {
       scene.traverse((node) => {
         const object = node as Node;
         if (object.isMesh && (object.parent?.name ?? "").startsWith("sm-dent-panel-clone-")) panels.push(object);
+        if (object.isMesh && /^(body|spoiler|wheel-)/.test(object.name ?? "") && object.geometry!.userData.forgeDeformClone === true) car.push(object.name!);
       });
     }
     let delta = 0;
@@ -52,6 +54,7 @@ async function panelState(page: Page): Promise<{ count: number; delta: number; o
       count: panels.length,
       delta,
       owned: panels.filter((panel) => panel.geometry!.userData.forgeDeformClone === true).map((panel) => panel.parent!.name!),
+      car: car.sort(),
     };
   });
 }
@@ -96,24 +99,27 @@ test("deformable runtime: driving into a panel dents that panel, the car stays s
   await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
   await expect(page.locator("#debug-stats")).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
-  await expect.poll(() => readDeform(page), { timeout: 30_000 }).toMatchObject({ objects: 2, dented: 0, dents: 0 });
-  expect(await panelState(page)).toEqual({ count: 2, delta: 0, owned: [] });
+  await expect.poll(() => readDeform(page), { timeout: 30_000 }).toMatchObject({ objects: 3, dented: 0, dents: 0 });
+  expect(await panelState(page)).toEqual({ count: 2, delta: 0, owned: [], car: [] });
 
   await page.locator("#game-canvas").click();
   await page.keyboard.down("KeyW");
-  await expect.poll(async () => (await readDeform(page))?.dents ?? 0, { timeout: 25_000 }).toBeGreaterThan(0);
+  await expect.poll(async () => (await readDeform(page))?.dented ?? 0, { timeout: 25_000 }).toBe(2);
   const speedAtHit = await readVehicleKmh(page);
   await page.keyboard.up("KeyW");
 
   const line = (await readDeform(page))!;
   console.log(`[deform smoke] ${JSON.stringify(line)} at ${speedAtHit} km/h`);
-  expect(line.dented).toBe(1);
-  expect(line.missed).toBe(0);
+  // A low-poly car can take a hit with no vertex near it; those are counted, not dents.
+  expect(line.dents).toBeGreaterThan(line.missed);
 
   const state = await panelState(page);
   console.log(`[deform smoke] ${JSON.stringify(state)}`);
   // Only the panel that was hit left the shared model; panel 0 is the one on the car's line.
   expect(state.owned).toEqual(["sm-dent-panel-clone-0"]);
+  // The car dents too; wheels spin, they never leave the shared model.
+  expect(state.car).toContain("body");
+  expect(state.car.filter((name) => name.startsWith("wheel-"))).toEqual([]);
   // The panel is scaled 0.08 on Z, so the 0.25 m maxDepth is 3.125 local units.
   expect(state.delta).toBeGreaterThan(0.5);
   expect(state.delta).toBeLessThanOrEqual(3.13);

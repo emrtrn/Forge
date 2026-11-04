@@ -35,6 +35,7 @@ export const VEHICLE_COMPONENT = "Vehicle";
 export const VEHICLE_AI_DRIVER_COMPONENT = "VehicleAiDriver";
 /** Breaks the actor's mesh with its `.fracture.json` (DEFORMABLE_FRACTURABLE Faz 4b). */
 export const FRACTURABLE_COMPONENT = "Fracturable";
+export const DEFORMABLE_COMPONENT = "Deformable";
 
 export type SceneLightType = "directional" | "point" | "spot";
 export type ColliderShape =
@@ -1002,6 +1003,21 @@ export function readFracturableComponent(entity: Entity): FracturableComponent |
     enabled: data.enabled !== false,
     ...(typeof impulse === "number" && Number.isFinite(impulse) && impulse >= 0 ? { breakImpulse: impulse } : {}),
   };
+}
+
+/**
+ * An actor that dents like a deformable static mesh: its mesh asset's
+ * `.deformable.json` is the definition. Unlike a placement an actor opts in,
+ * since one mesh can serve a car that dents and a prop that does not. Without
+ * an enabled sidecar on the mesh it does nothing.
+ */
+export interface DeformableComponent {
+  enabled: boolean;
+}
+
+export function readDeformableComponent(entity: Entity): DeformableComponent | undefined {
+  const data = entity.components[DEFORMABLE_COMPONENT];
+  return data ? { enabled: data.enabled !== false } : undefined;
 }
 
 /** Reads a tolerant path-follower component; malformed data simply does not move. */

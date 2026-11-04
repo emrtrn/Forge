@@ -1,11 +1,13 @@
 /**
  * Permanent impact dents at runtime (DEFORMABLE_FRACTURABLE_WORK_PLAN Faz 7).
  *
- * Every static-mesh placement whose model has an enabled `<Model>.deformable.json`
- * opts into impact events at its `dentImpulse`. A hit strong enough leaves a dent
- * on that one object: its render object gets its own geometry on the first dent
+ * Every static-mesh placement whose model has an enabled `<Model>.deformable.json`,
+ * and every Actor Script actor with a `Deformable` component on such a mesh, opts
+ * into impact events at its `dentImpulse`. A hit strong enough leaves a dent on
+ * that one object: its render object gets its own geometry on the first dent
  * (`DentTarget`), the collider never changes, and a script can dent through the
- * `Deformable.Dent` message (kinematic bodies produce no impacts).
+ * `Deformable.Dent` message (kinematic bodies produce no impacts). A vehicle's
+ * wheels stay rigid.
  *
  * A dent list outlives the render object. Each frame the module compares a dented
  * object with what the shell renders now, so a World Partition cell that returns
@@ -13,19 +15,27 @@
  *
  * Off (module not registered, or no shell host), every object stays rigid.
  */
+import type { Mesh } from "three";
+
+import { assetPath, assetRecordById, assetType, isModelAssetType, type AssetManifest } from "@engine/assets/manifest";
 import type { AssetDeformableDef } from "@engine/physics/deformable/deformableTypes";
 import { dentDepthForImpulse, type Dent, type DentVec3 } from "@engine/physics/deformable/impactDeform";
 import { DentTarget, type DentOutcome } from "@engine/render-three/deformableMeshSync";
+import { readDeformableComponent, readRenderableMeshComponent } from "@engine/scene/components";
+import type { Entity } from "@engine/scene/entity";
 import { instanceEntityId } from "@engine/scene/legacyRoomLayoutAdapter";
 
+import { loadAssetDeformable } from "../assetDeformableLoader";
 import type { CapabilityModule } from "./CapabilityModule";
 import type { RuntimeServices } from "./RuntimeServices";
 import {
+  assetManifestService,
   deformableCommandsService,
   deformableHostService,
   fractureCommandsService,
   scriptMessageBusService,
   type DeformableHost,
+  type ScriptMessageBus,
 } from "./runtimeServiceKeys";
 
 export const DEFORMABLE_MODULE_ID = "deformable";
@@ -48,9 +58,14 @@ const MAX_DENTS_PER_FRAME = 4;
 /** Hits waiting for their frame; a pile-up past this is dropped. */
 const MAX_QUEUED_HITS = 16;
 
+/** Names the vehicle module gives the wheels it rigs (see `vehicleModule`). */
+const VEHICLE_WHEEL_NODE_PREFIX = "VehicleWheel";
+
 /** An object that can dent. */
 interface DeformableSource {
   readonly def: AssetDeformableDef;
+  /** Actors leave with their entity; placements stay known from the layout. */
+  readonly actor: boolean;
 }
 
 /** An object's dents; `target` is null while nothing renders it. */
@@ -68,6 +83,14 @@ interface QueuedHit {
   readonly instigator: string | null;
 }
 
+/** Whether a mesh, or a node above it, is one of a vehicle's wheels. */
+function isWheelMesh(mesh: Mesh, wheelNodes: ReadonlySet<string>): boolean {
+  for (let node: Mesh["parent"] | Mesh = mesh; node; node = node.parent) {
+    if (wheelNodes.has(node.name) || node.name.startsWith(VEHICLE_WHEEL_NODE_PREFIX)) return true;
+  }
+  return false;
+}
+
 function readVector(value: unknown): DentVec3 | null {
   if (!Array.isArray(value) || value.length !== 3) return null;
   return value.every((item) => typeof item === "number" && Number.isFinite(item)) ? value as unknown as DentVec3 : null;
@@ -81,6 +104,11 @@ export function createDeformableModule(): CapabilityModule {
   const episodes = new Map<string, { startedAt: number; depth: number }>();
   const queue: QueuedHit[] = [];
   const unsubscribes: Array<() => void> = [];
+  /** Sidecars of actor meshes, once per asset; a placement's comes from the shell. */
+  const actorDefs = new Map<string, Promise<AssetDeformableDef | null>>();
+  let manifest: AssetManifest | null = null;
+  /** Bumped by every teardown so a sidecar arriving for an old level is dropped. */
+  let generation = 0;
   let clock = 0;
   let missed = 0;
   let skipped = 0;
@@ -96,7 +124,8 @@ export function createDeformableModule(): CapabilityModule {
       entry.target = null;
     }
     if (entry.target || !object || !source) return;
-    entry.target = new DentTarget(object);
+    const wheelNodes = new Set(host?.wheelNodes(entityId) ?? []);
+    entry.target = new DentTarget(object, { exclude: (mesh) => isWheelMesh(mesh, wheelNodes) });
     entry.target.restore(entry.dents, source.def);
   };
 
@@ -159,12 +188,58 @@ export function createDeformableModule(): CapabilityModule {
     host?.physics.setImpactEventThreshold(entityId, null);
   };
 
+  const actorDef = (assetId: string): Promise<AssetDeformableDef | null> => {
+    const known = actorDefs.get(assetId);
+    if (known) return known;
+    const record = manifest ? assetRecordById(manifest, assetId) : undefined;
+    if (!record || !isModelAssetType(assetType(record))) return Promise.resolve(null);
+    const pending = loadAssetDeformable(assetPath(record)).then((def) => (def?.enabled ? def : null));
+    actorDefs.set(assetId, pending);
+    return pending;
+  };
+
+  const trackActor = async (entity: Entity): Promise<void> => {
+    const mesh = readRenderableMeshComponent(entity);
+    if (!mesh || !readDeformableComponent(entity)?.enabled) return;
+    const level = generation;
+    const def = await actorDef(mesh.assetId);
+    if (!def || !host || level !== generation) return;
+    sources.set(entity.id, { def, actor: true });
+    host.physics.setImpactEventThreshold(entity.id, def.dentImpulse);
+  };
+
+  const subscribe = (bus: ScriptMessageBus): void => {
+    unsubscribes.push(bus.subscribe(FRACTURE_BROKEN_MESSAGE, (envelope) => {
+      const entityId = (envelope.payload as { entityId?: unknown } | undefined)?.entityId;
+      if (typeof entityId === "string") forget(entityId);
+    }));
+    unsubscribes.push(bus.subscribe(DEFORMABLE_DENT_MESSAGE, (envelope) => {
+      const payload = envelope.payload as { point?: unknown; direction?: unknown; impulse?: unknown } | undefined;
+      const point = readVector(payload?.point);
+      const direction = readVector(payload?.direction);
+      const length = direction ? Math.hypot(direction[0], direction[1], direction[2]) : 0;
+      const impulse = Number(payload?.impulse);
+      if (!envelope.target || !point || !direction || length === 0 || !Number.isFinite(impulse)) return;
+      enqueue({
+        entityId: envelope.target,
+        point,
+        direction: [direction[0] / length, direction[1] / length, direction[2] / length],
+        impulse,
+        instigator: envelope.source ?? null,
+      });
+    }));
+  };
+
   const teardown = (): void => {
-    for (const id of [...sources.keys()]) forget(id);
+    generation += 1;
+    // An actor that streamed out has dents and no source.
+    for (const id of new Set([...sources.keys(), ...entries.keys()])) forget(id);
     for (const unsubscribe of unsubscribes.splice(0)) unsubscribe();
     entries.clear();
     episodes.clear();
+    actorDefs.clear();
     queue.length = 0;
+    manifest = null;
     clock = 0;
   };
 
@@ -185,9 +260,23 @@ export function createDeformableModule(): CapabilityModule {
           return { deformable: sources.size, dented, dents, missed, skipped, lastDentMs };
         },
       });
+      // Level-start actors are read from the scene document in onLevelLoaded;
+      // the sink follows actors that spawn or stream in and out afterwards.
+      runtimeServices.addEntitySink({
+        setEntities: () => {},
+        addEntity: (entity) => {
+          if (host) void trackActor(entity);
+        },
+        removeEntity: (entityId) => {
+          if (!sources.get(entityId)?.actor) return;
+          // Its dents stay: an actor of a streamed cell comes back with this id.
+          sources.delete(entityId);
+          host?.physics.setImpactEventThreshold(entityId, null);
+        },
+      });
     },
 
-    onLevelLoaded(levelContext) {
+    async onLevelLoaded(levelContext) {
       teardown();
       if (levelContext.mode === "editor") return;
       const hostRef = levelContext.resolve(deformableHostService);
@@ -199,31 +288,16 @@ export function createDeformableModule(): CapabilityModule {
         group.placements.forEach((placement, index) => {
           if (placement.hidden) return;
           const entityId = instanceEntityId(group.assetId, index);
-          sources.set(entityId, { def });
+          sources.set(entityId, { def, actor: false });
           hostRef.physics.setImpactEventThreshold(entityId, def.dentImpulse);
         });
       }
       const bus = levelContext.resolve(scriptMessageBusService);
-      if (!bus) return;
-      unsubscribes.push(bus.subscribe(FRACTURE_BROKEN_MESSAGE, (envelope) => {
-        const entityId = (envelope.payload as { entityId?: unknown } | undefined)?.entityId;
-        if (typeof entityId === "string") forget(entityId);
-      }));
-      unsubscribes.push(bus.subscribe(DEFORMABLE_DENT_MESSAGE, (envelope) => {
-        const payload = envelope.payload as { point?: unknown; direction?: unknown; impulse?: unknown } | undefined;
-        const point = readVector(payload?.point);
-        const direction = readVector(payload?.direction);
-        const length = direction ? Math.hypot(direction[0], direction[1], direction[2]) : 0;
-        const impulse = Number(payload?.impulse);
-        if (!envelope.target || !point || !direction || length === 0 || !Number.isFinite(impulse)) return;
-        enqueue({
-          entityId: envelope.target,
-          point,
-          direction: [direction[0] / length, direction[1] / length, direction[2] / length],
-          impulse,
-          instigator: envelope.source ?? null,
-        });
-      }));
+      if (bus) subscribe(bus);
+      const level = generation;
+      manifest = (await levelContext.resolve(assetManifestService)?.()) ?? null;
+      if (!manifest || level !== generation) return;
+      await Promise.all(levelContext.sceneDocument.entities.map((entity) => trackActor(entity)));
     },
 
     onLevelUnloaded() {

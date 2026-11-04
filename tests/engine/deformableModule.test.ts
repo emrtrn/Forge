@@ -7,6 +7,9 @@ import { BufferGeometry, Group, Mesh, PerspectiveCamera, PlaneGeometry, Scene, t
 import type { EngineApp } from "../../engine/core/EngineApp";
 import { createAssetDeformable } from "../../engine/physics/deformable/deformableTypes";
 import type { PhysicsImpact } from "../../engine/physics/impactEvents";
+import type { AssetManifest } from "../../engine/assets/manifest";
+import { DEFORMABLE_COMPONENT, STATIC_MESH_COMPONENT } from "../../engine/scene/components";
+import type { Entity, EntityComponentData } from "../../engine/scene/entity";
 import type { LayoutPlacement, RoomLayout } from "../../engine/scene/layout";
 import { instanceEntityId } from "../../engine/scene/legacyRoomLayoutAdapter";
 import type { AssetLoader } from "../../src/scene/assetLoader";
@@ -14,6 +17,7 @@ import { createDeformableModule } from "../../src/scene/capabilities/deformableM
 import { createRuntimeContext } from "../../src/scene/capabilities/RuntimeContext";
 import { createRuntimeServiceHost } from "../../src/scene/capabilities/RuntimeServices";
 import {
+  assetManifestService,
   deformableCommandsService,
   deformableHostService,
   fractureCommandsService,
@@ -26,6 +30,8 @@ import {
 const ASSET_ID = "panel";
 const OTHER_ASSET = "rigid";
 const DT = 1 / 60;
+const TEST_DEF = { dentImpulse: 100, fullImpulse: 1100, radius: 0.5, maxDepth: 0.2, plasticity: 0.5 };
+const MODEL_PATH = "/Meshes/Sedan.glb";
 
 interface Envelope { target?: string; source?: string; payload?: unknown }
 
@@ -53,7 +59,10 @@ const panelObject = (): Object3D => {
 };
 const geometryOf = (object: Object3D): BufferGeometry => (object.children[0] as Mesh).geometry;
 
-function harness(placements: LayoutPlacement[] = [{ position: [0, 0, 0] }, { position: [9, 0, 0] }]) {
+function harness(
+  placements: LayoutPlacement[] = [{ position: [0, 0, 0] }, { position: [9, 0, 0] }],
+  actors: Entity[] = [],
+) {
   const services = createRuntimeServiceHost({ syncEntityTransform: () => {} });
   const thresholds = new Map<string, number>();
   const impacts: PhysicsImpact[] = [];
@@ -67,13 +76,17 @@ function harness(placements: LayoutPlacement[] = [{ position: [0, 0, 0] }, { pos
       },
       impacts: () => impacts,
     },
-    deformableDef: (assetId) => assetId === ASSET_ID ? { ...createAssetDeformable(), dentImpulse: 100, fullImpulse: 1100, radius: 0.5, maxDepth: 0.2, plasticity: 0.5 } : null,
+    deformableDef: (assetId) => assetId === ASSET_ID ? { ...createAssetDeformable(), ...TEST_DEF } : null,
     renderObject: (id) => objects.get(id) ?? null,
+    wheelNodes: () => ["wheel-front"],
   };
   const { bus, sent, send } = fakeBus();
   services.provide(deformableHostService, host);
   services.provide(scriptMessageBusService, bus);
   services.provide(fractureCommandsService, { isFractured: (id: string) => fractured.has(id) } as unknown as FractureCommands);
+  services.provide(assetManifestService, () => Promise.resolve({
+    assets: [{ id: ASSET_ID, assetType: "staticMesh", path: MODEL_PATH }],
+  } as unknown as AssetManifest));
   const module = createDeformableModule();
   module.onRuntimeStart!(services);
   const commands = services.resolve(deformableCommandsService)!;
@@ -89,16 +102,16 @@ function harness(placements: LayoutPlacement[] = [{ position: [0, 0, 0] }, { pos
     engineApp: {} as unknown as EngineApp,
     assetLoader: {} as unknown as AssetLoader,
     layout,
-    sceneDocument: { schema: 1, name: "deformable-test", entities: [] },
+    sceneDocument: { schema: 1, name: "deformable-test", entities: actors },
     services,
   });
-  void module.onLevelLoaded!(context);
+  const loaded = module.onLevelLoaded!(context);
   const first = instanceEntityId(ASSET_ID, 0);
   const second = instanceEntityId(ASSET_ID, 1);
   objects.set(first, panelObject());
   objects.set(second, panelObject());
   return {
-    module, commands, thresholds, impacts, objects, fractured, sent, send, first, second,
+    module, services, loaded, commands, thresholds, impacts, objects, fractured, sent, send, first, second,
     /** One frame with `list` as its impacts. */
     frame(list: PhysicsImpact[] = [], seconds = DT) {
       impacts.length = 0;
@@ -262,4 +275,96 @@ export function registerDeformableModuleTests(check: (label: string, run: () => 
     assert.equal(test.thresholds.size, 0);
     test.module.dispose!();
   });
+}
+
+const actorEntity = (id: string, deformable: EntityComponentData | null): Entity => ({
+  id,
+  name: id,
+  components: {
+    [STATIC_MESH_COMPONENT]: { assetId: ASSET_ID } as unknown as EntityComponentData,
+    ...(deformable ? { [DEFORMABLE_COMPONENT]: deformable } : {}),
+  },
+}) as unknown as Entity;
+
+/** Serves the actor mesh's sidecar while `run` works. */
+async function withSidecar(run: () => Promise<void>): Promise<void> {
+  const original = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL) => (String(input) === "/Meshes/Sedan.deformable.json"
+    ? { ok: true, status: 200, json: async () => TEST_DEF }
+    : { ok: false, status: 404, json: async () => ({}) }) as unknown as Response) as typeof globalThis.fetch;
+  try {
+    await run();
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+/** Lets a streamed actor's sidecar load finish. */
+const settle = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0); });
+
+/** A car: a body beside a named wheel and a wheel the vehicle module has rigged. */
+function carObject(): { root: Object3D; body: Mesh; wheel: Mesh; rigged: Mesh } {
+  const root = new Group();
+  const body = new Mesh(new PlaneGeometry(4, 4, 40, 40));
+  const wheel = new Mesh(new PlaneGeometry(4, 4, 40, 40));
+  wheel.name = "wheel-front";
+  const rigged = new Mesh(new PlaneGeometry(4, 4, 40, 40));
+  const pivot = new Group();
+  pivot.name = "VehicleWheel:wheel-back";
+  pivot.add(rigged);
+  root.add(body, wheel, pivot);
+  return { root, body, wheel, rigged };
+}
+
+export async function registerDeformableActorTests(check: (label: string, run: () => Promise<void>) => Promise<void> | void): Promise<void> {
+  await check("deformable module: an actor opts in with its component, and only then", () => withSidecar(async () => {
+    const test = harness([], [
+      actorEntity("actor:car", {} as EntityComponentData),
+      actorEntity("actor:off", { enabled: false } as unknown as EntityComponentData),
+      actorEntity("actor:plain", null),
+    ]);
+    await test.loaded;
+    assert.deepEqual(test.thresholds, new Map([["actor:car", TEST_DEF.dentImpulse]]));
+    test.module.dispose!();
+  }));
+
+  await check("deformable module: a car's body dents, its wheels stay rigid", () => withSidecar(async () => {
+    const test = harness([], [actorEntity("actor:car", {} as EntityComponentData)]);
+    await test.loaded;
+    const car = carObject();
+    const wheelGeometry = car.wheel.geometry;
+    const riggedGeometry = car.rigged.geometry;
+    const bodyGeometry = car.body.geometry;
+    test.objects.set("actor:car", car.root);
+    test.frame([hitOn("actor:car", 1100)]);
+    assert.notEqual(car.body.geometry, bodyGeometry);
+    assert.equal(car.wheel.geometry, wheelGeometry);
+    assert.equal(car.rigged.geometry, riggedGeometry);
+    test.module.dispose!();
+  }));
+
+  await check("deformable module: an actor that streams out comes back with its dents", () => withSidecar(async () => {
+    const test = harness([], []);
+    await test.loaded;
+    const entity = actorEntity("actor:car", {} as EntityComponentData);
+    test.services.addEntity(entity);
+    await settle();
+    assert.equal(test.thresholds.has("actor:car"), true);
+    test.objects.set("actor:car", panelObject());
+    test.frame([hitOn("actor:car", 1100)]);
+
+    test.services.removeEntity("actor:car");
+    test.objects.set("actor:car", null);
+    test.frame();
+    assert.equal(test.thresholds.has("actor:car"), false);
+    assert.equal(test.commands.snapshot().dents, 1);
+
+    test.services.addEntity(entity);
+    await settle();
+    const returned = panelObject();
+    test.objects.set("actor:car", returned);
+    test.frame();
+    assert.ok(Math.abs(dentDepth(returned) - 0.1) < 1e-4);
+    test.module.dispose!();
+  }));
 }

@@ -145,9 +145,11 @@ Bump → 0.187.0 sonrası derleme kırılır; bu faz tek dilimde kapanır.
 
 ### Faz 4 — Doğrulama ve kabul
 
-- [x] Smoke (89 test): 85 yeşil. Kırık dördü r184'te de aynı şekilde kırık, yükseltmeden
-  bağımsız, ayrı iş: `river-water-optics:301`, `sun-cascaded-shadows:92`,
-  `world-environment:24`, `vehicle:602` (readout boş, r184 worktree'sinde doğrulandı).
+- [x] Smoke r187 (89 test): 86 yeşil. Kırık üçü r184'te de aynı şekilde kırık, ayrı iş:
+  `river-water-optics:301`, `sun-cascaded-shadows:92`, `world-environment:24`.
+  `vehicle:602` bu turda koşmadı; r184 worktree'si, r185 ve r186'da aynı şekilde kırık
+  (readout boş). `world-partition-statics`, `fracture-runtime` ve `vehicle.spec`'in
+  kalanı r185'te yeşildi, r187'de tekrar koşmadı.
   Reflective surface'ı render eden smoke yok; capture için `reflection-capture` eklendi.
 - [x] Referans karşılaştırması (`Forge-Archive/three-r187-baseline`, 123 görüntü,
   `r184-vs-r187.json`): hiçbirinde piksellerin %1'i 24/255'ten fazla değişmedi; 69'u

@@ -158,6 +158,10 @@ Bump → 0.187.0 sonrası derleme kırılır; bu faz tek dilimde kapanır.
 - [ ] Kullanıcı görsel kabulü (su, gökyüzü yansıması, probe'lar, gölgeler).
 - [x] Mimari not: reversed-Z S5 ve su örneklemesi kod açıklamalarında güncel;
   `CLAUDE.md`'de bu konuda madde yoktu.
+- [x] Kullanıcı kabulünde bulunan hata, yükseltmeden bağımsız kodda (8f9796a6): sahnede nehir
+  varken probe bake'inin +Y yüzü siyahtı, çünkü planar capture `scene.onBeforeRender` içinde
+  küp yüzünü geri koymuyordu. Ayrıca kameradan 50 m'den uzak probe gökyüzünü göremiyordu;
+  bake artık gök kutusunu probe'a merkezliyor. Kullanıcı sahnesinde doğrulandı.
 - [ ] Görsel kabulden sonra plan `Forge-Archive`'e taşınır.
 - Smoke'larda three: `page.evaluate` içinde `/tests/smoke/pages/engineThree.ts` import
   edilir. `/node_modules/.vite/deps/three.js` smoke sunucusunun değil, eski bir dev

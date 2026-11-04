@@ -13,6 +13,7 @@
  * on top of this one, not in here.
  */
 import type { PersistentScriptStateEntry } from "../behavior/behaviorSubsystem";
+import { DEFORMABLE_LIMITS } from "../physics/deformable/deformableTypes";
 import { decodeChunkMask, FRACTURE_MASK_MAX_CHUNKS } from "../physics/fracture/fractureMask";
 import type { TransformComponent } from "../scene/components";
 import type { SceneJsonValue } from "../scene/entity";
@@ -70,6 +71,21 @@ export type SavedDestructibleState =
   /** Broken whole (or every chunk fell): it loads without its object or any chunk. */
   | { readonly entityId: string; readonly state: "fractured"; readonly damage: number };
 
+/** One dent in the object's own scaled root space, so it holds wherever the object moved. */
+export interface SavedDent {
+  readonly point: readonly [number, number, number];
+  /** Unit direction the surface was pushed in. */
+  readonly direction: readonly [number, number, number];
+  /** Metres at the centre. */
+  readonly depth: number;
+}
+
+/** A dented placement or actor: replaying `dents` gives its shape back. */
+export interface SavedDeformableState {
+  readonly entityId: string;
+  readonly dents: readonly SavedDent[];
+}
+
 export interface GameSaveState {
   readonly activeLevelPath: string;
   /**
@@ -89,6 +105,8 @@ export interface GameSaveState {
   readonly drivingVehicleId?: string | null;
   /** Broken or damaged fracturable sources. Absent in saves written before fracture plan Faz 5. */
   readonly destructibles?: readonly SavedDestructibleState[];
+  /** Dented objects. Absent in saves written before deformable plan Faz 7. */
+  readonly deformables?: readonly SavedDeformableState[];
 }
 
 export interface GameSaveRestoreRequest {
@@ -98,6 +116,7 @@ export interface GameSaveRestoreRequest {
   readonly vehicles: readonly SavedVehicleState[];
   readonly drivingVehicleId: string | null;
   readonly destructibles: readonly SavedDestructibleState[];
+  readonly deformables: readonly SavedDeformableState[];
 }
 
 export interface CollectSaveStateInput {
@@ -107,6 +126,7 @@ export interface CollectSaveStateInput {
   readonly vehicles?: readonly SavedVehicleState[];
   readonly drivingVehicleId?: string | null;
   readonly destructibles?: readonly SavedDestructibleState[];
+  readonly deformables?: readonly SavedDeformableState[];
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -250,6 +270,36 @@ function normalizeDestructibles(value: unknown): SavedDestructibleState[] {
   return entries.sort((a, b) => a.entityId.localeCompare(b.entityId));
 }
 
+function normalizeVec3(value: unknown): [number, number, number] | null {
+  if (!Array.isArray(value) || value.length !== 3 || !value.every(isFiniteNumber)) return null;
+  return [value[0]!, value[1]!, value[2]!];
+}
+
+function normalizeDent(value: unknown): SavedDent | null {
+  if (!isPlainObject(value)) return null;
+  const point = normalizeVec3(value.point);
+  const direction = normalizeVec3(value.direction);
+  const length = direction ? Math.hypot(direction[0], direction[1], direction[2]) : 0;
+  if (!point || !direction || length === 0 || !isFiniteNumber(value.depth) || value.depth <= 0) return null;
+  return { point, direction: [direction[0] / length, direction[1] / length, direction[2] / length], depth: value.depth };
+}
+
+/** Valid entries only, one per entity (the first wins), sorted by entity id; an entry with no valid dent is nothing to restore. */
+function normalizeDeformables(value: unknown): SavedDeformableState[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const entries: SavedDeformableState[] = [];
+  for (const raw of value) {
+    if (!isPlainObject(raw) || typeof raw.entityId !== "string" || raw.entityId.length === 0 || !Array.isArray(raw.dents)) continue;
+    if (seen.has(raw.entityId)) continue;
+    const dents = raw.dents.flatMap((dent) => normalizeDent(dent) ?? []).slice(0, DEFORMABLE_LIMITS.maxDents[1]);
+    if (dents.length === 0) continue;
+    seen.add(raw.entityId);
+    entries.push({ entityId: raw.entityId, dents });
+  }
+  return entries.sort((a, b) => a.entityId.localeCompare(b.entityId));
+}
+
 function normalizePersistentState(value: unknown): PersistentScriptStateEntry[] {
   if (!Array.isArray(value)) return [];
   const entries: PersistentScriptStateEntry[] = [];
@@ -283,6 +333,7 @@ export function collectSaveState(input: CollectSaveStateInput): GameSaveState {
     vehicles: normalizeVehicles(input.vehicles ?? []),
     drivingVehicleId: normalizeDrivingVehicleId(input.drivingVehicleId),
     destructibles: normalizeDestructibles(input.destructibles ?? []),
+    deformables: normalizeDeformables(input.deformables ?? []),
   };
 }
 
@@ -300,6 +351,7 @@ export function applySaveState(value: unknown): GameSaveRestoreRequest | null {
     drivingVehicleId: normalizeDrivingVehicleId(value.drivingVehicleId),
     // Like vehicles: a damaged entry costs that object its saved state, never the load.
     destructibles: normalizeDestructibles(value.destructibles),
+    deformables: normalizeDeformables(value.deformables),
   };
 }
 

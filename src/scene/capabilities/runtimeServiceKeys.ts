@@ -57,7 +57,7 @@ import type {
 } from "@engine/persistence/saveGameState";
 import type { PhysicsTransformSink } from "@engine/physics/physicsSubsystem";
 import type { PhysicsImpact } from "@engine/physics/impactEvents";
-import type { SavedDestructibleState } from "@engine/persistence/saveGameState";
+import type { SavedDeformableState, SavedDestructibleState } from "@engine/persistence/saveGameState";
 import type { VehicleGroundSinkProvider } from "@engine/physics/surface/surfaceResponse";
 import type { VehicleDefinition, VehicleInput, VehicleState, VehicleVec3, VehicleWheelState } from "@engine/physics/vehicle/vehicleTypes";
 import type { SurfaceDeformationSample } from "@engine/terrain/terrainSurface";
@@ -440,6 +440,13 @@ export interface DeformableDebugSnapshot {
 /** The debug readout. Provided by: `deformableModule`. */
 export interface DeformableCommands {
   snapshot(): DeformableDebugSnapshot;
+  /** Every dented object, unloaded ones included, for the save-game. */
+  captureState(): SavedDeformableState[];
+  /**
+   * Replaces all dents with a save-game's, quietly. Entries wait for their
+   * object when it is not known yet; the next restore replaces them.
+   */
+  restoreState(entries: readonly SavedDeformableState[]): void;
 }
 
 export const deformableCommandsService = runtimeServiceKey<DeformableCommands>("deformable-commands");

@@ -7,6 +7,7 @@ import { BufferGeometry, Group, Mesh, PerspectiveCamera, PlaneGeometry, Scene, t
 import type { EngineApp } from "../../engine/core/EngineApp";
 import { createAssetDeformable } from "../../engine/physics/deformable/deformableTypes";
 import type { PhysicsImpact } from "../../engine/physics/impactEvents";
+import type { SavedDeformableState } from "../../engine/persistence/saveGameState";
 import type { AssetManifest } from "../../engine/assets/manifest";
 import { DEFORMABLE_COMPONENT, STATIC_MESH_COMPONENT } from "../../engine/scene/components";
 import type { Entity, EntityComponentData } from "../../engine/scene/entity";
@@ -22,6 +23,7 @@ import {
   deformableHostService,
   fractureCommandsService,
   scriptMessageBusService,
+  type DeformableCommands,
   type DeformableHost,
   type FractureCommands,
   type ScriptMessageBus,
@@ -62,6 +64,7 @@ const geometryOf = (object: Object3D): BufferGeometry => (object.children[0] as 
 function harness(
   placements: LayoutPlacement[] = [{ position: [0, 0, 0] }, { position: [9, 0, 0] }],
   actors: Entity[] = [],
+  beforeLoad?: (commands: DeformableCommands) => void,
 ) {
   const services = createRuntimeServiceHost({ syncEntityTransform: () => {} });
   const thresholds = new Map<string, number>();
@@ -105,6 +108,7 @@ function harness(
     sceneDocument: { schema: 1, name: "deformable-test", entities: actors },
     services,
   });
+  beforeLoad?.(services.resolve(deformableCommandsService)!);
   const loaded = module.onLevelLoaded!(context);
   const first = instanceEntityId(ASSET_ID, 0);
   const second = instanceEntityId(ASSET_ID, 1);
@@ -317,6 +321,58 @@ function carObject(): { root: Object3D; body: Mesh; wheel: Mesh; rigged: Mesh } 
 }
 
 export async function registerDeformableActorTests(check: (label: string, run: () => Promise<void>) => Promise<void> | void): Promise<void> {
+  await check("deformable module: a save round-trips dents, and a restore replaces what happened since", () => withSidecar(async () => {
+    const test = harness();
+    const object = test.objects.get(test.first)!;
+    test.frame([hitOn(test.first, 1100)]);
+    const saved = JSON.parse(JSON.stringify(test.commands.captureState())) as SavedDeformableState[];
+    assert.equal(saved.length, 1);
+    assert.equal(saved[0]!.entityId, test.first);
+    assert.equal(saved[0]!.dents.length, 1);
+
+    test.frame([], 0.3);
+    test.frame([hitOn(test.second, 1100)]);
+    test.commands.restoreState(saved);
+    test.frame();
+    assert.equal(test.commands.snapshot().dented, 1);
+    assert.equal(dentDepth(test.objects.get(test.second)!), 0, "the dent made after the save is gone");
+    assert.ok(Math.abs(dentDepth(object) - 0.1) < 1e-4);
+    assert.deepEqual(test.sent.filter((item) => item.topic === "Deformable.Dented").length, 2, "a restore is quiet");
+    assert.deepEqual(JSON.parse(JSON.stringify(test.commands.captureState())), saved);
+    test.module.dispose!();
+  }));
+
+  await check("deformable module: a restore that beats the level's build waits for it", () => withSidecar(async () => {
+    const saved: SavedDeformableState[] = [{
+      entityId: instanceEntityId(ASSET_ID, 0),
+      dents: [{ point: [0, 0, 0], direction: [0, 0, -1], depth: 0.1 }],
+    }];
+    const test = harness(undefined, [], (commands) => commands.restoreState(saved));
+    await test.loaded;
+    test.frame();
+    assert.ok(Math.abs(dentDepth(test.objects.get(test.first)!) - 0.1) < 1e-4);
+    test.module.dispose!();
+  }));
+
+  await check("deformable module: an entry with no object warns, stays in the next save and does no harm", () => withSidecar(async () => {
+    const warnings: unknown[] = [];
+    const warn = console.warn;
+    console.warn = (...args: unknown[]) => { warnings.push(args[0]); };
+    try {
+      const saved: SavedDeformableState[] = [{ entityId: "instance:gone:7", dents: [{ point: [0, 0, 0], direction: [0, 0, -1], depth: 0.1 }] }];
+      const test = harness();
+      await test.loaded;
+      test.commands.restoreState(saved);
+      test.frame();
+      assert.equal(warnings.length, 1);
+      assert.match(String(warnings[0]), /instance:gone:7/);
+      assert.deepEqual(test.commands.captureState(), saved);
+      test.module.dispose!();
+    } finally {
+      console.warn = warn;
+    }
+  }));
+
   await check("deformable module: an actor opts in with its component, and only then", () => withSidecar(async () => {
     const test = harness([], [
       actorEntity("actor:car", {} as EntityComponentData),

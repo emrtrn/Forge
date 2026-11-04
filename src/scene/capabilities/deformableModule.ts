@@ -12,6 +12,7 @@
  * A dent list outlives the render object. Each frame the module compares a dented
  * object with what the shell renders now, so a World Partition cell that returns
  * or a placement clone rebuilt for reflection probes simply gets its dents again.
+ * The same path serves a save-game: restoring only puts a dent list in place.
  *
  * Off (module not registered, or no shell host), every object stays rigid.
  */
@@ -21,6 +22,7 @@ import { assetPath, assetRecordById, assetType, isModelAssetType, type AssetMani
 import type { AssetDeformableDef } from "@engine/physics/deformable/deformableTypes";
 import { dentDepthForImpulse, type Dent, type DentVec3 } from "@engine/physics/deformable/impactDeform";
 import { DentTarget, type DentOutcome } from "@engine/render-three/deformableMeshSync";
+import type { SavedDeformableState } from "@engine/persistence/saveGameState";
 import { readDeformableComponent, readRenderableMeshComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
 import { instanceEntityId } from "@engine/scene/legacyRoomLayoutAdapter";
@@ -104,6 +106,13 @@ export function createDeformableModule(): CapabilityModule {
   const episodes = new Map<string, { startedAt: number; depth: number }>();
   const queue: QueuedHit[] = [];
   const unsubscribes: Array<() => void> = [];
+  /**
+   * Save-game entries waiting for their object. Not part of the level teardown:
+   * a load's restore may arrive before this module's own `onLevelLoaded`.
+   */
+  const pendingRestore = new Map<string, SavedDeformableState>();
+  /** The level's placements and level-start actors are known; unmatched entries can be reported. */
+  let levelRegistered = false;
   /** Sidecars of actor meshes, once per asset; a placement's comes from the shell. */
   const actorDefs = new Map<string, Promise<AssetDeformableDef | null>>();
   let manifest: AssetManifest | null = null;
@@ -188,6 +197,41 @@ export function createDeformableModule(): CapabilityModule {
     host?.physics.setImpactEventThreshold(entityId, null);
   };
 
+  /** Moves a known object's waiting save entry into place; the next frame applies it. */
+  const applyRestore = (entityId: string): void => {
+    const saved = pendingRestore.get(entityId);
+    if (!saved || !sources.has(entityId)) return;
+    pendingRestore.delete(entityId);
+    entries.set(entityId, { dents: saved.dents, target: null });
+  };
+
+  const reportUnmatched = (): void => {
+    if (!levelRegistered || pendingRestore.size === 0) return;
+    // Kept for an actor that spawns later, and in the next save.
+    console.warn(`[deformable] save entries with no deformable object: ${[...pendingRestore.keys()].join(", ")}`);
+  };
+
+  const captureState = (): SavedDeformableState[] => {
+    const saved = new Map(pendingRestore);
+    for (const [entityId, entry] of entries) {
+      const dents = entry.target?.dentList ?? entry.dents;
+      if (dents.length > 0) saved.set(entityId, { entityId, dents: dents.map((dent) => ({ ...dent })) });
+    }
+    return [...saved.values()];
+  };
+
+  const restoreState = (restored: readonly SavedDeformableState[]): void => {
+    // The save's dents replace the ones made since, even on an object it does not list.
+    for (const entry of entries.values()) entry.target?.dispose();
+    entries.clear();
+    episodes.clear();
+    queue.length = 0;
+    pendingRestore.clear();
+    for (const entry of restored) pendingRestore.set(entry.entityId, entry);
+    for (const entityId of [...pendingRestore.keys()]) applyRestore(entityId);
+    reportUnmatched();
+  };
+
   const actorDef = (assetId: string): Promise<AssetDeformableDef | null> => {
     const known = actorDefs.get(assetId);
     if (known) return known;
@@ -206,6 +250,7 @@ export function createDeformableModule(): CapabilityModule {
     if (!def || !host || level !== generation) return;
     sources.set(entity.id, { def, actor: true });
     host.physics.setImpactEventThreshold(entity.id, def.dentImpulse);
+    applyRestore(entity.id);
   };
 
   const subscribe = (bus: ScriptMessageBus): void => {
@@ -241,6 +286,7 @@ export function createDeformableModule(): CapabilityModule {
     queue.length = 0;
     manifest = null;
     clock = 0;
+    levelRegistered = false;
   };
 
   return {
@@ -259,6 +305,8 @@ export function createDeformableModule(): CapabilityModule {
           }
           return { deformable: sources.size, dented, dents, missed, skipped, lastDentMs };
         },
+        captureState,
+        restoreState,
       });
       // Level-start actors are read from the scene document in onLevelLoaded;
       // the sink follows actors that spawn or stream in and out afterwards.
@@ -290,6 +338,7 @@ export function createDeformableModule(): CapabilityModule {
           const entityId = instanceEntityId(group.assetId, index);
           sources.set(entityId, { def, actor: false });
           hostRef.physics.setImpactEventThreshold(entityId, def.dentImpulse);
+          applyRestore(entityId);
         });
       }
       const bus = levelContext.resolve(scriptMessageBusService);
@@ -298,10 +347,14 @@ export function createDeformableModule(): CapabilityModule {
       manifest = (await levelContext.resolve(assetManifestService)?.()) ?? null;
       if (!manifest || level !== generation) return;
       await Promise.all(levelContext.sceneDocument.entities.map((entity) => trackActor(entity)));
+      if (level !== generation) return;
+      levelRegistered = true;
+      reportUnmatched();
     },
 
     onLevelUnloaded() {
       teardown();
+      pendingRestore.clear();
       host = null;
     },
 

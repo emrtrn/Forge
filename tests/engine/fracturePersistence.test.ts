@@ -18,6 +18,38 @@ export function registerFracturePersistenceTests(check: (label: string, fn: () =
     assert.equal(encodeChunkMask(Array(64).fill(true)), "f".repeat(16));
   });
 
+  check("deformable persistence: dents round-trip, damaged ones cost only themselves, old saves load", () => {
+    const dent = { point: [1, 2, 3] as [number, number, number], direction: [0, 0, -1] as [number, number, number], depth: 0.1 };
+    const saved = collectSaveState({
+      activeLevelPath: "layouts/a.level.json",
+      deformables: [
+        { entityId: "z", dents: [dent] },
+        { entityId: "a", dents: [dent, dent] },
+        { entityId: "a", dents: [dent] },
+        { entityId: "empty", dents: [] },
+      ],
+    });
+    assert.deepEqual(saved.deformables!.map((entry) => [entry.entityId, entry.dents.length]), [["a", 2], ["z", 1]]);
+    assert.deepEqual(applySaveState(JSON.parse(JSON.stringify(saved)))!.deformables, saved.deformables);
+
+    const damaged = applySaveState({
+      activeLevelPath: "layouts/a.level.json",
+      deformables: [
+        { entityId: "a", dents: [dent, { ...dent, depth: 0 }, { ...dent, depth: "deep" }, { ...dent, point: [1, 2] }, { ...dent, direction: [0, 0, 0] }, null] },
+        { entityId: "b", dents: [{ ...dent, depth: -1 }] },
+        { entityId: "c", dents: "many" },
+        { dents: [dent] },
+        null,
+      ],
+    })!;
+    assert.deepEqual(damaged.deformables, [{ entityId: "a", dents: [dent] }]);
+
+    assert.deepEqual(applySaveState({ activeLevelPath: "layouts/a.level.json" })!.deformables, []);
+    const long = applySaveState({ activeLevelPath: "a", deformables: [{ entityId: "a", dents: Array(90).fill({ ...dent, direction: [0, 0, -2] }) }] })!;
+    assert.equal(long.deformables[0]!.dents.length, 64);
+    assert.deepEqual(long.deformables[0]!.dents[0]!.direction, [0, 0, -1], "directions stay unit");
+  });
+
   check("fracture persistence: malformed masks decode to null", () => {
     assert.equal(decodeChunkMask("1", 5), null, "too short");
     assert.equal(decodeChunkMask("011", 5), null, "too long");

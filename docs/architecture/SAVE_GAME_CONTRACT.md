@@ -68,6 +68,7 @@ Defined in `engine/persistence/saveGameState.ts`, produced by `collectSaveState(
 | `vehicles` | `SavedVehicleState[]` (optional in older saves) | Every live ray-cast vehicle's entity ID, position, Euler rotation in degrees, world linear/angular velocity, handbrake, and drivetrain (`gear`, `engineRpm`, or `null`). In a World Partition level it also lists cars parked in unloaded cells (at rest: zero velocities); see *World Partition levels* below. |
 | `drivingVehicleId` | `string \| null` (optional in older saves) | Vehicle occupied by an on-foot pawn. `null` on foot and when the Game Mode pawn is itself the vehicle. |
 | `destructibles` | `SavedDestructibleState[]` (optional in older saves) | Fracturable placements/actors no longer as authored, from the fracture capability's `captureState()`: `fractured` (gone, no chunks), `damaged` (a partly broken anchored source: `chunkCount` + hex `standing` / `anchored` chunk masks, `engine/physics/fracture/fractureMask.ts`) or `intact` with accumulated `Damage.Apply` damage. Each also carries `damage`. Sources not listed load intact. |
+| `deformables` | `SavedDeformableState[]` (optional in older saves) | Dented placements/actors from the deformable capability's `captureState()`: `entityId` and its `dents`, each `{ point, direction, depth }` in the object's scaled root space. A dent is a result, not an impulse: replaying the list gives the same shape. Objects not listed load undented. |
 
 Notes:
 
@@ -81,8 +82,8 @@ Notes:
   Current capability store schema is `1`, with **no `migrate` hook wired yet**.
   Older schema-1 saves without vehicle fields remain valid: missing `vehicles`
   normalizes to `[]`, and missing `drivingVehicleId` to `null`; missing
-  `destructibles` normalizes to `[]` (nothing broken). Invalid vehicle
-  entries are dropped individually; duplicate entity IDs keep the first valid
+  `destructibles` and `deformables` normalize to `[]` (nothing broken or
+  dented). Invalid vehicle entries and dents are dropped individually; duplicate entity IDs keep the first valid
   entry. For an incompatible change, bump the store schema in
   `createSaveGameModule` and supply a `migrate(fromSchema, payload)` to
   `SaveGameStore` — older schemas without a migrate hook are
@@ -169,6 +170,9 @@ saved level is always rebuilt clean first:
    built, so it may arrive before the fracture capability has rebuilt the
    level; a chunk count that no longer matches the asset's bake warns and loads
    the source broken; an id with no fracturable source warns and is kept), then
+   `deformables` (deformable `restoreState`: replaces every current dent, no
+   message; an entry waits for its object, and an id with no deformable object
+   warns and is kept), then
    vehicle pose/motion, then the player transform, then boards
    `drivingVehicleId` if supported. A character is placed at rest with its
    respawn transform updated. A vehicle pawn already restored from `vehicles`
@@ -247,6 +251,8 @@ endpoints that write **structured layout / sidecar data** into `public/`
   `applySavedPlayerTransform`, `applySavedVehicles`, `applySavedVehicleRide`.
 - `src/scene/capabilities/fractureModule.ts` — `captureState` / `restoreState`
   of `destructibles`.
+- `src/scene/capabilities/deformableModule.ts` — `captureState` / `restoreState`
+  of `deformables`.
 - `tests/smoke/runtime-checkpoint.spec.ts` — browser proof of the
   autosave → load → respawn round-trip.
 - `tests/smoke/fracture-runtime.spec.ts` ("quick-save of a broken wall") —

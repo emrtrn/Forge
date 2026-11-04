@@ -131,3 +131,75 @@ test("deformable runtime: driving into a panel dents that panel, the car stays s
   expect(await readVehicleKmh(page)).toBeLessThan(15);
   expect(errors).toEqual([]);
 });
+
+test("deformable runtime: a quick-save keeps the dents and a load brings the same shape back", async ({ page }) => {
+  const errors: string[] = [];
+  const messages: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("console", (message) => {
+    messages.push(message.text());
+    if (message.type() === "error") errors.push(message.text());
+  });
+  await page.context().addInitScript(() => {
+    localStorage.clear();
+    const w = window as unknown as { __THREE_DEVTOOLS__: EventTarget; __deformScenes: unknown[] };
+    w.__deformScenes = [];
+    w.__THREE_DEVTOOLS__ = new EventTarget();
+    w.__THREE_DEVTOOLS__.addEventListener("observe", (event) => {
+      const object = (event as CustomEvent).detail as { isScene?: boolean };
+      if (object?.isScene) w.__deformScenes.push(object);
+    });
+  });
+  await page.route(`**/${LEVEL}`, async (route) => {
+    const response = await route.fetch();
+    const level = await response.json();
+    level.instances = level.instances.filter((group: { assetId: string }) => group.assetId !== "sm-breakable-crate");
+    const panels = level.instances.find((group: { assetId: string }) => group.assetId === "sm-dent-panel");
+    panels.placements[0].position = [0, 0, 16];
+    panels.placements[0].scale = [4, 2.5, 0.08];
+    panels.placements[1].position = [6, 0, 16];
+    level.worldSettings = { ...level.worldSettings, pauseMenuWidget: "menu" };
+    await route.fulfill({ response, json: level });
+  });
+  await page.route("**/project.3dgame.json", async (route) => {
+    const response = await route.fetch();
+    const project = await response.json();
+    project.editor.defaultScene = LEVEL;
+    await route.fulfill({ response, json: project });
+  });
+  await page.goto(`/?debug&deformSave=${Date.now()}`);
+  await expect.poll(() => messages.some((message) => message.includes('"layout":"PhysicsInteractionTest"')), { timeout: 60_000 }).toBeTruthy();
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
+  const stats = page.locator("#debug-stats");
+  await expect(stats).toContainText('save.slots.quick.status = "Empty"', { timeout: 30_000 });
+  await expect.poll(() => readDeform(page), { timeout: 30_000 }).toMatchObject({ objects: 3, dents: 0 });
+
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect.poll(async () => (await readDeform(page))?.dented ?? 0, { timeout: 25_000 }).toBe(2);
+  await page.keyboard.up("KeyW");
+  await page.waitForTimeout(1500);
+  const before = (await readDeform(page))!;
+  const shape = (await panelState(page)).delta;
+
+  await page.keyboard.press("Escape");
+  await expect(page.locator('[data-ui-id="title"]')).toContainText("Save / Load");
+  await page.locator('[data-ui-id="quick-save"]').click();
+  await expect(stats).toContainText(/save\.slots\.quick\.status = "Saved /, { timeout: 10_000 });
+  const saved = await page.evaluate(() => {
+    const key = Object.keys(localStorage).find((entry) => entry.startsWith("forge.saveGame.") && entry.endsWith(".slot.quick"));
+    return key ? JSON.parse(localStorage.getItem(key)!).payload.deformables as { entityId: string; dents: unknown[] }[] : null;
+  });
+  console.log(`[deform smoke] saved ${JSON.stringify(saved?.map((entry) => [entry.entityId, entry.dents.length]))}`);
+  expect(saved).toHaveLength(2);
+
+  await page.locator('[data-ui-id="quick-load"]').click();
+  await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  await expect.poll(async () => (await readDeform(page))?.dents ?? 0, { timeout: 30_000 }).toBe(before.dents);
+  await expect.poll(async () => (await panelState(page)).owned, { timeout: 30_000 }).toEqual(["sm-dent-panel-clone-0"]);
+  const after = await panelState(page);
+  console.log(`[deform smoke] shape ${shape} -> ${after.delta}`);
+  expect(Math.abs(after.delta - shape)).toBeLessThan(1e-3);
+  expect(after.car).toContain("body");
+  expect(errors).toEqual([]);
+});

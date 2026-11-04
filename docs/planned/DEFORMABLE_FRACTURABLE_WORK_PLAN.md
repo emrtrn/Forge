@@ -7,8 +7,11 @@
 > görsel kabulü. Etkileşim alanı ve static mesh sway Faz 6b'ye ayrıldı.
 > **Faz 2 tamam** (2026-11-03): Voronoi bake çekirdeği. **Faz 3 tamam**
 > (2026-11-03): fracture sidecar'ı + Static Mesh Editor bölümü. **Faz 4
-> çekirdeği tamam** (2026-11-03): static placement'lar oyunda kırılıyor;
-> actor component / override / VFX-ses alanları açık.
+> çekirdeği tamam** (2026-11-03): static placement'lar oyunda kırılıyor.
+> **Faz 4b, 4c ve 5 tamam** (2026-11-03): actor component, placement
+> override, VFX/ses + debris ayarları, destek grafiği ve kalıcılık.
+> **Faz 6b A kod tarafı tamam** (2026-11-04): static mesh sway; görsel kabul
+> ve B tasarım onayı kullanıcıda.
 >
 > **Kırılma sırası (kullanıcı kararı, 2026-11-03)** — yarım kalırsa buradan
 > devam: (1) ~~Faz 4b-3 kırılma VFX/ses + debris ayarları~~ (tamam) → (2) **Faz 4c destek
@@ -479,10 +482,10 @@ vermez. Kullanıcı görsel kabulü ayrı.
       dönünce bütün gelir (shell onu layout'tan yeniden kurar; placement
       hemen yeniden kaydolur, aktör yeniden doğunca). Kırık durumun hücre
       dönüşünde korunması Faz 5'tir.
-- [~] Actor olayı `Fracture.Broken` (instigator, impulse) + VFX/ses kancası
+- [x] Actor olayı `Fracture.Broken` (instigator, impulse) + VFX/ses kancası
       (veri ile bağlanır, kod sabit değil). `Fracture.Broken` script mesajı
       yayınlanır (`entityId`, `instigator`, `impulse`); VFX/ses sidecar
-      alanları açık.
+      alanları Faz 4b-3'te geldi (`breakEffect`, `breakSound`).
 - [x] Perf sayaçları: aktif parça, spawn hitch (ms), fizik adımı payı.
       `?debug` satırı `fracture: objects … broken … chunks … breaks … spawn
       … ms`; fizik payı mevcut subsystem profilinde.

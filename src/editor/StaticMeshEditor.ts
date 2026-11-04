@@ -58,6 +58,7 @@ import { projectFileUrl } from "@/project/ProjectSystem";
 import { OrbitViewportCamera, createAssetViewportRig } from "@/editor/assetViewportCamera";
 import { loadAssetCollision, saveAssetCollision } from "@/editor/assetCollisionStore";
 import { StaticMeshFracture } from "@/editor/staticMeshFracture";
+import { StaticMeshDeformable } from "@/editor/staticMeshDeformable";
 import {
   applyAssetUvwMapping,
   defaultAssetUvw,
@@ -197,6 +198,9 @@ export class StaticMeshEditor {
   /** Fracture support overlay (Faz 4c-4): anchor boxes, visible over the intact model too. */
   private readonly fractureSupportGroup = new Group();
   private readonly fracture: StaticMeshFracture;
+  /** Test Hit's dented copy of the model (Faz 7); shown in the model's place. */
+  private readonly deformablePreviewGroup = new Group();
+  private readonly deformable: StaticMeshDeformable;
   /** The loaded `gltf.scene`, the root the fracture bake and hash read. */
   private loadedModel: Object3D | null = null;
   private readonly resizeObserver: ResizeObserver;
@@ -316,6 +320,19 @@ export class StaticMeshEditor {
       rerender: () => this.renderDetails(),
     });
 
+    this.deformable = new StaticMeshDeformable({
+      modelPath: options.modelPath,
+      modelRoot: () => this.loadedModel,
+      previewGroup: this.deformablePreviewGroup,
+      modelVisible: () => this.modelGroup.visible,
+      setModelVisible: (visible) => {
+        this.modelGroup.visible = visible;
+      },
+      markDirty: () => this.markDirty(),
+      setStatus: (message, tone) => this.setStatus(message, tone),
+      rerender: () => this.renderDetails(),
+    });
+
     this.buildScene();
     this.bindCameraControls();
     this.bindKeyboard();
@@ -336,6 +353,9 @@ export class StaticMeshEditor {
     void this.fracture.load().then(() => {
       if (!this.disposed) this.renderDetails();
     });
+    void this.deformable.load().then(() => {
+      if (!this.disposed) this.renderDetails();
+    });
   }
 
   // --- scene setup -------------------------------------------------------
@@ -343,6 +363,7 @@ export class StaticMeshEditor {
   private buildScene(): void {
     createAssetViewportRig(this.scene);
     this.scene.add(this.modelGroup);
+    this.scene.add(this.deformablePreviewGroup);
     this.scene.add(this.overlayGroup);
     this.scene.add(this.complexCollisionGroup);
     this.fracturePreviewGroup.visible = false;
@@ -418,6 +439,7 @@ export class StaticMeshEditor {
         if (this.gizmoDragging || dragDistance >= 4) return;
         // Fracture Simulate Hit (Faz 4c-4) takes a click that lands on a chunk.
         if (this.fracture.wantsViewportHit && this.fracture.pickHit(this.rayAt(event))) return;
+        if (this.deformable.wantsViewportHit && this.deformable.pickHit(this.rayAt(event))) return;
         this.pickPrimitiveAt(event);
       },
     });
@@ -483,6 +505,7 @@ export class StaticMeshEditor {
         void this.applyPreviewMaterials({ dirty: false, status: false });
       }
       this.fracture.modelLoaded();
+      this.deformable.modelLoaded();
       this.renderDetails();
       this.setStatus("Ready.");
     } catch (error) {
@@ -1427,8 +1450,10 @@ export class StaticMeshEditor {
         <div class="sm-prim-list">${primitiveRows}</div>
       </div>
       ${this.fracture.html()}
+      ${this.deformable.html()}
     `;
     this.fracture.bind(this.detailsHost);
+    this.deformable.bind(this.detailsHost);
 
     this.detailsHost.querySelectorAll<HTMLSelectElement>("[data-sm-material-slot]").forEach((select) => {
       select.addEventListener("change", (event) => {
@@ -1663,22 +1688,23 @@ export class StaticMeshEditor {
 
   private async save(): Promise<void> {
     try {
-      const [collisionResult, materialResult, uvwResult, vertexColorResult, fractureResult] = await Promise.all([
+      const [collisionResult, materialResult, uvwResult, vertexColorResult, fractureResult, deformableResult] = await Promise.all([
         saveAssetCollision(this.options.modelPath, this.collision),
         saveAssetMaterialSlots(this.options.modelPath, this.materialSlots),
         saveAssetUvw(this.options.modelPath, this.uvw),
         saveAssetVertexColors(this.options.modelPath, this.vertexColors),
         this.fracture.save(),
+        this.deformable.save(),
       ]);
       this.overlay.querySelector<HTMLButtonElement>("[data-sm-save]")?.classList.remove("is-dirty");
       const changed = collisionResult.changed || materialResult.changed || uvwResult.changed || vertexColorResult.changed
-        || (fractureResult?.changed ?? false);
-      const fractureNote = fractureResult ? `, ${fractureResult.path}` : "";
+        || (fractureResult?.changed ?? false) || (deformableResult?.changed ?? false);
+      const fractureNote = `${fractureResult ? `, ${fractureResult.path}` : ""}${deformableResult ? `, ${deformableResult.path}` : ""}`;
       this.setStatus(
         changed
           ? `Saved ${collisionResult.path}, ${materialResult.path}, ${uvwResult.path}, ${vertexColorResult.path}${fractureNote}`
           : "No changes to save.",
-        fractureResult && fractureResult.dropped.length > 0 ? "warning" : "info",
+        (fractureResult?.dropped.length ?? 0) + (deformableResult?.dropped.length ?? 0) > 0 ? "warning" : "info",
       );
       if (this.options.assetId) {
         this.options.onMaterialSlotsSaved?.(this.options.assetId);
@@ -1714,6 +1740,7 @@ export class StaticMeshEditor {
     this.disposeUvwOverlay();
     this.disposeComplexCollisionOverlay();
     this.fracture.dispose();
+    this.deformable.dispose();
     this.complexCollisionMaterial.dispose();
     this.renderer.dispose();
     this.overlay.remove();

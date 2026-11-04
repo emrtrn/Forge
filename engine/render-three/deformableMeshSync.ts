@@ -84,6 +84,7 @@ const SCRATCH_MATRIX = new Matrix4();
 export class DentTarget {
   private meshes: DentMesh[] | null = null;
   private readonly dents: Dent[] = [];
+  private moved = 0;
 
   constructor(
     private readonly root: Object3D,
@@ -93,6 +94,11 @@ export class DentTarget {
   /** The object's dents, in dent space. */
   get dentList(): readonly Dent[] {
     return this.dents;
+  }
+
+  /** Vertices the latest hit moved, across the object's meshes. */
+  get lastMoved(): number {
+    return this.moved;
   }
 
   /** The object this target writes to; a rebuilt clone needs a new target. */
@@ -145,9 +151,12 @@ export class DentTarget {
   }
 
   private push(dent: Dent, params: DentParams): void {
+    this.moved = 0;
     for (const item of this.ensureMeshes()) {
       const change = applyDent(item.surface, dent, params);
-      if (change.moved > 0) this.write(item, change, params);
+      if (change.moved === 0) continue;
+      this.moved += change.moved;
+      this.write(item, change, params);
     }
   }
 

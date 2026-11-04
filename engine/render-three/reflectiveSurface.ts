@@ -144,10 +144,11 @@ export class ReflectiveSurface extends Mesh {
     this.uniforms.reflectionTint.value.set(item.tint);
   }
 
-  dispose(): void {
+  override dispose(): void {
     this.renderTarget.dispose();
     this.geometry.dispose();
     (this.material as Material).dispose();
+    super.dispose();
   }
 
   /** Patches the standard material to sample the planar reflection (shared live uniforms). */

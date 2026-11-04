@@ -101,14 +101,17 @@ Bugün de doğru olan, yükseltmeyi küçülten değişiklikler.
 
 ### Faz 2 — 0.186
 
-- [ ] Bump → 0.186.0.
-- [ ] `super.dispose?.()` → `super.dispose()`.
-- [ ] Değişen chunk'lara tutunan yamalar (`shaderChunkAnchors` testi ne
-  derse).
+- [x] Bump → 0.186.0.
+- [x] Dört Mesh alt sınıfına `override dispose()` + `super.dispose()`.
+- [x] Değişen chunk'lara tutunan yama yok (`shaderChunkAnchors` yeşil).
 - [ ] `toJSON()` artık varsayılan değerleri kontrol etmiyor (#34178): Forge
   three'nin `toJSON`'unu kayıt yolunda kullanmıyor (kontrol edildi), yine de
   kayıt round-trip testleri yeşil kalmalı.
-- [ ] Kapı + smoke. Görsel fark (PMREM spiral blur, multiscatter) not edilir.
+- [x] Kapı + r184 referans setinin tamamı: `terrain-water-runtime` r186'da düzeldi.
+  r184'te de kırık olan üç smoke aynen kırık, three'den bağımsız:
+  `river-water-optics:301` (kaynak sayısı 5, beklenen 4),
+  `sun-cascaded-shadows:92` (kaskad 3, beklenen 4), `world-environment:24`
+  (`moonShadowStrength` 0.5, test 0.45 bekliyor). Görsel karşılaştırma Faz 4'te.
 
 ### Faz 3 — 0.187: PMREM küp geçişi (asıl iş)
 

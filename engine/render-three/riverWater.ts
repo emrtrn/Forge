@@ -1008,7 +1008,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.shoreAllowed=allowed;this.refreshTerrainEffects();
   }
 
-  dispose(): void {
+  override dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
     this.aoNormalMaterial?.dispose(); this.aoNormalMaterial = null;
@@ -1036,6 +1036,7 @@ export class RiverWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     }
     this.geometry.dispose();
     this.material.dispose();
+    super.dispose();
   }
 }
 

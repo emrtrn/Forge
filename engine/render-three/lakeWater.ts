@@ -437,12 +437,12 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.material.uniforms.planarReflectionEnabled!.value = binding ? 1 : 0;
     this.material.uniforms.reflectionStrength!.value = this.strength;
   }
-  dispose() { this.underwaterBody.dispose(); this.setWheelFoam([]); this.setWheelRipples([]); for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
+  override dispose() { this.underwaterBody.dispose(); this.setWheelFoam([]); this.setWheelRipples([]); for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
     this.refractionMask?.dispose(); this.refractionMask = null; this.material.uniforms.lakeRefractionMask!.value = null;
     this.foamMaterial.dispose();
     this.foamTexture?.dispose(); this.foamTexture = null; this.material.uniforms.foamMask!.value = null;
     this.geometryFoamTexture?.dispose(); this.geometryFoamTexture = null; this.material.uniforms.geometryFoamMask!.value = null;
-    this.source?.removeConsumer(this); this.source = null; this.setPlanarReflectionBinding(null); this.geometry.dispose(); this.material.dispose(); }
+    this.source?.removeConsumer(this); this.source = null; this.setPlanarReflectionBinding(null); this.geometry.dispose(); this.material.dispose(); super.dispose(); }
 }
 
 /** Replace the existing override-pass water draw with its displacing variant. */

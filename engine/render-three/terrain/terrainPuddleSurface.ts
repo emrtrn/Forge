@@ -255,5 +255,5 @@ if (puddlePlanarReady > .5 && vPuddleProjected.w > 0.0) {
     }
   }
   clearRipples(): void { this.history.length = 0; this.ringCount.value = 0; }
-  dispose(): void { this.useReflectionSource(null); this.setPlanarReflectionBinding(null); this.clearRipples(); this.stopTexture.dispose(); this.geometry.dispose(); this.material.dispose(); }
+  override dispose(): void { this.useReflectionSource(null); this.setPlanarReflectionBinding(null); this.clearRipples(); this.stopTexture.dispose(); this.geometry.dispose(); this.material.dispose(); super.dispose(); }
 }

@@ -1,10 +1,10 @@
 # FORGE — Vehicle Component & Damage Contract
 
 **Dosya:** `FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`  
-**Sürüm:** v0.5 — tasarım sözleşmesi; motor hattı VM-1…3 uygulandı, araç hattı öneri  
+**Sürüm:** v0.6 — tasarım sözleşmesi; motor hattı VM-1…3 ve kararlı aktör kimliği uygulandı, araç hattı öneri  
 **Tarih:** 2026-11-04 (Europe/Istanbul)  
 **Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`, ilk oyun tüketicisi Ridgebound `RB-V-001 — Doruk K-180`  
-**Durum:** **[MOTOR HATTI TAMAM / `VCD-D12` KARARI AÇIK]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattı başlamadı.  
+**Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattı başlamadı.  
 **Yetki ayrımı:** Forge genel model, deformasyon, kırılma, kopma, kayıt ve editör altyapısını sağlar. Ridgebound hangi parçanın nasıl hasarlanacağını, eşikleri, onarım/ekonomi/oynanış sonuçlarını belirler. 
 
 **Girdi kaynakları:**
@@ -313,7 +313,7 @@ Faz 1 `PhysicsImpact` olayı fiziksel chassis collider'ından gelebilir; **motor
 
 ## 9. Kayıt / yükleme, restore ve geri dönüş
 
-**VM-3'te uygulanan (`logical` profil):** nesnenin kaybettiği parçalar göçüklerle aynı statedir: `SavedDeformableState.detachedParts`. Nesne yeniden kurulsa da, aktör hücreden çıkıp dönse de, kayıt yüklense de parça yerine dönmez. Gevşek parça kaydedilmez. Yükleme canlı sahnede kalır: kazadan önceki kayıt yüklenince gevşek parça silinir, aynı düğüm eski yerine takılır ve göçüğü kalkar. Kopan parçanın göçükleri parçayla gider, nesnenin listesinde kalmaz. Kayıt `assetId` de taşır: aktör kimliği sıra numarası olduğu için başka asset'e düşen kayıt uyarıyla yok sayılır (`VCD-D12`).
+**VM-3'te uygulanan (`logical` profil):** nesnenin kaybettiği parçalar göçüklerle aynı statedir: `SavedDeformableState.detachedParts`. Nesne yeniden kurulsa da, aktör hücreden çıkıp dönse de, kayıt yüklense de parça yerine dönmez. Gevşek parça kaydedilmez. Yükleme canlı sahnede kalır: kazadan önceki kayıt yüklenince gevşek parça silinir, aynı düğüm eski yerine takılır ve göçüğü kalkar. Kopan parçanın göçükleri parçayla gider, nesnenin listesinde kalmaz. Kayıt `assetId` de taşır: hâlâ sıra numarasıyla yazılmış kayıtlarda başka asset'e düşen giriş uyarıyla yok sayılır.
 
 **Bütçe:** seviyede en çok 16 gevşek parça tutulur, en eskisi önce gider. Sahibi olan aktör hücreyle boşalınca parçaları da gider, kayıp bilgisi kalır. Sayı ölçümle seçilmedi; `VCD-12` benchmark'ı henüz yapılmadı.
 
@@ -348,7 +348,9 @@ Faz 1 `PhysicsImpact` olayı fiziksel chassis collider'ından gelebilir; **motor
 ```
 
 - Faz 7-6 kaydı kök uzayında `{ entityId, dents[] }` tutar; VM-1 her göçüğe isteğe bağlı `part` ekledi, eski kayıtlar gövdeye düşer. Parçası sidecar'dan silinmiş göçük de gövdede kalır. `sourceAssetHash` veya topoloji sürümü hâlâ yoktur; model değişirse eski göçükler yeni vertex'lere yine konur, bu açık bir risk. Bu sözleşme **part-local vs vehicle-local** dönüşümlerinin tutarlı bir kaydını şart koşar. Öneri: `part-local` rest geometry üzerinden dent recipe; eski `deformables` kayıtları kök uzayında okunmaya devam eder, kayıt dönüştürücüsü vehicle actor ile test edilir.
-- Runtime aktör kimliği sıra numarasına bağlıdır (`actor:${index}`, `engine/scene/actorInstance.ts`). Aktör listesi değişirse kayıt başka aktöre bağlanabilir. `assetId` koruması yalnız farklı asset'i yakalar: aynı kamyondan iki tanesinin sırası değişirse hasar diğerine geçer. Kalıcı `vehicleInstanceId` bu kimliğin üzerine kurulamaz (`VCD-D12`).
+- **Kararlı aktör kimliği (`VCD-D12`):** `vehicleInstanceId`in karşılığı `LayoutActorInstance.id`dir. Runtime kimliği `actor:<index>` kalır; çeviri yalnız kayıt sınırında yapılır (`engine/persistence/saveEntityKeys.ts`): kayıt aktörü `actor-id:<id>` diye yazar, yüklerken o seviyedeki yeni sırasına çevrilir. Araç, kırılma, göçük, kalıcı script state ve binilen araç aynı yoldan geçer. Sıra sorunu küçük değildi: World Partition seviyesinde bir hücreye aktör eklemek sonraki hücrelerin numaralarını kaydırır.
+- Kimliği editör üretir: yüklemede ve her kayıtta eksik olana verir, çakışanın ikincisine yenisini verir, kopya kimliksiz başlar. Mevcut seviyeler sonraki editör Save'inde kimlik kazanır; o zamana kadar ve eski kayıtlar için `actor:<index>` çalışmaya devam eder. Seviyeden çıkmış aktörün kaydı başka aktöre düşmez, uyarıyla atlanır.
+- **Sınır:** placement'lar hâlâ `instance:<asset>:<index>` ile kaydedilir. Kırılan veya göçen statik nesnelerin kaydı, aynı asset grubunda sıra değişirse kayar. Binlerce placement'a kimlik yazmak büyük dosya farkı demek; ayrı karar gerektirir.
 - Fracture Faz 5'te enkaz pozlarının kaydedilmemesi kullanıcı kararıdır; bu belge **genel fracture kuralını değiştirmez**. Araçta ayrı `World-persistent detached` profilinin açılması kullanıcı/oyun ihtiyacına bağlıdır.
 - Yeni kayıtta olmayan alanlar eski save ile uyumlu olmalı, bilinmeyen ID/mesh hash/topology değişince güvenli fallback ve uyarı üretmelidir. Dünya dışına çıkmış geçici debris restore edilmek zorunda değildir.
 - Hasarlı parça, fizik sistemini yeniden yükledikten sonra **aynı kaynak mesh'e** dent recipe uygulanarak yeniden üretilebilir; runtime transient vertex buffer'larının her baytını save etmek zorunlu değildir.
@@ -418,7 +420,6 @@ Aşağıdaki testler `RB-V-001` ön tamponu için yazılmıştır. Motor hattın
 | `VCD-D07` | Cam parçalama mimarisi | Node-seçimli fracture veya Blender'dan ayrık cam asset; camı bütün araç kaynağına bake etme | Motor oturumu + sanat |
 | `VCD-D08` | Kapı/kaput menteşe hareketi | Kopma/hasar ayrı; dinamik joint sonrası | Kullanıcı / öncelik |
 | `VCD-D09` | Kopmuş tekerlek ve aktarma bozulması | İlk dilim dışında; wheel visual + raycast mapping korunur | Kullanıcı / fizik |
-| `VCD-D12` | Kalıcı `vehicleInstanceId` kaynağı | Aktöre kararlı kimlik eklenir. `actor:${index}` araç, kırılma ve göçük kayıtlarının hepsinde kullanıldığı için bu ayrı bir kayıt sistemi işidir; VM-3 yalnız `assetId` koruması ekledi | Kullanıcı önceliği / motor oturumu |
 
 **Kapanan kararlar:**
 
@@ -432,13 +433,14 @@ Aşağıdaki testler `RB-V-001` ön tamponu için yazılmıştır. Motor hattın
 | `VCD-D10` | `Deformable` ve `Fracturable` eşikleri sahip bazlı tutulur; çözüldü | `bce53640` |
 | `VCD-D11` | Konsept form olduğu gibi kalır, özgünleştirilmez; ortografik ve 3B kabul ayrıdır | Kullanıcı, 2026-11-04 |
 | `VCD-D13` | Temel dokuda kalıcı vuruk olmaz; göçükleri runtime üretir | Kullanıcı, 2026-11-04 |
+| `VCD-D12` | Aktöre kalıcı `id`; runtime `actor:<index>` kalır, kayıt sınırında çevrilir | 2026-11-04 |
 | `VCD-D14` | `detach` önce Gaz-52'de, `RB-V-001` modellemesinden bağımsız yapılır | Kullanıcı, 2026-11-04 |
 
 ## 13. Motor ve modelleme oturumlarına devredilecek işler
 
 ### 13.1. Motor hattı tamamlandı
 
-VM-1…3 kapandı. Kalan motor işleri bir sonraki tüketici gelince açılır: kararlı aktör kimliği (`VCD-D12`), parça düzenleme arayüzü (bugün `parts` JSON'dan yazılır), `VCD-12` benchmark'ı, cam için düğüm seçimli fracture (`VCD-D07`).
+VM-1…3 ve kararlı aktör kimliği kapandı. Kalan motor işleri bir sonraki tüketici gelince açılır: parça düzenleme arayüzü (bugün `parts` JSON'dan yazılır), `VCD-12` benchmark'ı, cam için düğüm seçimli fracture (`VCD-D07`), placement'ların kayıt kimliği.
 
 ### 13.2. Blender ilk modelleme görevi
 
@@ -462,5 +464,6 @@ VM-1…3 kapandı. Kalan motor işleri bir sonraki tüketici gelince açılır: 
 | 2026-11-04 | `VCD-003` / v0.3 | VM-1 tamam: sidecar `parts`, yüzey noktasıyla parça çözümü, parça filtreli göçük, kayıtta `part`, Gaz-52 kapı ve ayna verisi; `VCD-D02` kapandı; §7 bölge kuralı ölçümle düzeltildi | **[VM-1 TAMAM]** |
 | 2026-11-04 | `VCD-004` / v0.4 | VM-2 tamam: `detach` verisi, canlı düğüm taşıma, `v + ω × r`, çift bazlı geçiş, `Deformable.PartDetached`; `VCD-D01/04/05` kapandı; kare hızı riski eklendi. Görsel not: yandan çarpmada araba kapıyı kamyonun altına süpürüyor | **[VM-2 TAMAM]** |
 | 2026-11-04 | `VCD-005` / v0.5 | VM-3 tamam: `detachedParts`, nesne yeniden kurulumu, kayıttan geri takma, 16 parça bütçesi, sahibin hücresiyle temizlik, `assetId` koruması; `VCD-D06` kapandı; `VCD-D12` kullanıcı önceliğine bırakıldı. Kullanıcı kopmayı oyunda doğruladı | **[MOTOR HATTI TAMAM]** |
+| 2026-11-04 | `VCD-006` / v0.6 | `VCD-D12` kapandı: `LayoutActorInstance.id`, kayıt sınırında çeviri, editörde üretim. Placement sınırı yazıldı | **[TAMAM]** |
 
 **Devam protokolü:** motor hattı kapandı; `RB-V-001` modellemesi ayrı yürür ve hazır olunca VC-2…VC-4 ile bağlanır. Her aşama sonunda belge sürümü yükseltilir; Drive kopyası varsa **aynı dosya ID'sinde** güncellenir. Uygulama başka bir oturumda gerçekleştirilirse commit/fixture, test sonucunu ve açık riskleri bu belgenin yeni sürüm kaydına ekle.

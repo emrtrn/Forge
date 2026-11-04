@@ -111,6 +111,11 @@ engine/editor.
   the `fracture` override (`{ enabled: false, breakImpulse }` on the asset's
   `.fracture.json`; `validatePlacementFracture`); undo snapshots
   keep the id and duplicates mint a fresh one (`reidentifyDuplicatePlacement`).
+  An actor's `id` lives in `validateActorInstance`: the editor mints it on load and
+  Save (`ensureActorIds`), a duplicate starts without one. Runtime ids stay
+  `actor:<index>`, which an edit renumbers, so a save names actors by `id` and
+  translates at its boundary (`engine/persistence/saveEntityKeys.ts`); anything new
+  a save keeps per entity must go through `rekeyEntries` in both directions.
   World Partition's `spatiallyLoaded` (only `false`
   is persisted) is copied by `applyTransformFields` and the actor, light,
   reflection-capture, blocking-volume, target-point and world-widget validators;

@@ -341,7 +341,11 @@ export class PlanarReflectionSource {
         if (!this.consumers.has(object)) hidden.push([object, object.visible]);
       }
     });
+    // A probe bake reaches this from inside a cube face: without the face, three
+    // resumes on face 0 and the face being drawn stays black.
     const previousTarget = renderer.getRenderTarget();
+    const previousFace = renderer.getActiveCubeFace();
+    const previousMip = renderer.getActiveMipmapLevel();
     const previousToneMapping = renderer.toneMapping;
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
     const previousXrEnabled = renderer.xr.enabled;
@@ -370,7 +374,7 @@ export class PlanarReflectionSource {
       renderer.xr.enabled = previousXrEnabled;
       renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
       renderer.toneMapping = previousToneMapping;
-      renderer.setRenderTarget(previousTarget);
+      renderer.setRenderTarget(previousTarget, previousFace, previousMip);
       for (const [consumer, visible] of hidden) consumer.visible = visible;
     }
   }

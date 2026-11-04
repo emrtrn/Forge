@@ -7,6 +7,7 @@ import {
   type PerspectiveCamera,
   type WebGLRenderer,
 } from "three";
+import type { Object3D } from "three";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 import { installMoonDisc } from "./moonDisc";
 
@@ -80,6 +81,7 @@ export function createSkyObject(): Sky {
   // The water reflection already samples the environment. A low-resolution
   // planar capture must not rasterise this enormous HDR solar disc again.
   sky.userData.waterReflectionBackground = true;
+  sky.userData.skyDome = true;
   sky.userData.waterSunDiscRadiance = new Vector3();
   sky.userData.waterSunDiscDirection = new Vector3(0, 1, 0);
   // Background geometry is never a pick target.
@@ -95,6 +97,24 @@ export function createSkyObject(): Sky {
  */
 export function followCameraWithSky(sky: Sky, camera: PerspectiveCamera): void {
   sky.position.copy(camera.position);
+}
+
+/**
+ * Runs `fn` with every sky dome in `scene` centred on `position`. The dome is a box
+ * around the viewport camera, so a capture taken elsewhere (a probe far from the
+ * camera, a level still loading) would otherwise see the box from outside: no sky.
+ */
+export function withSkyCenteredOn<T>(scene: Object3D, position: Vec3, fn: () => T): T {
+  const domes: [Object3D, Vector3][] = [];
+  scene.traverse((object) => {
+    if (object.userData.skyDome === true) domes.push([object, object.position.clone()]);
+  });
+  for (const [dome] of domes) dome.position.set(position[0], position[1], position[2]);
+  try {
+    return fn();
+  } finally {
+    for (const [dome, home] of domes) dome.position.copy(home);
+  }
 }
 
 /**

@@ -109,3 +109,73 @@ test("Sphere Reflection Capture blends, stays specular-only and parallax-correct
   // it, which is what the blue reading above rules out for the patched one.
   expect(measured.plain.far[2], report).toBeLessThan(0.05);
 });
+
+/**
+ * Two parts of a real scene that the room above does not have. The Sky's box
+ * follows the viewport camera, so a probe far from the camera sits outside it.
+ * Water refreshes its planar reflection from `scene.onBeforeRender`, which also
+ * runs for each cube face of the bake, and has to hand the same face back.
+ */
+test("Sphere Reflection Capture sees the Sky far from the camera and past planar water", async ({ page }, testInfo) => {
+  await page.goto("/templates/game-starter/index.html");
+  const measured = await page.evaluate(async () => {
+    const THREE = await import("/tests/smoke/pages/engineThree.ts" as string);
+    const capture = await import("/engine/render-three/reflectionCapture.ts" as string);
+    const skyActor = await import("/engine/render-three/skyAtmosphere.ts" as string);
+    const planar = await import("/engine/render-three/planarReflectionSource.ts" as string);
+    const renderer = new THREE.WebGLRenderer({ canvas: document.createElement("canvas") });
+    renderer.toneMapping = THREE.NoToneMapping;
+
+    const size = 16;
+    const scene = new THREE.Scene();
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.MeshStandardMaterial());
+    plane.rotation.x = -Math.PI / 2;
+    scene.add(plane);
+    const camera = new THREE.OrthographicCamera(-10, 10, 10, -10, 0.1, 20);
+    camera.position.set(0, 5, 0);
+    camera.lookAt(0, 0, 0);
+    const target = new THREE.WebGLRenderTarget(size, size, { type: THREE.FloatType });
+    const pixels = new Float32Array(size * size * 4);
+
+    // What a mirror facing the sky reads from a probe baked in this Sky scene.
+    const mirror = (skyPosition: [number, number, number], planarWater: boolean): number[] => {
+      const probeScene = new THREE.Scene();
+      const sky = skyActor.createSkyObject();
+      skyActor.applySkyUniforms(sky, skyActor.resolveSkyAtmosphere({}));
+      skyActor.applySkySunDirection(sky, new THREE.Vector3(0.5, 0.7, 0.5).normalize());
+      sky.position.set(...skyPosition);
+      probeScene.add(sky);
+      const source = planarWater ? new planar.PlanarReflectionSource(0, "high") : null;
+      if (source) {
+        // Without a consumer on screen the source has nothing to refresh.
+        const water = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshBasicMaterial({ color: 0x000000 }));
+        water.rotation.x = -Math.PI / 2;
+        probeScene.add(water);
+        source.addConsumer(water);
+        probeScene.onBeforeRender = (r: unknown, s: unknown, c: unknown) => source.update(r, s, c);
+      }
+      const bake = capture.bakeSphereReflectionCapture(renderer, probeScene, {
+        name: "probe", hidden: false, position: [0, 1, 0], rotation: [0, 0, 0],
+        radius: 50, intensity: 1, priority: 0, resolution: 256, parallax: false, near: 0.1, far: 100,
+      });
+      source?.dispose();
+      delete plane.userData.captureBaseMaterial;
+      plane.material = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.02, metalness: 1 });
+      capture.applyProbeEnvMapToObject(plane, bake, null, 1);
+      renderer.setRenderTarget(target);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      renderer.readRenderTargetPixels(target, 0, 0, size, size, pixels);
+      capture.disposeSphereReflectionCaptureBake(bake);
+      return Array.from(pixels.subarray(0, 3)) as number[];
+    };
+
+    return { reference: mirror([0, 1, 0], false), farCamera: mirror([200, 1, 0], false), planarWater: mirror([0, 1, 0], true) };
+  });
+  writeFileSync(testInfo.outputPath("reflection-capture-sky.json"), JSON.stringify(measured, null, 2));
+  const report = JSON.stringify(measured);
+  // A clear sky straight up: blue, far from the black of an unwritten cube face.
+  expect(measured.reference[2], report).toBeGreaterThan(1);
+  expect(measured.farCamera[2], report).toBeCloseTo(measured.reference[2]!, 1);
+  expect(measured.planarWater[2], report).toBeCloseTo(measured.reference[2]!, 1);
+});

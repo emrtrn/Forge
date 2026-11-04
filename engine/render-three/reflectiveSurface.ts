@@ -250,6 +250,8 @@ export class ReflectiveSurface extends Mesh {
     const previousVisible = this.visible;
     this.visible = false;
     const previousRenderTarget = renderer.getRenderTarget();
+    const previousFace = renderer.getActiveCubeFace();
+    const previousMip = renderer.getActiveMipmapLevel();
     const previousToneMapping = renderer.toneMapping;
     const previousShadowAutoUpdate = renderer.shadowMap.autoUpdate;
     const previousXrEnabled = renderer.xr.enabled;
@@ -263,7 +265,7 @@ export class ReflectiveSurface extends Mesh {
     renderer.xr.enabled = previousXrEnabled;
     renderer.shadowMap.autoUpdate = previousShadowAutoUpdate;
     renderer.toneMapping = previousToneMapping;
-    renderer.setRenderTarget(previousRenderTarget);
+    renderer.setRenderTarget(previousRenderTarget, previousFace, previousMip);
     this.visible = previousVisible;
   }
 

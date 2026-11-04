@@ -24856,7 +24856,7 @@ check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shad
   // from the probe envMap â€” the specular-only redirect is gated on blend.
   assert.ok(
     shaderA.fragmentShader.includes(
-      "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * worldNormal, 1.0 );",
+      "vec4 envMapColor = textureLod( envMap, envMapRotation * worldNormal, ENVMAP_MAX_LOD );",
     ),
   );
 
@@ -24885,12 +24885,12 @@ check("assignProbeEnvMapMaterial clones standard mats; parallax patches the shad
   // no longer floods the surface with the probe's bake.
   assert.ok(
     blendShader.fragmentShader.includes(
-      "vec4 envMapColor = textureCubeUV( captureGlobalEnv, envMapRotation * worldNormal, 1.0 );",
+      "vec4 envMapColor = textureLod( captureGlobalEnv, envMapRotation * worldNormal, captureGlobalEnvMaxLod );",
     ),
   );
   assert.ok(
     !blendShader.fragmentShader.includes(
-      "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * worldNormal, 1.0 );",
+      "vec4 envMapColor = textureLod( envMap, envMapRotation * worldNormal, ENVMAP_MAX_LOD );",
     ),
   );
 

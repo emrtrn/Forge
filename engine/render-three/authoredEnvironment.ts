@@ -34,7 +34,7 @@ import type {
   PerspectiveCamera,
   Scene,
   WebGLRenderer,
-  WebGLRenderTarget,
+  WebGLCubeRenderTarget,
 } from "three";
 import type { Sky } from "three/examples/jsm/objects/Sky.js";
 
@@ -142,7 +142,7 @@ export class AuthoredEnvironment {
   private skyObject: Sky | null = null;
   private cloudObject: CloudDome | null = null;
   /** Captured Sky Light environment (PMREM) backing `scene.environment`; null when none. */
-  private reflectionTarget: WebGLRenderTarget | null = null;
+  private reflectionTarget: WebGLCubeRenderTarget | null = null;
   /** The World Environment override rendered this frame; null renders the authored look. */
   private override: ResolvedEnvironment | null = null;
   private lastCapture: CaptureRecord | null = null;

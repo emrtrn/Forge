@@ -12,7 +12,6 @@ import {
 } from "three";
 
 import { computeSunCascades, sunCascadeBudget, sunCascadeNeedsUpdate, sunShadowFadeRange, SUN_CASCADE_MAX } from "@engine/world/sunCascades";
-import { shadowDepthBias } from "./depthMode";
 
 /**
  * Cascaded sun shadow for far view mode (OPEN_WORLD_PLAN Faz 7c2). three's `CSM`
@@ -234,7 +233,6 @@ export class SunCascadeShadow {
     const [fadeStart, fadeEnd] = sunShadowFadeRange(distance);
     this.fadeUniform.value.set(fadeStart, fadeEnd);
     this.group.visible = isEffectivelyVisible(sun);
-    const biasSign = Math.sign(shadowDepthBias()) || 1;
     const frame = this.frame;
     this.frame += 1;
     this.lights.forEach((light, index) => {
@@ -268,7 +266,7 @@ export class SunCascadeShadow {
       shadowCamera.near = result.near;
       shadowCamera.far = result.far;
       shadowCamera.updateProjectionMatrix();
-      light.shadow.bias = (biasSign * CASCADE_BIAS_METERS) / result.far;
+      light.shadow.bias = -CASCADE_BIAS_METERS / result.far;
       light.shadow.normalBias = result.texelSize * CASCADE_NORMAL_BIAS_TEXELS;
     });
     return true;

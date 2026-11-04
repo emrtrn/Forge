@@ -4,7 +4,7 @@
   Scene,
   Vector3,
   type WebGLRenderer,
-  type WebGLRenderTarget,
+  type WebGLCubeRenderTarget,
 } from "three";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 
@@ -52,7 +52,7 @@ export function captureSkyEnvironment(
   sunDirection: Vector3,
   /** Cube face size of the capture; a moving sun captures often and smaller. */
   size = 256,
-): WebGLRenderTarget {
+): WebGLCubeRenderTarget {
   const pmrem = new PMREMGenerator(renderer);
   const envScene = new Scene();
   const captureSky = new Sky();
@@ -95,7 +95,7 @@ export function captureSkyEnvironment(
  */
 export function applyReflectionEnvironment(
   scene: Scene,
-  target: WebGLRenderTarget | null,
+  target: WebGLCubeRenderTarget | null,
   resolved: ResolvedReflection | null,
 ): void {
   if (!target || !resolved || resolved.hidden) {

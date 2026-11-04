@@ -209,8 +209,8 @@ test("far view: a long view distance renders Play with reversed-Z into a float-d
     // The last cascade's slice sphere reaches the 150 m split (60° fov, so ≥ 150 m wide).
     expect(extents[2]!).toBeGreaterThan(75);
     for (const cascade of probe.cascades) {
-      // 2 cm of world depth per cascade, positive under reversed-Z; sphere + 100 m margin deep.
-      expect(cascade.bias).toBeCloseTo(0.02 / cascade.far, 8);
+      // 2 cm of world depth per cascade, three flips it under reversed-Z; sphere + 100 m margin deep.
+      expect(cascade.bias).toBeCloseTo(-0.02 / cascade.far, 8);
       expect(cascade.far).toBeCloseTo(2 * cascade.halfExtent + 100, 5);
       // Centred ahead of the camera, never past its own reach.
       expect(cascade.lead).toBeLessThanOrEqual(cascade.halfExtent + 1);
@@ -246,7 +246,7 @@ test("cascaded shadows: the sun's flag casts through cascades without a view dis
   expect(probe.sunLayers).toBe(0);
   expect(probe.cascades).toHaveLength(3);
   expect(probe.cascades.every((cascade) => cascade.map)).toBe(true);
-  // Standard depth flips the bias sign: 2 cm of world depth toward the light.
+  // The same sign as reversed-Z: 2 cm of world depth toward the light.
   for (const cascade of probe.cascades) expect(cascade.bias).toBeCloseTo(-0.02 / cascade.far, 8);
   expect(probe.cascadePrograms).toBeGreaterThan(0);
 });

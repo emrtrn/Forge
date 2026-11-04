@@ -19,7 +19,6 @@ import {
   type Sprite,
   type Texture,
   type WebGLRenderer,
-  type WebGLRenderTarget,
 } from "three";
 
 import type { Vec3 } from "@engine/scene/layout";
@@ -201,7 +200,7 @@ function drawProbeGlyph(ctx: CanvasRenderingContext2D, size: number): void {
  */
 export interface SphereReflectionCaptureBake {
   /** Prefiltered PMREM environment render target (`.texture` drives envMaps). */
-  target: WebGLRenderTarget;
+  target: WebGLCubeRenderTarget;
   /** World position the cubemap was captured from. */
   position: Vec3;
   /** Influence radius copied from the actor at bake time. */
@@ -324,10 +323,10 @@ const CAPTURE_FRAGMENT_INCLUDE = "#include <envmap_physical_pars_fragment>";
 const CAPTURE_REFLECT_LINE = "reflectVec = transformDirectionByInverseViewMatrix( reflectVec, viewMatrix );";
 /** Line inside the IBL chunk that samples the probe envMap into `envMapColor`. */
 const CAPTURE_ENVCOLOR_LINE =
-  "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * reflectVec, roughness );";
+  "vec4 envMapColor = textureLod( envMap, envMapRotation * reflectVec, roughnessToMip( roughness ) );";
 /** Diffuse-IBL sample line inside `getIBLIrradiance` (probe ambient lookup). */
 const CAPTURE_IRRADIANCE_LINE =
-  "vec4 envMapColor = textureCubeUV( envMap, envMapRotation * worldNormal, 1.0 );";
+  "vec4 envMapColor = textureLod( envMap, envMapRotation * worldNormal, ENVMAP_MAX_LOD );";
 
 /**
  * Specular-only probe: redirects the diffuse irradiance lookup from the probe envMap
@@ -342,7 +341,7 @@ const CAPTURE_IRRADIANCE_LINE =
  * present (blend on); with no sky the probe still drives diffuse, as before.
  */
 const CAPTURE_GLOBAL_IRRADIANCE_LINE =
-  "vec4 envMapColor = textureCubeUV( captureGlobalEnv, envMapRotation * worldNormal, 1.0 );\n" +
+  "vec4 envMapColor = textureLod( captureGlobalEnv, envMapRotation * worldNormal, captureGlobalEnvMaxLod );\n" +
   "\t\t\tenvMapColor.rgb *= captureGlobalEnvIntensity / max( envMapIntensity, 0.0001 );";
 
 /**
@@ -396,13 +395,14 @@ const CAPTURE_BLEND_START = 0.7;
  * covered surface does not hard-cut to the global IBL at the boundary. The weight
  * ramps from 1 (full probe) inside `CAPTURE_BLEND_START` of the radius down to 0
  * (full global) at the radius. The global env is sampled with the un-parallaxed
- * reflection dir since it is infinitely far.
+ * reflection dir since it is infinitely far. The sky has its own LOD count: the
+ * probe's mip is rescaled to it, or a 64px probe reads a 256px sky too sharp.
  */
 const CAPTURE_BLEND_BLOCK = `
 			{
 				float captureScore = length( vCaptureWorldPos - captureProbePosition ) / captureProbeRadius;
 				float captureWeight = 1.0 - smoothstep( ${CAPTURE_BLEND_START.toFixed(2)}, 1.0, captureScore );
-				vec4 captureGlobalColor = textureCubeUV( captureGlobalEnv, envMapRotation * captureReflectGlobal, roughness );
+				vec4 captureGlobalColor = textureLod( captureGlobalEnv, envMapRotation * captureReflectGlobal, roughnessToMip( roughness ) / ENVMAP_MAX_LOD * captureGlobalEnvMaxLod );
 				captureGlobalColor.rgb *= captureGlobalEnvIntensity / max( envMapIntensity, 0.0001 );
 				envMapColor = mix( captureGlobalColor, envMapColor, captureWeight );
 			}`;
@@ -475,6 +475,7 @@ function installCaptureShaderPatch(
     if (blend) {
       shader.uniforms.captureGlobalEnv = { value: globalEnv };
       shader.uniforms.captureGlobalEnvIntensity = { value: globalEnvIntensity };
+      shader.uniforms.captureGlobalEnvMaxLod = { value: Math.max(globalEnv.mipmaps!.length - 1, 0) };
     }
     shader.vertexShader = `varying vec3 vCaptureWorldPos;\n${shader.vertexShader.replace(
       CAPTURE_WORLDPOS_INCLUDE,
@@ -494,7 +495,7 @@ function installCaptureShaderPatch(
     }
     const decls =
       "uniform vec3 captureProbePosition;\nuniform float captureProbeRadius;\nvarying vec3 vCaptureWorldPos;\n" +
-      (blend ? "uniform sampler2D captureGlobalEnv;\nuniform float captureGlobalEnvIntensity;\n" : "");
+      (blend ? "uniform samplerCube captureGlobalEnv;\nuniform float captureGlobalEnvIntensity;\nuniform float captureGlobalEnvMaxLod;\n" : "");
     shader.fragmentShader = `${decls}${shader.fragmentShader.replace(
       CAPTURE_FRAGMENT_INCLUDE,
       patchedChunk,

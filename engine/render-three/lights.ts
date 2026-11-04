@@ -17,7 +17,7 @@ import {
   Vector3,
 } from "three";
 import type { ColorRepresentation } from "three";
-import { shadowDepthBias } from "./depthMode";
+import { SHADOW_DEPTH_BIAS } from "./depthMode";
 
 import type { Entity } from "@engine/scene/entity";
 import { LIGHT_COMPONENT, readLightComponent, readTransformComponent } from "@engine/scene/components";
@@ -113,7 +113,7 @@ export function configureShadowCastingLight(
 ): void {
   light.shadow.mapSize.set(2048, 2048);
   // Sign follows the scene depth mode (reversed-Z flips the comparison).
-  light.shadow.bias = shadowDepthBias();
+  light.shadow.bias = SHADOW_DEPTH_BIAS;
   light.shadow.normalBias = 0.02;
   if (light instanceof DirectionalLight) {
     const shadowCam = light.shadow.camera;

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { CubeUVReflectionMapping, DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLRenderTarget } from "three";
+import { DirectionalLight, PerspectiveCamera, Scene, Vector3, WebGLCubeRenderTarget } from "three";
 import { createWaterEnvironmentUniforms, updateWaterEnvironment } from "../../engine/render-three/waterEnvironment";
 import { createRiverSunShadowUniforms, updateRiverSunShadow } from "../../engine/render-three/riverSunShadow";
 import { SunCascadeShadow } from "../../engine/render-three/sunCascadeShadow";
@@ -183,8 +183,13 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     assert.equal(resolveRiverWater({ ...base, reflectionMode: "environment" }).reflectionMode, "sharedPlanar");
   });
   await checkAsync("terrain river: environment rebind, probe removal and borrowed texture lifetime", async () => {
-    const global = new WebGLRenderTarget(768, 1024), local = new WebGLRenderTarget(336, 256);
-    global.texture.mapping = local.texture.mapping = CubeUVReflectionMapping;
+    const pmrem = (lods: number) => {
+      const target = new WebGLCubeRenderTarget(16);
+      (target.texture as typeof target.texture & { isPMREMTexture: boolean }).isPMREMTexture = true;
+      target.texture.mipmaps = Array.from({ length: lods }, () => ({}));
+      return target;
+    };
+    const global = pmrem(6), local = pmrem(4);
     let disposed = 0;
     global.texture.addEventListener("dispose", () => { disposed++; });
     local.texture.addEventListener("dispose", () => { disposed++; });
@@ -196,8 +201,8 @@ export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Pr
     updateWaterEnvironment(uniforms, scene, camera, [probe]);
     assert.equal(uniforms.waterEnvironment.value, global.texture);
     assert.equal(uniforms.waterEnvironmentIntensity.value, 0.8);
-    assert.equal(uniforms.waterEnvironmentSize.value.z, 8);
-    assert.equal(uniforms.waterProbeSize.value.z, 6);
+    assert.equal(uniforms.waterEnvironmentMaxLod.value, 5);
+    assert.equal(uniforms.waterProbeMaxLod.value, 3);
     assert.equal(uniforms.waterProbe.value, local.texture);
     updateWaterEnvironment(uniforms, scene, camera);
     assert.equal(uniforms.waterProbe.value, null); assert.equal(uniforms.waterProbeRadius.value, 0);

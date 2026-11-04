@@ -1,7 +1,6 @@
 import { Vector3, type DirectionalLight } from "three";
 
 import { computeFollowShadowFrame } from "@engine/world/followShadow";
-import { shadowDepthBias } from "./depthMode";
 
 /**
  * Camera-following sun shadow for far view mode (OPEN_WORLD_PLAN Faz 7c1). The
@@ -67,7 +66,7 @@ export function updateSunFollowShadow(
   camera.near = frame.near;
   camera.far = frame.far;
   camera.updateProjectionMatrix();
-  sun.shadow.bias = Math.sign(shadowDepthBias()) * (FOLLOW_SHADOW_BIAS_METERS / frame.far);
+  sun.shadow.bias = -FOLLOW_SHADOW_BIAS_METERS / frame.far;
   return true;
 }
 

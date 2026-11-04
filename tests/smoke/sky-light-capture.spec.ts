@@ -16,8 +16,7 @@ test.setTimeout(240_000);
 test("Sky Light capture is finite and continuous as the sun moves", async ({ page }) => {
   await page.goto("/templates/game-starter/index.html");
   const sweeps = await page.evaluate(async () => {
-    // Vite's pre-bundled three, the same module the served engine code imports.
-    const THREE = await import("/node_modules/.vite/deps/three.js" as string);
+    const THREE = await import("/tests/smoke/pages/engineThree.ts" as string);
     const reflection = await import("/engine/render-three/reflection.ts" as string);
     const skyAtmosphere = await import("/engine/scene/skyAtmosphere.ts" as string);
     const renderer = new THREE.WebGLRenderer({ canvas: document.createElement("canvas") });

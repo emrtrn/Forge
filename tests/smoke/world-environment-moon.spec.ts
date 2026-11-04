@@ -9,7 +9,7 @@ test("World Environment: cratered moon follows the light, fades by day and stays
   await page.route("**/__wes-moon", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><html><body style='margin:0;background:#000'></body></html>" }));
   await page.goto("/__wes-moon");
   const result = await page.evaluate(async () => {
-    const THREE = await import("/node_modules/.vite/deps/three.js" as string);
+    const THREE = await import("/tests/smoke/pages/engineThree.ts" as string);
     const { AuthoredEnvironment } = await import("/engine/render-three/authoredEnvironment.ts" as string);
     const { resolveWorldEnvironment } = await import("/engine/environment/worldEnvironment.ts" as string);
     const { stateFromDefaults } = await import("/engine/environment/environmentResolve.ts" as string);
@@ -117,7 +117,7 @@ test("World Environment: moon retains surface detail through the night with stan
   await page.route("**/__wes-moon-post", (route) => route.fulfill({ contentType: "text/html", body: "<!doctype html><body style='margin:0;background:black'>" }));
   await page.goto("/__wes-moon-post");
   const report = await page.evaluate(async () => {
-    const THREE = await import("/node_modules/.vite/deps/three.js" as string);
+    const THREE = await import("/tests/smoke/pages/engineThree.ts" as string);
     const { AuthoredEnvironment } = await import("/engine/render-three/authoredEnvironment.ts" as string);
     const { resolveWorldEnvironment } = await import("/engine/environment/worldEnvironment.ts" as string);
     const { stateFromDefaults } = await import("/engine/environment/environmentResolve.ts" as string);

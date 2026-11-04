@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import { Box3, BoxGeometry, Group, Matrix4, Mesh, Object3D, ShaderChunk, ShaderLib, Vector3 } from "three";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 
+import { SHADOW_DEPTH_BIAS } from "../../engine/render-three/depthMode";
 import { REFLECTION_CAPTURE_SHADER_ANCHORS } from "../../engine/render-three/reflectionCapture";
 import { setFixedMatrix } from "../../engine/render-three/transforms";
+import { WATER_ENVIRONMENT_GLSL } from "../../engine/render-three/waterEnvironment";
 import { WORLD_MASK_SHADER_SOURCE } from "../../engine/render-three/worldMaskPatch";
 
 type Check = (label: string, fn: () => void) => void;
@@ -65,6 +67,12 @@ export function registerShaderChunkAnchorTests(check: Check): void {
     assertAnchors(new Sky().material.fragmentShader, ["#include <tonemapping_fragment>"], "Sky fragment shader");
   });
 
+  check("shader anchors: three still flips the shadow bias under reversed depth", () => {
+    // Forge passes one negative bias in both depth modes and relies on this line.
+    assertAnchors(ShaderChunk.shadowmap_pars_fragment, ["shadowCoord.z -= shadowBias;"], "shadowmap_pars_fragment");
+    assert.ok(SHADOW_DEPTH_BIAS < 0);
+  });
+
   check("shader anchors: world mask patch", () => {
     assertAnchors(ShaderLib.standard.vertexShader, [WORLD_MASK_SHADER_SOURCE.vertexAnchor], "standard vertex shader");
     assertAnchors(ShaderLib.standard.fragmentShader, [WORLD_MASK_SHADER_SOURCE.fragmentAnchor], "standard fragment shader");
@@ -75,6 +83,11 @@ export function registerShaderChunkAnchorTests(check: Check): void {
     assertAnchors(ShaderChunk.envmap_physical_pars_fragment, [reflectLine, envColorLine, irradianceLine], "envmap_physical_pars_fragment");
     assertAnchors(ShaderLib.standard.vertexShader, [worldPositionInclude], "standard vertex shader");
     assertAnchors(ShaderLib.standard.fragmentShader, [fragmentInclude], "standard fragment shader");
+  });
+
+  check("shader anchors: water's mip curve still matches three's roughnessToMip", () => {
+    assertAnchors(ShaderChunk.envmap_common_pars_fragment, ["ENVMAP_MAX_LOD * r * ( 2.0 - r )"], "envmap_common_pars_fragment");
+    assertAnchors(WATER_ENVIRONMENT_GLSL, ["maxLod * r * (2.0 - r)"], "WATER_ENVIRONMENT_GLSL");
   });
 
   check("setFixedMatrix: bounds are right before the first render", () => {

@@ -16,7 +16,7 @@ test("World Environment: night fill lights unlit surfaces without altering noon 
   }));
   await page.goto("/__wes-night-photometry");
   const report = await page.evaluate(async () => {
-    const THREE = await import("/node_modules/.vite/deps/three.js" as string);
+    const THREE = await import("/tests/smoke/pages/engineThree.ts" as string);
     const { AuthoredEnvironment } = await import("/engine/render-three/authoredEnvironment.ts" as string);
     const { stateFromDefaults } = await import("/engine/environment/environmentResolve.ts" as string);
     const { resolveWorldEnvironment } = await import("/engine/environment/worldEnvironment.ts" as string);

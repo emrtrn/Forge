@@ -13,7 +13,8 @@ import { expect, test } from "./test";
  *
  * - blend: a mirror is probe-coloured inside the radius, blue outside it. A
  *   plain envMap would stay red/green across the whole plane.
- * - specular-only: a rough surface's diffuse light stays blue inside the radius.
+ * - specular-only: a rough surface's diffuse light stays blue inside the radius,
+ *   even though the 512px probe and the 256px sky have different LOD counts.
  * - parallax: a mirror seen by a parallel camera has one reflection direction,
  *   so only the parallax patch can split it into a red and a green side.
  */
@@ -24,11 +25,7 @@ type Rgb = [number, number, number];
 test("Sphere Reflection Capture blends, stays specular-only and parallax-corrects", async ({ page }, testInfo) => {
   await page.goto("/templates/game-starter/index.html");
   const measured = await page.evaluate(async () => {
-    // The engine's own three URL, query included: another URL is another module
-    // instance, and the probe code's `instanceof` would reject this page's materials.
-    const source = await (await fetch("/engine/render-three/reflectionCapture.ts")).text();
-    const threeUrl = /"([^"]*\/deps\/three\.js[^"]*)"/.exec(source)![1]!;
-    const THREE = await import(threeUrl);
+    const THREE = await import("/tests/smoke/pages/engineThree.ts" as string);
     const capture = await import("/engine/render-three/reflectionCapture.ts" as string);
     const renderer = new THREE.WebGLRenderer({ canvas: document.createElement("canvas") });
     renderer.toneMapping = THREE.NoToneMapping;
@@ -52,7 +49,7 @@ test("Sphere Reflection Capture blends, stays specular-only and parallax-correct
 
     const bake = (parallax: boolean) => capture.bakeSphereReflectionCapture(renderer, probeScene, {
       name: "probe", hidden: false, position: [0, 1, 0], rotation: [0, 0, 0],
-      radius: 5, intensity: 1, priority: 0, resolution: 256, parallax, near: 0.1, far: 100,
+      radius: 5, intensity: 1, priority: 0, resolution: 512, parallax, near: 0.1, far: 100,
     });
 
     const size = 64;

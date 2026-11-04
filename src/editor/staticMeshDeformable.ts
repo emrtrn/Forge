@@ -9,6 +9,7 @@ import {
 import { dentDepthForImpulse } from "@engine/physics/deformable/impactDeform";
 import { DentTarget } from "@engine/render-three/deformableMeshSync";
 import { loadAssetDeformable, saveAssetDeformable } from "@/editor/assetDeformableStore";
+import { DeformablePartsEditor } from "@/editor/staticMeshDeformableParts";
 
 /**
  * The Static Mesh Editor's "Deformable" section (DEFORMABLE_FRACTURABLE_WORK_PLAN
@@ -26,6 +27,8 @@ export interface StaticMeshDeformableHost {
   modelRoot(): Object3D | null;
   /** Holds the dented copy; the host keeps it in the scene. */
   readonly previewGroup: Group;
+  /** Holds the part zone boxes; the host keeps it in the scene. */
+  readonly zoneGroup: Group;
   modelVisible(): boolean;
   setModelVisible(visible: boolean): void;
   markDirty(): void;
@@ -88,8 +91,21 @@ export class StaticMeshDeformable {
   /** Mean edge of the model, once it has loaded. */
   private edgeLength = 0;
   private stats = "";
+  private readonly parts: DeformablePartsEditor;
 
-  constructor(private readonly host: StaticMeshDeformableHost) {}
+  constructor(private readonly host: StaticMeshDeformableHost) {
+    this.parts = new DeformablePartsEditor({
+      modelRoot: () => host.modelRoot(),
+      zoneGroup: host.zoneGroup,
+      parts: () => this.def?.parts ?? [],
+      setParts: (parts) => {
+        const { parts: _parts, ...rest } = this.def ?? {};
+        this.patch({ ...rest, ...(parts.length > 0 ? { parts } : {}) }, true);
+      },
+      setStatus: (message, tone) => host.setStatus(message, tone),
+      rerender: () => host.rerender(),
+    });
+  }
 
   async load(): Promise<void> {
     this.def = await loadAssetDeformable(this.host.modelPath);
@@ -100,11 +116,13 @@ export class StaticMeshDeformable {
   modelLoaded(): void {
     const root = this.host.modelRoot();
     this.edgeLength = root ? meanEdgeLength(root) : 0;
+    // Its node list and zones need the model.
+    this.host.rerender();
   }
 
   /** True while Test Hit waits for a viewport click; the editor then routes clicks to {@link pickHit}. */
   get wantsViewportHit(): boolean {
-    return this.hitArmed && this.def !== null;
+    return (this.hitArmed || this.parts.wantsViewportPick) && this.def !== null;
   }
 
   get dirty(): boolean {
@@ -121,6 +139,7 @@ export class StaticMeshDeformable {
 
   /** Dents the preview under the ray; false when the ray misses the model. */
   pickHit(raycaster: Raycaster): boolean {
+    if (this.parts.wantsViewportPick) return this.parts.pick(raycaster);
     const def = this.def;
     const root = this.host.modelRoot();
     if (!def || !root || (!this.preview && !this.host.modelVisible())) return false;
@@ -135,7 +154,9 @@ export class StaticMeshDeformable {
     const outcome = target.hit([hit.point.x, hit.point.y, hit.point.z], [-normal.x, -normal.y, -normal.z], depth, def);
     if (outcome === "dented") {
       const sparse = target.lastMoved < SPARSE_MOVED_VERTICES;
-      this.stats = `${target.dentList.length} göçük, son darbe ${target.lastMoved} vertex`;
+      const part = target.lastPart;
+      const tears = part !== null && (def.parts?.find(({ id }) => id === part)?.detach?.impulse ?? Number.POSITIVE_INFINITY) <= impulse;
+      this.stats = `${target.dentList.length} göçük, son darbe ${target.lastMoved} vertex${part ? `, parça: ${part}${tears ? " (oyunda kopar)" : ""}` : ""}`;
       this.host.setStatus(
         sparse ? "Mesh bu yarıçap için seyrek: göçük köşeli görünür." : "Test darbesi uygulandı (kaydedilmez).",
         sparse ? "warning" : "info",
@@ -149,6 +170,7 @@ export class StaticMeshDeformable {
 
   dispose(): void {
     this.resetPreview();
+    this.parts.dispose();
   }
 
   html(): string {
@@ -179,6 +201,7 @@ export class StaticMeshDeformable {
           <span>Enabled</span>
         </label>
         ${rows}
+        ${this.parts.html()}
         ${sparse ? `<div class="sm-hint" data-sm-deformable-sparse>Mesh bu yarıçap için seyrek görünüyor (ortalama kenar ${this.edgeLength.toFixed(2)} m): göçük köşeli çıkar. Yarıçapı büyüt ya da modeli böl.</div>` : ""}
         <div class="sm-hint">Çarpışma şekli değişmez (Visual Only). Ölçek 1 ile önizlenir; placement ölçeğinde yarıçap yine dünya metresidir.</div>
         <label class="sm-row" title="Test darbesinin impulse'u (yalnız önizleme); boş = Full Impulse">
@@ -209,6 +232,7 @@ export class StaticMeshDeformable {
         this.patch({ [input.dataset.smDeformableNum as NumberKey]: value });
       });
     });
+    this.parts.bind(root);
     root.querySelector<HTMLInputElement>("[data-sm-deformable-hit-impulse]")?.addEventListener("change", (event) => {
       const raw = (event.currentTarget as HTMLInputElement).value.trim();
       const value = Number(raw);
@@ -224,8 +248,9 @@ export class StaticMeshDeformable {
     });
   }
 
-  private patch(patch: Partial<AssetDeformableDef>): void {
-    this.def = normalizeAssetDeformable({ ...this.def, ...patch });
+  /** `replace` takes `patch` as the whole sidecar, so a removed field stays removed. */
+  private patch(patch: Partial<AssetDeformableDef>, replace = false): void {
+    this.def = normalizeAssetDeformable(replace ? patch : { ...this.def, ...patch });
     // Dents on screen were made with the old values.
     this.resetPreview();
     this.changed();

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
-  DEFORMABLE_DEFAULTS, DEFORMABLE_DETACH_LIMITS, DEFORMABLE_LIMITS, DEFORMABLE_MAX_PARTS, createAssetDeformable, deformableSidecarPath, normalizeAssetDeformable,
+  DEFORMABLE_DEFAULTS, DEFORMABLE_DETACH_LIMITS, DEFORMABLE_LIMITS, DEFORMABLE_MAX_PARTS, DEFORMABLE_ZONE_COORDINATE,
+  createAssetDeformable, deformableSidecarPath, fitPartZone, normalizeAssetDeformable,
   type AssetDeformableDef,
 } from "../../engine/physics/deformable/deformableTypes";
 import { validateSaveDeformablePayload } from "../../tools/saveValidator";
@@ -81,6 +82,31 @@ export function registerDeformableAssetTests(check: (label: string, run: () => v
     for (const broken of [{ massKg: 5 }, { impulse: "hard" }, { impulse: Number.NaN }, null, 3, []]) {
       assert.equal(read(broken), undefined, "the part stays, it just never tears off");
     }
+  });
+
+  check("deformable asset: a zone corner stays in bounds", () => {
+    const part = { id: "door", nodes: ["Door"], zone: { min: [-5000, 0, 0], max: [1, 5000, 1] } };
+    const zone = normalizeAssetDeformable({ parts: [part] })!.parts![0]!.zone;
+    assert.equal(zone.min[0], DEFORMABLE_ZONE_COORDINATE[0]);
+    assert.equal(zone.max[1], DEFORMABLE_ZONE_COORDINATE[1]);
+  });
+
+  check("deformable asset: a fitted zone reaches the model's outside along the part's thin axis", () => {
+    const close = (actual: readonly number[], expected: readonly number[]): void => {
+      actual.forEach((value, axis) => assert.ok(Math.abs(value - expected[axis]!) < 1e-6, `${actual} vs ${expected}`));
+    };
+    // The Gaz-52: a door on the left (+X) of a 2.44 m wide truck.
+    const model = { min: [-1.22, 0, -4.64] as [number, number, number], max: [1.22, 2.6, 2.26] as [number, number, number] };
+    const door = fitPartZone({ min: [0.77, 0.93, -0.57], max: [0.98, 2.46, 0.44] }, model);
+    close(door.min, [0.72, 0.88, -0.62]);
+    close(door.max, [1.27, 2.51, 0.49]);
+    const otherDoor = fitPartZone({ min: [-0.98, 0.93, -0.57], max: [-0.77, 2.46, 0.44] }, model);
+    close(otherDoor.min, [-1.27, 0.88, -0.62]);
+    close(otherDoor.max, [-0.72, 2.51, 0.49]);
+    // A thin hood looks up, past the part, to the top of the model.
+    close(fitPartZone({ min: [-0.8, 1.5, 0.5], max: [0.8, 1.6, 2] }, model).max, [0.85, 2.65, 2.05]);
+    // A part already at the bounds keeps its margin.
+    close(fitPartZone({ min: [1.1, 0, 0], max: [1.22, 1, 1] }, model).max, [1.27, 1.05, 1.05]);
   });
 
   check("deformable asset: the sidecar sits beside its model", () => {

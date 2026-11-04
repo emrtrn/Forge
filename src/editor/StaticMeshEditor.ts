@@ -200,6 +200,7 @@ export class StaticMeshEditor {
   private readonly fracture: StaticMeshFracture;
   /** Test Hit's dented copy of the model (Faz 7); shown in the model's place. */
   private readonly deformablePreviewGroup = new Group();
+  private readonly deformableZoneGroup = new Group();
   private readonly deformable: StaticMeshDeformable;
   /** The loaded `gltf.scene`, the root the fracture bake and hash read. */
   private loadedModel: Object3D | null = null;
@@ -324,6 +325,7 @@ export class StaticMeshEditor {
       modelPath: options.modelPath,
       modelRoot: () => this.loadedModel,
       previewGroup: this.deformablePreviewGroup,
+      zoneGroup: this.deformableZoneGroup,
       modelVisible: () => this.modelGroup.visible,
       setModelVisible: (visible) => {
         this.modelGroup.visible = visible;
@@ -364,6 +366,7 @@ export class StaticMeshEditor {
     createAssetViewportRig(this.scene);
     this.scene.add(this.modelGroup);
     this.scene.add(this.deformablePreviewGroup);
+    this.scene.add(this.deformableZoneGroup);
     this.scene.add(this.overlayGroup);
     this.scene.add(this.complexCollisionGroup);
     this.fracturePreviewGroup.visible = false;

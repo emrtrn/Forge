@@ -91,8 +91,14 @@ export const DEFORMABLE_DETACH_LIMITS = {
   kick: [0, 50],
 } as const;
 
-/** Starting values of a part's `detach` for the fields a sidecar leaves out. */
-const DETACH_DEFAULTS = { massKg: 20, kick: 1 } as const;
+/** Starting values of a new `detach`; `massKg` and `kick` also fill what a sidecar leaves out. */
+export const DEFORMABLE_DETACH_DEFAULTS: Readonly<DeformablePartDetach> = { impulse: 5000, massKg: 20, kick: 1 };
+
+/** Bounds of a zone corner, metres. */
+export const DEFORMABLE_ZONE_COORDINATE = [-1000, 1000] as const;
+
+/** Room left around a fitted zone, metres. */
+const ZONE_FIT_MARGIN = 0.05;
 
 /** Defaults of a new sidecar; starting values, not measured ones. */
 export const DEFORMABLE_DEFAULTS: Readonly<AssetDeformableDef> = {
@@ -120,9 +126,27 @@ function bounded(value: unknown, fallback: number, limits: readonly [number, num
 function readVec3(value: unknown): DeformableVec3 | null {
   if (!Array.isArray(value) || value.length !== 3) return null;
   const [x, y, z] = value as unknown[];
-  return typeof x === "number" && Number.isFinite(x) && typeof y === "number" && Number.isFinite(y) && typeof z === "number" && Number.isFinite(z)
-    ? [x, y, z]
-    : null;
+  if (typeof x !== "number" || !Number.isFinite(x) || typeof y !== "number" || !Number.isFinite(y) || typeof z !== "number" || !Number.isFinite(z)) return null;
+  const [low, high] = DEFORMABLE_ZONE_COORDINATE;
+  return [Math.max(low, Math.min(high, x)), Math.max(low, Math.min(high, y)), Math.max(low, Math.min(high, z))];
+}
+
+/**
+ * The zone for a part from its nodes' box and the model's. A hit is placed on the
+ * outer surface, and over a thin part such as a door that surface can be a wider
+ * panel, so the zone reaches from the part out to the model's bounds along the
+ * part's thinnest axis, on the side facing away from the model's centre.
+ */
+export function fitPartZone(part: DeformablePartZone, model: DeformablePartZone): DeformablePartZone {
+  const min: DeformableVec3 = [part.min[0] - ZONE_FIT_MARGIN, part.min[1] - ZONE_FIT_MARGIN, part.min[2] - ZONE_FIT_MARGIN];
+  const max: DeformableVec3 = [part.max[0] + ZONE_FIT_MARGIN, part.max[1] + ZONE_FIT_MARGIN, part.max[2] + ZONE_FIT_MARGIN];
+  const sizes = [0, 1, 2].map((axis) => part.max[axis]! - part.min[axis]!);
+  const thin = sizes.indexOf(Math.min(...sizes));
+  const partCentre = (part.min[thin]! + part.max[thin]!) / 2;
+  const modelCentre = (model.min[thin]! + model.max[thin]!) / 2;
+  if (partCentre >= modelCentre) max[thin] = Math.max(max[thin]!, model.max[thin]! + ZONE_FIT_MARGIN);
+  else min[thin] = Math.min(min[thin]!, model.min[thin]! - ZONE_FIT_MARGIN);
+  return { min, max };
 }
 
 /** `impulse` is the one required field: without it nothing would ever tear off. */
@@ -132,8 +156,8 @@ function normalizeDetach(value: unknown): DeformablePartDetach | null {
   if (typeof input.impulse !== "number" || !Number.isFinite(input.impulse)) return null;
   return {
     impulse: bounded(input.impulse, 0, DEFORMABLE_DETACH_LIMITS.impulse),
-    massKg: bounded(input.massKg, DETACH_DEFAULTS.massKg, DEFORMABLE_DETACH_LIMITS.massKg),
-    kick: bounded(input.kick, DETACH_DEFAULTS.kick, DEFORMABLE_DETACH_LIMITS.kick),
+    massKg: bounded(input.massKg, DEFORMABLE_DETACH_DEFAULTS.massKg, DEFORMABLE_DETACH_LIMITS.massKg),
+    kick: bounded(input.kick, DEFORMABLE_DETACH_DEFAULTS.kick, DEFORMABLE_DETACH_LIMITS.kick),
   };
 }
 

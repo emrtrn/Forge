@@ -3761,6 +3761,20 @@
 .sm-row.sm-toggle input { width: 16px; height: 16px; }
 
 .sm-prim-list { padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.sm-prim-list > button {
+  height: 26px;
+  border: 1px solid var(--forge-border-mid);
+  border-radius: 4px;
+  background: #23272d;
+  color: var(--forge-text);
+  font-size: 12px;
+  cursor: pointer;
+}
+.sm-prim-list > button:hover:not(:disabled) { background: #2c3138; }
+.sm-prim-list > button:disabled { opacity: 0.5; cursor: default; }
+.sm-prim-list > button.is-active { outline: 1px solid #ffb648; background: #3a2c14; }
+.sm-part-id { font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.sm-part-nodes { color: var(--forge-text-secondary); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sm-prim-row {
   display: grid;
   grid-template-columns: auto 1fr auto;

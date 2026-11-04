@@ -13,6 +13,7 @@ import {
 } from "three";
 
 import { DentTarget } from "../../engine/render-three/deformableMeshSync";
+import { modelPartNodes, nodeBounds, partNodeOfMesh } from "../../engine/render-three/deformablePartNodes";
 import type { DentParams, DentPart, DentVec3 } from "../../engine/physics/deformable/impactDeform";
 
 const params: DentParams = { dentImpulse: 100, fullImpulse: 1100, radius: 0.5, maxDepth: 0.2, plasticity: 0.5, maxDents: 8 };
@@ -301,6 +302,41 @@ export function registerDeformableMeshSyncTests(check: (label: string, run: () =
     assert.equal(car.door.geometry, shared);
     assert.equal(copyFreed, 1);
     assert.equal(piece.object.children.length, 0);
+  });
+
+  check("deformable nodes: a wrapper node names its mesh, a shared one does not", () => {
+    const root = new Group();
+    const wrapper = new Group();
+    wrapper.name = "Door_L";
+    const wrapped = new Mesh(panel(2, 1));
+    wrapped.name = "Door_L_Gaz-52_0";
+    wrapper.add(wrapped);
+    const assembly = new Group();
+    assembly.name = "Lights";
+    const left = new Mesh(panel(1, 1));
+    left.name = "Light_L";
+    const right = new Mesh(panel(1, 1));
+    right.name = "Light_R";
+    assembly.add(left, right);
+    const direct = new Mesh(panel(1, 1));
+    direct.name = "Body";
+    const unnamed = new Mesh(panel(1, 1));
+    root.add(wrapper, assembly, direct, unnamed);
+    assert.equal(partNodeOfMesh(wrapped, root), wrapper);
+    assert.equal(partNodeOfMesh(left, root), left, "the group holds two meshes, so it is not this one's name");
+    assert.equal(partNodeOfMesh(direct, root), direct, "the model root is never a part");
+    assert.deepEqual(modelPartNodes(root), ["Door_L", "Light_L", "Light_R", "Body"]);
+  });
+
+  check("deformable nodes: bounds are in the root's space and cover every named node", () => {
+    const { root } = twoPieceObject();
+    root.position.set(50, 0, 0);
+    root.rotation.y = 1;
+    const box = nodeBounds(root, ["Door"])!;
+    const near = (a: number, b: number): boolean => Math.abs(a - b) < 1e-3;
+    assert.ok(near(box.min[0], 0) && near(box.max[0], 4), String(box.min));
+    assert.ok(near(box.min[1], -2) && near(box.max[1], 2));
+    assert.equal(nodeBounds(root, ["Nope"]), null);
   });
 
   check("deformable mesh: a saved dent of a removed part stays on the body", () => {

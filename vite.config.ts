@@ -46,6 +46,7 @@ import {
   validateSaveEffectPayload,
   validateSaveVehiclePayload,
   validateSaveFracturePayload,
+  validateSaveDeformablePayload,
   validateSaveWorldRecipePayload,
   validateSaveFoliagePayload,
   validateSaveMeshPaintPayload,
@@ -297,7 +298,7 @@ async function updateImportedAssetBytes(rel: string, bytes: number): Promise<boo
 // Model assets carry editor sidecars that share the file's base name. Renaming or
 // deleting the model must move/remove these too, or they orphan.
 const MODEL_EXTS = new Set([".glb", ".gltf"]);
-const MODEL_SIDECAR_SUFFIXES = [".collision.json", ".materials.json", ".uvw.json", ".skeleton.json", ".vertexcolors.json"];
+const MODEL_SIDECAR_SUFFIXES = [".collision.json", ".materials.json", ".uvw.json", ".skeleton.json", ".vertexcolors.json", ".fracture.json", ".deformable.json"];
 
 async function pathExists(absPath: string): Promise<boolean> {
   return stat(absPath).then(
@@ -925,6 +926,7 @@ const PRIVILEGED_URLS = new Set([
   "/__save-effect",
   "/__save-vehicle",
   "/__save-fracture",
+  "/__save-deformable",
   "/__save-worldrecipe",
   "/__save-foliage",
   "/__save-foliage-type",
@@ -1552,6 +1554,37 @@ function isLocalRequest(req: IncomingMessage): boolean {
             await mkdir(resolve(filePath, ".."), { recursive: true });
             const previous = await readFile(filePath, "utf8").catch(() => null);
             const next = `${JSON.stringify(payload.fracture, null, 2)}\n`;
+            await writeFile(filePath, next, "utf8");
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, dropped }));
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+          }
+          return;
+        }
+
+        // Deformable parameters, same fence and report as fracture.
+        if (req.url === "/__save-deformable") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          try {
+            const body = await readJsonBody(req);
+            const payload = validateSaveDeformablePayload(body);
+            const dropped = reportDroppedFields(
+              (body as { deformable?: unknown } | null)?.deformable,
+              payload.deformable,
+              "deformable",
+            );
+            const filePath = resolvePublicPath(payload.path);
+            await mkdir(resolve(filePath, ".."), { recursive: true });
+            const previous = await readFile(filePath, "utf8").catch(() => null);
+            const next = `${JSON.stringify(payload.deformable, null, 2)}
+`;
             await writeFile(filePath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, dropped }));

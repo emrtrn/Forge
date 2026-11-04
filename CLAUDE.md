@@ -206,6 +206,15 @@ engine/editor.
   asset UVW mapping) only tells the editor the bake is stale. A missing
   sidecar means the asset never breaks.
 
+- **Eighth allowlist surface — `<Model>.deformable.json` deformable asset
+  (version 1):** `/__save-deformable` takes `{ path, deformable }` and validates
+  through `validateSaveDeformablePayload`, reusing `normalizeAssetDeformable`
+  (`engine/physics/deformable/deformableTypes.ts`) as the field allowlist; new
+  fields go in that normalizer (and its maximal test in
+  `tests/engine/deformableAsset.test.ts`) or saving drops them (reported in
+  `dropped[]`). The sidecar holds parameters only; dents are runtime state and
+  belong to the save-game. A missing sidecar means the asset never dents.
+
 - **World Partition cell files:** with `worldSettings.partition.enabled`, the
   editor saves a level as a persistent level (`worldCells` index) plus
   `<Level>.cells/main/<x_z>.cell.json` (`engine/world/worldPartition.ts`).
@@ -288,7 +297,7 @@ engine/editor.
   `/__save-terrain`, `/__save-terrain-tile`, `/__save-terrain-global`,
   `/__save-world-cells`, `/__save-foliage-cells`,
   `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
-  `/__save-fracture`,
+  `/__save-fracture`, `/__save-deformable`,
   `/__save-worldrecipe`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,

@@ -69,6 +69,7 @@ import { parseWorldCellKey } from "../engine/world/worldGrid";
 import { VIEW_DISTANCE_MIN, VIEW_DISTANCE_MAX } from "../engine/world/viewDistance";
 import { normalizeEffectDefinition } from "../engine/vfx/particleEffectParser";
 import { FRACTURE_LIMITS, normalizeAssetFracture } from "../engine/physics/fracture/fractureTypes";
+import { normalizeAssetDeformable } from "../engine/physics/deformable/deformableTypes";
 import {
   normalizeVehicleAsset,
   normalizeVehicleAssetPath,
@@ -3611,6 +3612,26 @@ export function validateSaveFracturePayload(value: unknown): {
   const fracture = normalizeAssetFracture(input.fracture);
   if (!fracture) throw new Error('fracture must be an object with version 1 and source "voronoi"');
   return { path, fracture: fracture as unknown as Record<string, unknown> };
+}
+
+/** Deformable saves reuse the runtime normalizer as their field allowlist. */
+export function validateSaveDeformablePayload(value: unknown): {
+  path: string;
+  deformable: Record<string, unknown>;
+} {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("deformable payload must be an object");
+  }
+  const input = value as Record<string, unknown>;
+  const path = input.path;
+  if (typeof path !== "string" || path.startsWith("/") || path.includes("\\") ||
+      path.includes(":") || path.includes(" ") || path.split("/").includes("..") ||
+      !path.endsWith(".deformable.json")) {
+    throw new Error("deformable path must be public-root-relative and end with .deformable.json");
+  }
+  const deformable = normalizeAssetDeformable(input.deformable);
+  if (!deformable) throw new Error('deformable must be an object with version 1 and mode "impact"');
+  return { path, deformable: deformable as unknown as Record<string, unknown> };
 }
 
 export function validateSaveEffectPayload(value: unknown): {

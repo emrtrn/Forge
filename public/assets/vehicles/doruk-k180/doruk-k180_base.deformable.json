@@ -124,6 +124,119 @@
         "massKg": 70,
         "kick": 0.5
       }
+    },
+    {
+      "id": "hood",
+      "nodes": [
+        "Hood"
+      ],
+      "zone": {
+        "min": [
+          -0.8,
+          1.6,
+          1.47
+        ],
+        "max": [
+          0.8,
+          1.8,
+          3.12
+        ]
+      },
+      "detach": {
+        "impulse": 45000,
+        "massKg": 35,
+        "kick": 1
+      }
+    },
+    {
+      "id": "fender_left",
+      "nodes": [
+        "Fender_FL"
+      ],
+      "zone": {
+        "min": [
+          0.8,
+          0.46,
+          1.29
+        ],
+        "max": [
+          1.45,
+          1.62,
+          3.05
+        ]
+      },
+      "detach": {
+        "impulse": 22000,
+        "massKg": 25,
+        "kick": 1
+      }
+    },
+    {
+      "id": "fender_right",
+      "nodes": [
+        "Fender_FR"
+      ],
+      "zone": {
+        "min": [
+          -1.45,
+          0.46,
+          1.29
+        ],
+        "max": [
+          -0.8,
+          1.62,
+          3.05
+        ]
+      },
+      "detach": {
+        "impulse": 22000,
+        "massKg": 25,
+        "kick": 1
+      }
+    },
+    {
+      "id": "front_grille",
+      "nodes": [
+        "Grille_Panel",
+        "Headlight_L",
+        "Headlight_R",
+        "Turn_Signal_L",
+        "Turn_Signal_R"
+      ],
+      "zone": {
+        "min": [
+          -1.05,
+          1.0,
+          3.0
+        ],
+        "max": [
+          1.05,
+          1.6,
+          3.35
+        ]
+      }
+    },
+    {
+      "id": "rigid_core",
+      "nodes": [
+        "Cabin_Interior",
+        "Engine_Block",
+        "Chassis_Frame",
+        "Windshield",
+        "Rear_Window"
+      ],
+      "zone": {
+        "min": [
+          0,
+          -100,
+          0
+        ],
+        "max": [
+          0,
+          -100,
+          0
+        ]
+      }
     }
   ]
 }

@@ -222,8 +222,8 @@ test("the Static Mesh Editor shows the Doruk K-180 parts from its sidecar", asyn
   const editor = page.locator(".sm-editor-overlay");
   await expect(editor.locator("[data-sm-status]")).toHaveText("Ready.", { timeout: 30_000 });
   const section = editor.locator("[data-sm-deformable]");
-  await expect(section.locator("[data-sm-deformable-parts]")).toHaveAttribute("data-zones", "5");
-  for (const part of ["mirror_left", "mirror_right", "door_left", "door_right", "front_bumper"]) {
+  await expect(section.locator("[data-sm-deformable-parts]")).toHaveAttribute("data-zones", "10");
+  for (const part of ["mirror_left", "mirror_right", "door_left", "door_right", "front_bumper", "hood", "fender_left", "fender_right", "front_grille", "rigid_core"]) {
     await expect(section.locator(`[data-sm-part="${part}"]`)).toBeVisible();
   }
   await expect(section.locator('[data-sm-deformable-part-node] option[value="Front_Bumper"]')).toHaveCount(0);
@@ -684,8 +684,134 @@ test("Doruk K-180 mirror tears off on a branch beside the cab, alone", async ({ 
   expect(pieces.map((piece) => [piece.name, piece.meshes])).toEqual([["detached-mirror_left", ["Mirror_L"]]]);
   expect(nodes).not.toContain("Mirror_L");
   for (const kept of ["Mirror_R", "Door_L", "Windshield"]) expect(nodes).toContain(kept);
-  // The hit tips the truck back and its tail meets the ground, which dents the body
-  // there, so the body as a whole is not asserted; what stood beside the mirror is.
-  for (const untouched of ["Door_L", "SideGlass_L", "Windshield", "Cabin_Interior", "Cabin_Shell", "Mirror_R"]) expect(dented).not.toContain(untouched);
+  // The hit tips the truck back and its tail meets the ground, and the branch stays
+  // where it is and next meets the cab's pillar: both dent the body, which is not
+  // asserted. Glass and what sits inside never dent.
+  for (const untouched of ["Door_L", "SideGlass_L", "Windshield", "Cabin_Interior", "Mirror_R"]) expect(dented).not.toContain(untouched);
+  expect(errors).toEqual([]);
+});
+
+/** A beam across the lane, its underside at `bottomY`: the truck meets it above the bumper. */
+const beamAhead = (z: number, bottomY: number, height: number) => (level: any): void => {
+  level.instances = [];
+  const floor = level.blockingVolumes[0];
+  level.blockingVolumes = [floor, { ...floor, id: "smoke-beam", name: "Smoke Beam", position: [0, bottomY + height / 2, z], size: [8, height, 1] }];
+  level.actors = [{ classRef: TRUCK, name: "Driven K-180", position: [0, 0, 0], rotation: [0, 0, 0] }];
+};
+
+/** What sits under the front panels, inside a dent's radius. */
+const UNDER_THE_PANELS = ["Engine_Block", "Chassis_Frame", "Cabin_Interior"];
+
+async function driveUntil(page: Page, settle: () => Promise<boolean>): Promise<void> {
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyW");
+  await expect.poll(settle, { timeout: 70_000 }).toBe(true);
+  await page.keyboard.up("KeyW");
+  await page.waitForTimeout(1500);
+}
+
+test("Doruk K-180 hood dents under a beam at town speed, and the engine stays", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, beamAhead(14, 1.6, 2), 1);
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Hood");
+  await driveUntil(page, async () => (await truckParts(page, "actor:0")).dented.includes("Hood"));
+  const { dented, pieces, nodes } = await truckParts(page, "actor:0");
+  console.log(`[doruk smoke] hood dent ${JSON.stringify(dented)} ${await readDeform()}`);
+  for (const untouched of [...UNDER_THE_PANELS, "Front_Bumper", "Grille_Panel"]) expect(dented).not.toContain(untouched);
+  expect(nodes).toContain("Hood");
+  expect(pieces).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 hood tears off under a beam at speed and shows the engine", async ({ page }, testInfo) => {
+  const { errors, readDeform, open } = await sceneRig(page, beamAhead(75, 1.6, 2), 1);
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Hood");
+  await driveUntil(page, async () => /detached 1/.test(await readDeform()));
+  const { dented, pieces, nodes } = await truckParts(page, "actor:0");
+  console.log(`[doruk smoke] hood tear ${JSON.stringify(dented)} ${await readDeform()}`);
+  expect(pieces.map((piece) => [piece.name, piece.meshes])).toEqual([["detached-hood", ["Hood"]]]);
+  expect(pieces[0]!.dented).toBe(true);
+  expect(nodes).not.toContain("Hood");
+  for (const kept of ["Engine_Block", "Fender_FL", "Fender_FR", "Grille_Panel", "Front_Bumper"]) expect(nodes).toContain(kept);
+  for (const untouched of UNDER_THE_PANELS) expect(dented).not.toContain(untouched);
+  await page.keyboard.down("KeyS");
+  await page.waitForTimeout(3500);
+  await page.keyboard.up("KeyS");
+  await page.waitForTimeout(1000);
+  await shootTruck(page, "actor:0", testInfo.outputPath("doruk-k180-torn-hood.png"), [-2.6, 3.4, 7.5], [0, 1.2, 2.2]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 hood dents from above, and only the hood", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, (level) => {
+    level.instances = [];
+    level.blockingVolumes = [level.blockingVolumes[0]];
+    const car = level.actors[0];
+    level.actors = [
+      { classRef: TRUCK, name: "Parked K-180", position: [0, 0, 0], rotation: [0, 0, 0] },
+      // A 1.2 t weight from 8 m: stands in for a rock or a falling tree.
+      { ...car, name: "Falling weight", position: [0, 8, 2.3], rotation: [0, 90, 0] },
+    ];
+  });
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:0")).dented, { timeout: 30_000 }).toContain("Hood");
+  await page.waitForTimeout(1500);
+  const { dented, nodes } = await truckParts(page, "actor:0");
+  console.log(`[doruk smoke] hood from above ${JSON.stringify(dented)} ${await readDeform()}`);
+  for (const untouched of [...UNDER_THE_PANELS, "Front_Bumper", "Grille_Panel", "Windshield"]) expect(dented).not.toContain(untouched);
+  expect(nodes).toContain("Hood");
+  expect(errors).toEqual([]);
+});
+
+/** The car stays pawn and meets the truck's left front wheel arch. */
+const fenderSide = (truckZ: number) => (level: any): void => {
+  level.instances = [];
+  level.blockingVolumes = [level.blockingVolumes[0]];
+  level.actors = [level.actors[0], { classRef: TRUCK, name: "Parked K-180", position: [-2.1, 0, truckZ], rotation: [0, 90, 0] }];
+};
+
+test("Doruk K-180 fender dents under a car at town speed, and the engine stays", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, fenderSide(14));
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:1")).nodes).toContain("Fender_FL");
+  await driveUntil(page, async () => (await truckParts(page, "actor:1")).dented.includes("Fender_FL"));
+  const { dented, pieces } = await truckParts(page, "actor:1");
+  console.log(`[doruk smoke] fender dent ${JSON.stringify(dented)} ${await readDeform()}`);
+  for (const untouched of [...UNDER_THE_PANELS, "Fender_FR", "Door_R"]) expect(dented).not.toContain(untouched);
+  expect(pieces).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 fender tears off at speed and leaves the wheel on", async ({ page }, testInfo) => {
+  const { errors, readDeform, open } = await sceneRig(page, fenderSide(70));
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:1")).nodes).toContain("Fender_FL");
+  await driveUntil(page, async () => /detached 1/.test(await readDeform()));
+  const { dented, pieces, nodes } = await truckParts(page, "actor:1");
+  console.log(`[doruk smoke] fender tear ${JSON.stringify(dented)} ${await readDeform()}`);
+  expect(pieces.map((piece) => [piece.name, piece.meshes])).toEqual([["detached-fender_left", ["Fender_FL"]]]);
+  expect(nodes).not.toContain("Fender_FL");
+  for (const kept of ["Wheel_FL", "Wheel_FL_Rim", "Engine_Block", "Hood", "Door_L"]) expect(nodes).toContain(kept);
+  for (const untouched of UNDER_THE_PANELS) expect(dented).not.toContain(untouched);
+  await page.keyboard.down("KeyS");
+  await page.waitForTimeout(3500);
+  await page.keyboard.up("KeyS");
+  await page.waitForTimeout(1000);
+  await shootTruck(page, "actor:1", testInfo.outputPath("doruk-k180-torn-fender.png"), [1.5, 1.5, -5.5], [2.1, 1.1, 0]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 grille dents under a low beam, with its lamps, and the radiator stays", async ({ page }) => {
+  // Between the bumper's top and the hood's edge: a log at grille height.
+  const { errors, readDeform, open } = await sceneRig(page, beamAhead(14, 1.05, 0.45), 1);
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Grille_Panel");
+  await driveUntil(page, async () => (await truckParts(page, "actor:0")).dented.includes("Grille_Panel"));
+  const { dented, pieces, nodes } = await truckParts(page, "actor:0");
+  console.log(`[doruk smoke] grille ${JSON.stringify(dented)} ${await readDeform()}`);
+  for (const untouched of [...UNDER_THE_PANELS, "Front_Bumper", "Hood"]) expect(dented).not.toContain(untouched);
+  expect(nodes).toContain("Grille_Panel");
+  expect(pieces).toEqual([]);
   expect(errors).toEqual([]);
 });

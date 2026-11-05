@@ -1,10 +1,10 @@
 # FORGE — Vehicle Component & Damage Contract
 
 **Dosya:** `FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`  
-**Sürüm:** v1.11 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, Doruk K-180 greybox'ı ve hasar parçaları (VC-1…3, VC-5) tamam, cam `R-11` bekler  
+**Sürüm:** v1.12 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, Doruk K-180 greybox'ı ve hasar parçaları (VC-1…3, VC-5) tamam, cam `R-11` bekler  
 **Tarih:** 2026-11-05 (Europe/Istanbul)  
 **Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`; ilk özgün araç `RB-V-001 — Doruk K-180` (`VCD-D15`, 2026-11-05)  
-**Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattında VC-1 ve VC-2 kabul edildi, VC-3 ve VC-5 kod tamam, görsel kabul bekliyor.  
+**Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattında VC-1 ve VC-2 kabul edildi, VC-3 ve VC-5 kod tamam. Doruk K-180'de parça kopması `VCD-D16` ile veriden kapatıldı: araç yalnız sınırlı göçük alır, kopma kodu motorda kalır.  
 **Yetki ayrımı:** Forge genel model, deformasyon, kırılma, kopma, kayıt ve editör altyapısını sağlar. Ridgebound hangi parçanın nasıl hasarlanacağını, eşikleri, onarım/ekonomi/oynanış sonuçlarını belirler. 
 
 **Girdi kaynakları:**
@@ -154,8 +154,8 @@ Bu isimler **zorunlu Forge API** olarak anlaşılmamalı. Node mapping'in gerçe
 | Doruk K-180 parçası | Varsayılan bağlı davranış | İleri hasar | Kopma/kırılma | İlk prototip |
 |---|---|---|---|---|
 | `front_bumper` | Araca bağlı rigid görsel | `dent`, birikimli görsel göçük | `detach` | **P0 demonstratör** |
-| `hood` | Bağlı panel | `dent` | `detach`, menteşe sonra | P1 |
-| `door_left`, `door_right` | Bağlı panel | `dent` | `detach`, menteşe sonra | P1 |
+| `hood` | Bağlı panel | `dent` | yok (`VCD-D16`) | P1 |
+| `door_left`, `door_right` | Bağlı panel | `dent` | yok (`VCD-D16`) | P1 |
 | `front_fender_left/right` | Bağlı panel | `dent` | gerekirse `detach` | P1 |
 | `windshield` | Bağlı kırılabilir panel | çatlak VFX/maske (ayrı) | `fracture` veya swap; cam özel kalite/bütçe | P1 |
 | `side_glass_left/right` | Bağlı cam | çatlak | `fracture` | P2 |
@@ -171,6 +171,8 @@ Bu isimler **zorunlu Forge API** olarak anlaşılmamalı. Node mapping'in gerçe
 | `tow_hook_*` | Şasiye bağlı `rigid_visual` | yok | yok; tampon kopunca yerinde kalır | P0 modellemesi |
 | `wheel_*` | `wheel_visual`; motor kontrolü sahibi | ileride lastik/aks hasarı | kopma **ayrı vehicle physics tasarımı** | **mevcut kontrol korunur** |
 | `chassis_main` | Rigid physics otoritesi | ayrı gövde göçüğü araştırması | genel parçalanma MVP dışı | **mevcut vehicle korunur** |
+
+**`VCD-D16` notu (2026-11-05):** Bu tablodaki `detach` ve `fracture` sütunu ilk plandır. K-180 sidecar'ında `detach` yoktur; güncel durum `art/vehicles/doruk-k180/PARTS.md` dosyasındadır.
 
 **Oyun için P0 kapsam:** bütün tablo değil; yalnız **ön tampon** üzerinden gerçek “dent → detach” teknoloji dilimi. Daha sonra diğer araçlarda aynı genel mekanizma farklı veri profilleriyle tekrar kullanılır.
 
@@ -400,9 +402,9 @@ Faz 1 `PhysicsImpact` olayı fiziksel chassis collider'ından gelebilir; **motor
 |---|---|---|---|
 | **VC-1** | Blender'da `RB-V-001` greybox parça sınırları ve pivot/eksen paketi | Tek GLB import, 4 wheel node, statik bumper bağı ve smoke (`doruk-k180` smoke) | **[TAMAM — 2026-11-05, model görünümü kullanıcıca kabul edildi]** |
 | **VC-2** | `front_bumper` için `dent` (VM-1 hazırsa veriyle bağlanır) | 2 art arda darbe aynı tamponu büker; başka araç değişmez; save/reload shape aynı (`doruk-k180` smoke) | **[TAMAM — 2026-11-05, kullanıcı kabul etti]** |
-| **VC-3** | `front_bumper` için `detach` | Önceki göçük aynı mesh üstünde; part tek doğar; araca bağlı görünmez (`doruk-k180` smoke) | **[KOD TAMAM — 2026-11-05, görsel kabul kullanıcıda]** |
+| **VC-3** | `front_bumper` için `detach` | Önceki göçük aynı mesh üstünde; part tek doğar; araca bağlı görünmez (`doruk-k180` smoke) | **[KOD TAMAM — 2026-11-05; K-180 verisinden `VCD-D16` ile kaldırıldı, davranış Gaz-52 ve motor testleriyle korunur]** |
 | **VC-4** | `RB-V-001` için save/restore ve bütçe doğrulaması | Tekrarlı save/load, parçanın geri takılmaması, bellek stabilliği | **[KAYIT TAMAM — 2026-11-05; bellek ve hücre çıkışı K-180'de ölçülmedi, `R-07`]** |
-| **VC-5** | Kaput, kapı, cam gibi diğer part profilleri | Her malzeme için ayrı test; tek genel “hasar” efekti yok | **[KOD TAMAM — 2026-11-05: kapı, ayna, kaput, çamurluk, ızgara, lambalar, arka tampon, arka kapak, kasa yanları, yakıt deposu; cam `R-11` bekler; görsel kabul kullanıcıda]** |
+| **VC-5** | Kaput, kapı, cam gibi diğer part profilleri | Her malzeme için ayrı test; tek genel “hasar” efekti yok | **[KOD TAMAM — 2026-11-05: kapı, ayna, kaput, çamurluk, ızgara, lambalar, arka tampon, arka kapak, kasa yanları, yakıt deposu; cam `R-11` bekler; kopma `VCD-D16` ile kaldırıldı, tüm parçalar yalnız göçer]** |
 
 **Geliştirme sırası notu:** Faz 7 kodu ve r187 kapısı kapandı; açık olan Faz 7 görsel kabulü motor hattını bekletmez. Yeni commit'ler bu belgeden daha güncel kanıt getirebilir; fark tarih ve commit ile kaydedilir.
 
@@ -464,7 +466,7 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 | ID | İş | Not |
 |---|---|---|
 | `R-11` | Cam kırılması (`VCD-D07`, Faz 8 `source: imported`) | Düğüm seçimli fracture veya ayrık cam kaynağı gerekir. |
-| `R-12` | Menteşe ve tekerlek kopması (`VCD-D08/09`) | Kapı açılması ayrı joint işi; tekerlek kopması ayrı araç fiziği tasarımı. |
+| `R-12` | Tekerlek kopması (`VCD-D09`) | Ayrı araç fiziği tasarımı. Menteşe işi `VCD-D16` ile iptal edildi. |
 | `R-13` | Kopan parçaya yeni göçük | Parça koptuktan sonra göçmüyor, sözleşme bunu opsiyonel tutuyor (§6.2). |
 | `R-14` | Zone'u viewport'ta sürükleme | Bugün sayısal alanlar ve `Fit Zone` var. |
 | `R-15` | Faz 8 kalanları | `swap-mesh`, `joint-break`, dışbükey olmayan mesh için CSG; tüketici gelince. |
@@ -481,7 +483,6 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 |---|---|---|---|
 | `VCD-D03` | Part-local/vehicle-local dent koordinat kaydı | `part-local` rest uzayı; source hash/version ile; eski kök uzayı kayıtları okunur | Motor oturumu / test |
 | `VCD-D07` | Cam parçalama mimarisi | Node-seçimli fracture veya Blender'dan ayrık cam asset; camı bütün araç kaynağına bake etme | Motor oturumu + sanat |
-| `VCD-D08` | Kapı/kaput menteşe hareketi | Kopma/hasar ayrı; dinamik joint sonrası | Kullanıcı / öncelik |
 | `VCD-D09` | Kopmuş tekerlek ve aktarma bozulması | İlk dilim dışında; wheel visual + raycast mapping korunur | Kullanıcı / fizik |
 
 **Kapanan kararlar:**
@@ -498,6 +499,8 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 | `VCD-D15` | İlk özgün araç Doruk K-180; referans `Downloads\Ridgebound\ConceptDesign\Vehicle`, kaynak `art/vehicles/doruk-k180/` | Kullanıcı, 2026-11-05 |
 | `VCD-D13` | Temel dokuda kalıcı vuruk olmaz; göçükleri runtime üretir | Kullanıcı, 2026-11-04 |
 | `VCD-D12` | Aktöre kalıcı `id`; runtime `actor:<index>` kalır, kayıt sınırında çevrilir | 2026-11-04 |
+| `VCD-D08` | Kapı/kaput menteşesi yapılmaz; araç fizik simülasyonuna dönüşmez | Kullanıcı, 2026-11-05 |
+| `VCD-D16` | Doruk K-180'de hiçbir parça kopmaz, hasar yalnız sınırlı göçüktür (`maxDepth` 0,08, tek sert çarpma ~0,05). Kopma kodu motorda ve Gaz-52 verisinde kalır; gerekince araç sidecar'ına `detach` eklemek yeter. Hasarın zenginliği ve kirlenme doku/malzeme aşamasında gösterilir | Kullanıcı, 2026-11-05 |
 | `VCD-D14` | `detach` önce Gaz-52'de, `RB-V-001` modellemesinden bağımsız yapılır | Kullanıcı, 2026-11-04 |
 
 ## 13. Motor ve modelleme oturumlarına devredilecek işler
@@ -574,6 +577,7 @@ Sonraki araçlar için `[ARAÇ ADI]` ve `[GÖRSEL YOLU]` alanlarını doldurup y
 | 2026-11-04 | `VCD-007` / v0.7 | Static Mesh Editor `Parts` listesi, `Fit Zone`, viewport tel kutuları, Test Hit parça bilgisi | **[TAMAM]** |
 | 2026-11-04 | `VCD-008` / v0.8 | Kalan işler §11.2'de toplandı; `RB-V-001` modelleme istemi §13.2'ye yazıldı | **[SIRADA: R-01]** |
 | 2026-11-04 | `VCD-009` / v0.9 | Kullanıcı: araç henüz seçilmedi, yeni konseptler üretiliyor; model Forge'da kalabilir. `R-00` ve `VCD-D15` eklendi, §13.2 aracı seçilebilir hale geldi | **[SIRADA: R-00]** |
+| 2026-11-05 | `VCD-022` / v1.12 | Kullanıcı: menteşe yok, parça düşmez, yalnız sınırlı göçük. K-180 sidecar'ından 18 `detach` silindi; `maxDepth` 0,25→0,08, `plasticity` 0,5→0,6, `fullImpulse` 20.000→40.000. Kopma smoke'ları "hızlı çarpma yalnız göçertir, sınırı aşmaz" testine döndü. Yükleme, asset'in artık kaybedemediği parçayı kayıttan silmez | **[SIRADA: ön gövde formu]** |
 | 2026-11-05 | `VCD-021` / v1.11 | Kullanıcı işaretlemesiyle form düzeltmeleri: ızgara tamponun arkasına iniyor (0,90), kaput yanı çamurluğun üstünde burun boyunca aşağı kavisleniyor ve ızgara üst kenarı kaputu izliyor; iç davlumbaz kemer içini kapatıyor (kapalı duvar, x 0,60); ön çamur lastiği çamurluk kuyruğunun arkasından torpido duvarına çıkıyor; pencere deliği ışınsal eşlemeyle (`radial_pair`) cam kauçuğunu izliyor; ızgara şeridi yalnız ızgara açıklığının çevresinde; ayna iki ayağıyla kapıda ve `Door_L/R` düğümünün çocuğu. Motor: başka parçanın düğümü altındaki parça onunla birlikte kopar, tek başına da kopabilir (`DentTarget.ridersOf`). Ölçüler değişmedi | **[SIRADA: form onayı, ardından prosedürel doku]** |
 | 2026-11-05 | `VCD-020` / v1.10 | Kullanıcı çizimiyle akış geçişi: düz kaporta bloğu kalktı, kaput kesitinden ön cam tabanına akan tek yüzey (`cowl_point`) geldi; ön cam plan görünümünde kavisli (13 cm sarma), kabin yanı fıçı kesitli, kaput arkası kabin genişliğine açılıyor, tavan önü cam kavsini izliyor. Ölçüler değişmedi | **[SIRADA: form onayı, ardından prosedürel doku]** |
 | 2026-11-05 | `VCD-019` / v1.9 | Kullanıcı çizimiyle oran geçişi: kaput üstü 1,75'ten 1,92'ye, kuşak 1,72'den 1,90'a, çamurluk kemeri 0,72'den 0,80'e, kaput burnu ızgaranın üstüne biniyor, tavan dolgunlaştı. Tavan 2,65 korundu. Çarpıştırıcı, kaput, çamurluk ve ayna bölgeleri buna uyarlandı | **[SIRADA: form onayı, ardından prosedürel doku]** |

@@ -393,6 +393,18 @@ export function registerDeformableModuleTests(check: (label: string, run: () => 
     test.module.dispose!();
   });
 
+  check("deformable module: a save loses no part the asset can no longer lose", () => {
+    const parts: AssetDeformablePart[] = [{ id: "door", nodes: ["Door"], zone: { min: [0, -2, -1], max: [4, 2, 1] } }];
+    const test = harness(undefined, undefined, undefined, { parts });
+    const { root, door } = partedObject();
+    test.objects.set(test.first, root);
+    test.commands.restoreState([{ entityId: test.first, dents: [], detachedParts: ["door"], assetId: ASSET_ID }]);
+    test.frame();
+    assert.equal(door.parent!.parent, root);
+    assert.deepEqual(test.commands.captureState(), []);
+    test.module.dispose!();
+  });
+
   check("deformable module: a save entry from another asset is ignored", () => {
     const test = lossyHarness();
     const warnings: string[] = [];

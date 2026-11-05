@@ -300,10 +300,12 @@ export function createDeformableModule(): CapabilityModule {
       console.warn(`[deformable] save entry for ${saved.assetId} ignored: ${entityId} is ${source.assetId} now`);
       return;
     }
+    // A save outlives its sidecar: a part the asset can no longer lose comes back on.
+    const losable = new Set(source.def.parts?.filter((part) => part.detach).map((part) => part.id));
     entries.set(entityId, {
       dents: saved.dents,
       target: null,
-      detached: new Set(saved.detachedParts ?? []),
+      detached: new Set(saved.detachedParts?.filter((part) => losable.has(part))),
       assetId: source.assetId,
     });
   };

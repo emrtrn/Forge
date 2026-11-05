@@ -1,15 +1,16 @@
 # Doruk K-180: düğüm listesi
 
 Düğüm adları `doruk-k180_model.py` ile aynıdır. `partId` değerleri `*.deformable.json` içinde tutulur.
-Bağlı olanlar, `dent` + `detach`: `Front_Bumper` → `front_bumper`, `Door_L/R` → `door_left/right` (cam ve ayna kapıyla gider), `Mirror_L/R` → `mirror_left/right` (kapının çocuğu, tek başına da kopar), `Hood` → `hood`, `Fender_FL/FR` → `fender_left/right`.
-`dent` + `detach`, `alsoDents` ile: `Headlight_L/R` → `headlight_left/right`, `Turn_Signal_L/R` → `turn_signal_left/right`.
+**Hiçbir parça kopmaz (`VCD-D16`):** hasar yalnız sınırlı göçüktür. Aşağıda kopma geçen yerler düğüm yapısını anlatır; bir gün açılırsa o parçanın sidecar kaydına `detach` eklemek yeter.
+Bağlı olanlar, `dent`: `Front_Bumper` → `front_bumper`, `Door_L/R` → `door_left/right`, `Mirror_L/R` → `mirror_left/right` (kapının çocuğu), `Hood` → `hood`, `Fender_FL/FR` → `fender_left/right`.
+`dent`, `alsoDents` ile: `Headlight_L/R` → `headlight_left/right`, `Turn_Signal_L/R` → `turn_signal_left/right`.
 Aynı şekilde: `Tail_Lamp_L/R` → `tail_lamp_left/right`, `Rear_Bumper` → `rear_bumper`, `Tailgate` + `Cargo_Latch_L/R` → `tailgate`, `Wood_Side_Panel_L/R` + dört `Cargo_Stake` → `bed_side_left/right`.
-Yalnız `dent`: `Grille_Panel` + `Grille_Panel_Back` → `front_grille` (far yuvası bu meshtedir), `Fuel_Tank` → `fuel_tank`.
+Ayrıca: `Grille_Panel` + `Grille_Panel_Back` → `front_grille` (far yuvası bu meshtedir), `Fuel_Tank` → `fuel_tank`.
 Hiç göçmez: `Cabin_Interior`, `Engine_Block`, `Chassis_Frame`, `Windshield`, `Rear_Window`, `Bed_Base`, `Inner_Fender_L/R` → `rigid_core` (bölgesi modelin dışında).
 Kalan her mesh gövdedir. Aşağıdaki sınıflar ilk plandır; güncel durum bu listedir.
 Yeni parça bağlarken sözleşme §7'deki Doruk K-180 ölçüm kurallarına bak.
 
-Sınıf: **A** = ilk dalgada göçer ve kopar. **B** = yalnız kopar. **C** = yalnız göçer.
+Sınıf (ilk plan, kopma `VCD-D16` ile kapalı): **A** = ilk dalgada göçer ve kopar. **B** = yalnız kopar. **C** = yalnız göçer.
 **D** = sonra (fracture, kıymık, P2/P3). **–** = kopmaz.
 
 ```text

@@ -9,16 +9,20 @@
       "placements": [
         {
           "position": [
-            165.62,
-            0.03,
-            99.56
+            161.21,
+            1.73,
+            100.45
           ],
           "name": "Cube",
           "scaleLocked": true,
           "generateOverlapEvents": true,
           "simulationGeneratesHitEvents": true,
           "rotationYDeg": 0,
-          "scale": 5
+          "scale": [
+            10.9,
+            8.5,
+            5
+          ]
         }
       ]
     },
@@ -41,29 +45,33 @@
       "placements": [
         {
           "position": [
-            170.73,
-            -0.15,
-            104.77
+            167.84,
+            0.14,
+            98.7
           ],
           "rotationYDeg": 0,
-          "scale": 1
+          "scale": [
+            1.6,
+            1.6,
+            1
+          ]
         }
       ]
     }
   ],
   "actors": [
     {
-      "classRef": "assets/vehicles/gaz52/Script_Gaz52.actor.json",
+      "classRef": "assets/vehicles/doruk-k180/Script_DorukK180.actor.json",
       "position": [
-        171.45,
-        0,
-        86.53
+        181.4,
+        16.17,
+        33.85
       ],
-      "id": "act-mw2k5jcv-5rbh",
+      "id": "act-mw38txqq-8lek",
       "rotationYDeg": 0,
       "rotation": [
         0,
-        -2.5,
+        -6,
         0
       ],
       "scale": 1

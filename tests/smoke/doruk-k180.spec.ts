@@ -670,7 +670,7 @@ test("Doruk K-180 mirror tears off on a branch beside the cab, alone", async ({ 
     const floor = level.blockingVolumes[0];
     // A low branch at roof height, beside the cab. Any lower and the line of the hit
     // meets the grille's top corner first, 1.7 m further forward, and the body takes it.
-    level.blockingVolumes = [floor, { ...floor, id: "smoke-branch", name: "Smoke Branch", position: [1.25, 2.35, 14], size: [0.3, 0.5, 0.5] }];
+    level.blockingVolumes = [floor, { ...floor, id: "smoke-branch", name: "Smoke Branch", position: [1.25, 2.4, 14], size: [0.3, 0.4, 0.5] }];
     level.actors = [{ classRef: TRUCK, name: "Driven K-180", position: [0, 0, 0], rotation: [0, 0, 0] }];
   }, 1);
   await open();
@@ -712,7 +712,7 @@ async function driveUntil(page: Page, settle: () => Promise<boolean>): Promise<v
 }
 
 test("Doruk K-180 hood dents under a beam at town speed, and the engine stays", async ({ page }) => {
-  const { errors, readDeform, open } = await sceneRig(page, beamAhead(14, 1.52, 2), 1);
+  const { errors, readDeform, open } = await sceneRig(page, beamAhead(14, 1.70, 2), 1);
   await open();
   await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Hood");
   await driveUntil(page, async () => (await truckParts(page, "actor:0")).dented.includes("Hood"));
@@ -725,7 +725,7 @@ test("Doruk K-180 hood dents under a beam at town speed, and the engine stays", 
 });
 
 test("Doruk K-180 hood tears off under a beam at speed and shows the engine", async ({ page }, testInfo) => {
-  const { errors, readDeform, open } = await sceneRig(page, beamAhead(75, 1.52, 2), 1);
+  const { errors, readDeform, open } = await sceneRig(page, beamAhead(75, 1.70, 2), 1);
   await open();
   await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Hood");
   await driveUntil(page, async () => /detached 1/.test(await readDeform()));

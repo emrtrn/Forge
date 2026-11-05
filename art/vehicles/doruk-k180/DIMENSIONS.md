@@ -19,7 +19,7 @@ Konsept görseli ölçü kaynağı değildir (sözleşme §3.3). Birim metre.
 | Lastik genişliği, ön | 0,32 | 0,314 |
 | Lastik genişliği, arka ikiz toplam | 0,60 | 0,578 |
 | Kabin genişliği | 2,15 | – |
-| Kaput üstü | 1,75 | – |
+| Kaput üstü | 1,92 (kullanıcı isteğiyle 1,75'ten; panoyla oran) | – |
 | Tampon yüksekliği | 0,72–0,98 | gövdeye gömülü |
 | Kasa dış boyu × eni | 3,80 × 2,45 | – |
 | Kasa tabanı | 1,25 | – |

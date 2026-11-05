@@ -42,7 +42,7 @@ export interface DeformablePartsHost {
 type DetachKey = keyof DeformablePartDetach;
 
 const DETACH_FIELDS: readonly { key: DetachKey; label: string; step: number; title: string; sliderMax: number }[] = [
-  { key: "impulse", label: "Detach Impulse (N·s)", step: 50, title: "Parçaya bu kadar sert vuran darbe onu koparır", sliderMax: 20000 },
+  { key: "impulse", label: "Detach Impulse (N·s)", step: 50, title: "Parçaya bu kadar sert vuran darbe onu koparır", sliderMax: 100000 },
   { key: "massKg", label: "Mass (kg)", step: 1, title: "Kopan parçanın kütlesi; nesnenin kendi kütlesi değişmez", sliderMax: 500 },
   { key: "kick", label: "Kick (m/s)", step: 0.1, title: "Koparken nesneden uzağa eklenen hız", sliderMax: 10 },
 ];

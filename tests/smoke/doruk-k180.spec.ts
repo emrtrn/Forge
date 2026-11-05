@@ -16,6 +16,7 @@ const LEVEL = "assets/starter-content/Levels/VehicleTest.level.json";
 const TRUCK = "assets/vehicles/doruk-k180/Script_DorukK180.actor.json";
 const GLB = "public/assets/vehicles/doruk-k180/doruk-k180_base.glb";
 const SIDECAR = "assets/vehicles/doruk-k180/doruk-k180_base.deformable.json";
+const SAVE_LEVEL = "layouts/PhysicsInteractionTest.level.json";
 
 test.setTimeout(180_000);
 
@@ -227,9 +228,13 @@ test("the Static Mesh Editor shows the Doruk K-180 bumper part from its sidecar"
   expect(errors).toEqual([]);
 });
 
-/** VC-2: the same bumper takes two crashes into a wall; nothing else changes. */
-test("Doruk K-180 bumper dents twice, alone, and a load gives the same shape", async ({ page }, testInfo) => {
-  const SAVE_LEVEL = "layouts/PhysicsInteractionTest.level.json";
+/** Two trucks facing a wall, with the pause menu's save slots; `open` plays the level. */
+async function crashRig(page: Page, wallZ: number): Promise<{
+  errors: string[];
+  stats: ReturnType<Page["locator"]>;
+  readDeform: () => Promise<string>;
+  open: () => Promise<void>;
+}> {
   const errors: string[] = [];
   const messages: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -252,9 +257,10 @@ test("Doruk K-180 bumper dents twice, alone, and a load gives the same shape", a
   await page.route(`**/${SAVE_LEVEL}`, async (route) => {
     const response = await route.fetch();
     const level = await response.json();
-    level.instances = level.instances.filter((group: { assetId: string }) => !["sm-breakable-crate", "sm-dent-panel"].includes(group.assetId));
+    // Only the floor and the wall: the fixture's ramps would end a long run-up early.
+    level.instances = [];
     const floor = level.blockingVolumes[0];
-    level.blockingVolumes.push({ ...floor, id: "smoke-wall", name: "Smoke Wall", position: [0, 2, 14], size: [8, 4, 1] });
+    level.blockingVolumes = [floor, { ...floor, id: "smoke-wall", name: "Smoke Wall", position: [0, 2, wallZ], size: [8, 4, 1] }];
     level.actors = [
       { classRef: TRUCK, name: "Driven K-180", position: [0, 0, 0], rotation: [0, 0, 0] },
       { classRef: TRUCK, name: "Parked K-180", position: [7, 0, 0], rotation: [0, 0, 0] },
@@ -269,7 +275,7 @@ test("Doruk K-180 bumper dents twice, alone, and a load gives the same shape", a
     await route.fulfill({ response, json: project });
   });
   const stats = page.locator("#debug-stats");
-  const readDeform = async (): Promise<string> => ((await stats.textContent()) ?? "").match(/deform: .*?ms/)?.[0] ?? "";
+  const readDeform = async (): Promise<string> => ((await stats.textContent()) ?? "").match(/deform: .*?ms(?: detached \d+)?/)?.[0] ?? "";
   const open = async (): Promise<void> => {
     messages.length = 0;
     await page.goto(`/?debug&dorukSmoke=${Date.now()}`);
@@ -278,6 +284,40 @@ test("Doruk K-180 bumper dents twice, alone, and a load gives the same shape", a
     await expect(stats).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });
     await expect.poll(readDeform, { timeout: 30_000 }).toMatch(/objects 2 /);
   };
+  return { errors, stats, readDeform, open };
+}
+
+/** One frame from a camera `offset` off the driven truck, for the visual acceptance; `at` is a world point, or its nose. */
+async function shootFront(page: Page, path: string, offset: [number, number, number], at?: number[]): Promise<void> {
+  const hideOverlays = await page.addStyleTag({ content: "#debug-stats, section { display: none !important; }" });
+  await page.evaluate(({ from, look }) => {
+    const w = window as unknown as { __vehicleScenes: any[]; __vehicleRenderer: any; __restoreRender?: () => void };
+    let actor: any;
+    for (const scene of w.__vehicleScenes) scene.traverse((node: any) => {
+      if (node.userData.actorEntityId === "actor:0" && node.getObjectByName("Chassis_Frame")) actor = node;
+    });
+    const renderer = w.__vehicleRenderer;
+    const render = renderer.render;
+    w.__restoreRender = () => { renderer.render = render; };
+    renderer.render = (scene: any, camera: any) => {
+      if (camera.isPerspectiveCamera && scene === actor.parent) {
+        const target = actor.getWorldPosition(actor.position.clone());
+        camera.position.copy(target).add(target.clone().set(from[0], from[1], from[2]));
+        if (look) camera.lookAt(look[0], look[1], look[2]);
+        else camera.lookAt(target.x, target.y + 0.9, target.z + 3.2);
+      }
+      render.call(renderer, scene, camera);
+    };
+  }, { from: offset, look: at ?? null });
+  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+  await page.screenshot({ path });
+  await page.evaluate(() => (window as unknown as { __restoreRender: () => void }).__restoreRender());
+  await hideOverlays.evaluate((style) => (style as unknown as Element).remove());
+}
+
+/** VC-2: the same bumper takes two crashes into a wall; nothing else changes. */
+test("Doruk K-180 bumper dents twice, alone, and a load gives the same shape", async ({ page }, testInfo) => {
+  const { errors, stats, readDeform, open } = await crashRig(page, 14);
 
   /** Each truck's bumper vertices and which of its meshes own a dented copy. */
   const trucks = (): Promise<{ bumper: number[]; dented: string[]; shared: boolean }[] | null> => page.evaluate(() => {
@@ -350,27 +390,7 @@ test("Doruk K-180 bumper dents twice, alone, and a load gives the same shape", a
   await page.waitForTimeout(5000);
   await page.keyboard.up("KeyS");
   await page.waitForTimeout(1500);
-  const hideOverlays = await page.addStyleTag({ content: "#debug-stats, section { display: none !important; }" });
-  await page.evaluate(() => {
-    const w = window as unknown as { __vehicleScenes: any[]; __vehicleRenderer: any };
-    let actor: any;
-    for (const scene of w.__vehicleScenes) scene.traverse((node: any) => {
-      if (node.userData.actorEntityId === "actor:0" && node.getObjectByName("Front_Bumper")) actor = node;
-    });
-    const renderer = w.__vehicleRenderer;
-    const render = renderer.render.bind(renderer);
-    renderer.render = (scene: any, camera: any) => {
-      if (camera.isPerspectiveCamera && scene === actor.parent) {
-        const target = actor.getWorldPosition(actor.position.clone());
-        camera.position.copy(target).add(target.clone().set(-1.6, 1.35, 5.2));
-        camera.lookAt(target.x, target.y + 0.9, target.z + 3.2);
-      }
-      render(scene, camera);
-    };
-  });
-  await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
-  await page.screenshot({ path: testInfo.outputPath("doruk-k180-dented-bumper.png") });
-  await hideOverlays.evaluate((style) => (style as unknown as Element).remove());
+  await shootFront(page, testInfo.outputPath("doruk-k180-dented-bumper.png"), [-1.6, 1.35, 5.2]);
 
   // VCD-07: saved, opened fresh, loaded: the same shape on the same bumper.
   const menu = page.locator('[data-ui-id="title"]');
@@ -391,5 +411,138 @@ test("Doruk K-180 bumper dents twice, alone, and a load gives the same shape", a
   expect(deepest(push(saved, loaded[0]!.bumper))).toBeLessThan(1e-4);
   expect(loaded[0]!.dented).toEqual(["Front_Bumper"]);
   expect(loaded[1]!.dented).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+/** VC-3: a crash past the bumper's limit tears it off once, dent included; a save keeps that. */
+test("Doruk K-180 bumper tears off dented, once, and a save keeps it off", async ({ page }, testInfo) => {
+  test.setTimeout(280_000);
+  const { errors, stats, readDeform, open } = await crashRig(page, 75);
+
+  /** Where the bumpers are: on which truck, and any torn-off piece with what it carries. */
+  const bumpers = (): Promise<{
+    onTrucks: boolean[]; hooksOnTruck: boolean;
+    pieces: { name: string; meshes: string[]; dented: boolean; at: number[] }[];
+  }> => page.evaluate(() => {
+    const scenes = (window as unknown as { __vehicleScenes: any[] }).__vehicleScenes;
+    const actorOf = (id: string): any => {
+      let found: any;
+      for (const scene of scenes) scene.traverse((node: any) => {
+        if (node.userData.actorEntityId === id && node.getObjectByName("Chassis_Frame")) found = node;
+      });
+      return found;
+    };
+    const pieces: { name: string; meshes: string[]; dented: boolean; at: number[] }[] = [];
+    const seen = new Set<any>();
+    for (const scene of scenes) scene.traverse((node: any) => {
+      if (!node.name?.startsWith("detached-") || seen.has(node)) return;
+      seen.add(node);
+      const meshes: string[] = [];
+      let dented = false;
+      node.traverse((child: any) => {
+        if (!child.isMesh) return;
+        meshes.push(child.name);
+        dented ||= child.geometry.userData.forgeDeformClone === true;
+      });
+      const { elements } = node.matrixWorld;
+      pieces.push({ name: node.name, meshes, dented, at: [elements[12], elements[13], elements[14]] });
+    });
+    const [driven, parked] = [actorOf("actor:0"), actorOf("actor:1")];
+    return {
+      onTrucks: [driven, parked].map((actor) => Boolean(actor?.getObjectByName("Front_Bumper"))),
+      hooksOnTruck: Boolean(driven?.getObjectByName("Tow_Hook_L") && driven?.getObjectByName("Tow_Hook_R")),
+      pieces,
+    };
+  });
+  const crash = async (): Promise<void> => {
+    await page.locator("#game-canvas").click();
+    await page.keyboard.down("KeyW");
+    await expect.poll(readDeform, { timeout: 70_000 }).toMatch(/detached 1/);
+    await page.keyboard.up("KeyW");
+  };
+  const menu = page.locator('[data-ui-id="title"]');
+  const openMenu = async (): Promise<void> => {
+    await page.keyboard.press("Escape", { delay: 150 });
+    await expect(menu).toContainText("Save / Load");
+  };
+  const closeMenu = async (): Promise<void> => {
+    if (await menu.isVisible()) await page.keyboard.press("Escape", { delay: 150 });
+    await expect(menu).toBeHidden();
+  };
+  const quickSave = async (): Promise<void> => {
+    await page.locator('[data-ui-id="quick-save"]').click();
+    await expect(stats).toContainText(/save\.slots\.quick\.status = "Saved /, { timeout: 10_000 });
+  };
+  const quickLoad = async (): Promise<void> => {
+    await page.locator('[data-ui-id="quick-load"]').click();
+    await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  };
+  const savedEntry = (): Promise<{ detachedParts?: string[]; assetId?: string } | undefined> => page.evaluate(() => {
+    const key = Object.keys(localStorage).find((entry) => entry.startsWith("forge.saveGame.") && entry.endsWith(".slot.quick"));
+    const entries = key ? JSON.parse(localStorage.getItem(key)!).payload.deformables as { entityId: string; detachedParts?: string[]; assetId?: string }[] : [];
+    return entries.find((entry) => entry.entityId === "actor:0");
+  });
+
+  await open();
+  await expect.poll(async () => (await bumpers()).onTrucks).toEqual([true, true]);
+  await openMenu();
+  await quickSave();
+  await closeMenu();
+
+  // VCD-04/05: one piece, carrying this bumper's dented mesh; the hooks stay on the frame.
+  await crash();
+  const torn = await bumpers();
+  expect(torn.pieces.map((piece) => [piece.name, piece.meshes])).toEqual([["detached-front_bumper", ["Front_Bumper"]]]);
+  expect(torn.pieces[0]!.dented, "the bumper left with its dent, not as a clean copy").toBe(true);
+  expect(torn.onTrucks).toEqual([false, true]);
+  expect(torn.hooksOnTruck).toBe(true);
+
+  await page.waitForTimeout(4000);
+  const settled = await bumpers();
+  console.log(`[doruk smoke] piece rests at ${settled.pieces[0]!.at.map((value) => value.toFixed(2)).join(" ")}`);
+  const [pieceX, pieceY, pieceZ] = settled.pieces[0]!.at;
+  expect(pieceY!).toBeLessThan(1.2);
+  expect(pieceY!).toBeGreaterThan(-0.2);
+  expect(Math.hypot(pieceX!, pieceZ! - 71)).toBeLessThan(12);
+
+  // The truck still drives, and meets the wall again without a second piece.
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyS");
+  await expect.poll(async () => Math.abs(await readKmh(page)), { timeout: 20_000 }).toBeGreaterThan(3);
+  await page.waitForTimeout(4000);
+  await page.keyboard.up("KeyS");
+  await page.waitForTimeout(1500);
+  await shootFront(page, testInfo.outputPath("doruk-k180-torn-bumper.png"), [-2.2, 1.5, 6.5]);
+  const piece = (await bumpers()).pieces[0]!.at;
+  await shootFront(page, testInfo.outputPath("doruk-k180-loose-bumper.png"), [-1.8, 2.2, 6.5], piece);
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(6000);
+  await page.keyboard.up("KeyW");
+  expect((await bumpers()).pieces).toHaveLength(1);
+  expect(await readDeform()).toMatch(/detached 1/);
+
+  // VCD-07: a load from before the crash puts the bumper back, clean.
+  await openMenu();
+  await quickLoad();
+  await expect.poll(async () => (await bumpers()).onTrucks, { timeout: 30_000 }).toEqual([true, true]);
+  expect((await bumpers()).pieces).toEqual([]);
+  expect(await readDeform()).not.toMatch(/detached/);
+
+  // Lost, then saved: loading twice never brings it back, and leaves no loose piece.
+  await closeMenu();
+  await crash();
+  await openMenu();
+  await quickSave();
+  expect(await savedEntry()).toMatchObject({ detachedParts: ["front_bumper"], assetId: "doruk-k180-base" });
+  for (let load = 0; load < 2; load += 1) {
+    await quickLoad();
+    await expect.poll(async () => (await bumpers()).pieces, { timeout: 30_000 }).toEqual([]);
+    await expect.poll(async () => (await bumpers()).onTrucks, { timeout: 30_000 }).toEqual([false, true]);
+    if (load === 0) {
+      await closeMenu();
+      await openMenu();
+    }
+  }
+  expect((await bumpers()).hooksOnTruck).toBe(true);
   expect(errors).toEqual([]);
 });

@@ -1,7 +1,7 @@
 # FORGE — Vehicle Component & Damage Contract
 
 **Dosya:** `FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`  
-**Sürüm:** v1.9 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, Doruk K-180 greybox'ı ve hasar parçaları (VC-1…3, VC-5) tamam, cam `R-11` bekler  
+**Sürüm:** v1.10 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, Doruk K-180 greybox'ı ve hasar parçaları (VC-1…3, VC-5) tamam, cam `R-11` bekler  
 **Tarih:** 2026-11-05 (Europe/Istanbul)  
 **Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`; ilk özgün araç `RB-V-001 — Doruk K-180` (`VCD-D15`, 2026-11-05)  
 **Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattında VC-1 ve VC-2 kabul edildi, VC-3 ve VC-5 kod tamam, görsel kabul bekliyor.  
@@ -574,6 +574,7 @@ Sonraki araçlar için `[ARAÇ ADI]` ve `[GÖRSEL YOLU]` alanlarını doldurup y
 | 2026-11-04 | `VCD-007` / v0.7 | Static Mesh Editor `Parts` listesi, `Fit Zone`, viewport tel kutuları, Test Hit parça bilgisi | **[TAMAM]** |
 | 2026-11-04 | `VCD-008` / v0.8 | Kalan işler §11.2'de toplandı; `RB-V-001` modelleme istemi §13.2'ye yazıldı | **[SIRADA: R-01]** |
 | 2026-11-04 | `VCD-009` / v0.9 | Kullanıcı: araç henüz seçilmedi, yeni konseptler üretiliyor; model Forge'da kalabilir. `R-00` ve `VCD-D15` eklendi, §13.2 aracı seçilebilir hale geldi | **[SIRADA: R-00]** |
+| 2026-11-05 | `VCD-020` / v1.10 | Kullanıcı çizimiyle akış geçişi: düz kaporta bloğu kalktı, kaput kesitinden ön cam tabanına akan tek yüzey (`cowl_point`) geldi; ön cam plan görünümünde kavisli (13 cm sarma), kabin yanı fıçı kesitli, kaput arkası kabin genişliğine açılıyor, tavan önü cam kavsini izliyor. Ölçüler değişmedi | **[SIRADA: form onayı, ardından prosedürel doku]** |
 | 2026-11-05 | `VCD-019` / v1.9 | Kullanıcı çizimiyle oran geçişi: kaput üstü 1,75'ten 1,92'ye, kuşak 1,72'den 1,90'a, çamurluk kemeri 0,72'den 0,80'e, kaput burnu ızgaranın üstüne biniyor, tavan dolgunlaştı. Tavan 2,65 korundu. Çarpıştırıcı, kaput, çamurluk ve ayna bölgeleri buna uyarlandı | **[SIRADA: form onayı, ardından prosedürel doku]** |
 | 2026-11-05 | `VCD-018` / v1.8 | Form geçişi: kaputta orta kırım ve omuz, tek döküm ızgara, 13,5 cm far, kapı pres çizgileri, ince fitil, iç davlumbaz (`Inner_Fender_*`, `rigid_core`), çamurluk yan lambası (`Fender_F*_Marker`), kapanan kaporta yanı. `R-20` kapandı. İlk göçük maliyeti ızgarada yaklaşık 8 ms'e çıktı, `R-07` ile bakılır | **[SIRADA: form onayı, ardından prosedürel doku]** |
 | 2026-11-05 | `VCD-017` / v1.7 | Detay modelleme ilk geçiş: greybox script'i `doruk-k180_model.py` oldu; kabin, kaput, çamurluk, ızgara, tampon, tekerlek, şasi, motor, kasa kavisli geometriye geçti. Ölçü, düğüm adı ve hasar eşikleri korundu; `Cabin_Trim` ve `Door_*_Trim` düğümleri eklendi. 62 mesh, yaklaşık 82 bin vertex, 2,45 MB. Doku ve UV sonraki adım | **[SIRADA: görsel kabul, doku]** |

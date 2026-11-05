@@ -82,6 +82,8 @@ FRAME_Y = (0.78, 1.00)
 CYLINDER_SEGMENTS = 32
 SMOOTH_ANGLE = 38.0  # degrees; a sharper edge stays a crease
 DOOR_GAP = 0.012
+WINDSHIELD_WRAP = 0.13  # how far the windshield's corners sweep back, metres at x = 1
+HOOD_REAR_HALF = 1.06
 
 EXPOSED_HIDDEN = {"Front_Bumper", "Hood", "Grille_Panel", "Door_L", "Fender_FL", "Windshield",
                   "Mirror_L", "Wood_Side_Panel_L", "Headlight_L", "Headlight_R",
@@ -125,7 +127,8 @@ def clamp01(value):
 def cab_half(y):
     """Half width of the cab at height y: straight to the belt line, then tucking in."""
     t = clamp01((y - 1.88) / 0.60)
-    return CAB_HALF_WIDTH - 0.085 * t * t
+    below = clamp01((1.88 - y) / 1.0)
+    return CAB_HALF_WIDTH - 0.085 * t * t - 0.035 * below * below
 
 
 def cab_plan(z):
@@ -140,7 +143,7 @@ def side_point(z, y, depth=0.0):
 
 def front_z(x, y):
     """The cab's front face, curved in plan around the windshield line."""
-    return windshield_z(y) - 0.05 * x * x
+    return windshield_z(y) - WINDSHIELD_WRAP * x * x
 
 
 def front_point(x, y, depth=0.0):
@@ -525,14 +528,26 @@ def back_point(x, y, depth=0.0):
     return (x, y, CAB_BACK_Z + depth)
 
 
-def roof_point(z, t, depth=0.0):
-    """t runs from -1 to 1 across the roof; the crown falls off to every edge."""
+def roof_point(u, t, depth=0.0):
+    """u runs back to front, t across; the crown falls off to every edge and the front
+    edge follows the windshield's curve with a short lip."""
     rise = ROOF_Y - ROOF_BASE_Y
-    back = clamp01((z - CAB_BACK_Z) / 0.42)
-    front = clamp01((WINDSHIELD_TOP[0] + 0.07 - z) / 0.30)
+    half = cab_half(ROOF_BASE_Y)
+    z = lerp(CAB_BACK_Z, front_z(t * half, ROOF_BASE_Y) + 0.05, u)
+    back = clamp01(u / 0.34)
+    front = clamp01((1 - u) / 0.28)
     fall = math.sqrt(1 - (1 - back) ** 2) * (0.25 + 0.75 * math.sqrt(1 - (1 - front) ** 2))
-    half = cab_half(ROOF_BASE_Y) * cab_plan(z)
-    return (t * half, ROOF_BASE_Y + rise * fall * math.sqrt(max(0.0, 1 - abs(t) ** 3.4)) - depth, z)
+    return (t * half * cab_plan(z), ROOF_BASE_Y + rise * fall * math.sqrt(max(0.0, 1 - abs(t) ** 3.4)) - depth, z)
+
+
+def cowl_point(u, t, depth=0.0):
+    """From the hood's rear edge (u = 0) to the windshield's base (u = 1): the hood's own
+    section widening into the cab, so the shoulder runs on into the door without a step."""
+    x0, y0, z0 = hood_point(HOOD_REAR_Z, t)
+    base_y = WINDSHIELD_BASE[1]
+    x1 = t * cab_half(base_y)
+    z1 = front_z(x1, base_y)
+    return (lerp(x0, x1, u), lerp(y0, base_y, u * u * (3 - 2 * u)) - depth, lerp(z0 - 0.012, z1, u))
 
 
 def cabin_shell():
@@ -543,21 +558,18 @@ def cabin_shell():
 
     # Each side: the cab's silhouette around the door opening.
     count = 96
-    corners = [(CAB_BACK_Z, 0.90), (FIREWALL_Z, 0.90), (FIREWALL_Z, HOOD_EDGE_Y), (a_pillar_z(WINDSHIELD_BASE[1]), WINDSHIELD_BASE[1]),
-               (a_pillar_z(ROOF_BASE_Y), ROOF_BASE_Y), (CAB_BACK_Z, ROOF_BASE_Y)]
-    outer = resample(fillet_loop(corners, (0.04, 0.0, 0.0, 0.0, 0.0, 0.0)), count, (CAB_BACK_Z, 0.90))
+    edge = [cowl_point(i / 8, 1.0) for i in range(9)]
+    corners = [(CAB_BACK_Z, 0.90), (FIREWALL_Z, 0.90), (FIREWALL_Z, 1.30), (edge[0][2], 1.60)]
+    corners += [(z, y) for _, y, z in edge] + [(a_pillar_z(ROOF_BASE_Y), ROOF_BASE_Y), (CAB_BACK_Z, ROOF_BASE_Y)]
+    outer = resample(fillet_loop(corners, 0.0), count, (CAB_BACK_Z, 0.90))
     opening = resample(door_outline(DOOR_GAP), count, (DOOR_Z[0], DOOR_Y[0]))
     for side in (1, -1):
         m.sheet(outer, opening, 3, side_point, 0.05, side)
 
-    # Behind the fender's tail: the cab side carries on to the cowl.
-    for side in (1, -1):
-        m.box((side * (half - 0.02), 1.08, FIREWALL_Z), (side * half, HOOD_EDGE_Y + 0.02, HOOD_REAR_Z), (1, 3, 2))
-
     # The front around the windshield.
     low = WINDSHIELD_BASE[1]
-    outer = resample([(-cab_half(low), low), (cab_half(low), low), (cab_half(ROOF_BASE_Y), ROOF_BASE_Y),
-                      (-cab_half(ROOF_BASE_Y), ROOF_BASE_Y)], 112, (-cab_half(low), low))
+    outer = resample([(-cab_half(low), low), (0.0, low), (cab_half(low), low), (cab_half(ROOF_BASE_Y), ROOF_BASE_Y),
+                      (0.0, ROOF_BASE_Y), (-cab_half(ROOF_BASE_Y), ROOF_BASE_Y)], 112, (-cab_half(low), low))
     m.sheet(outer, resample(windshield_outline(), 112, (-1.0, WINDSHIELD_BASE[1])), 2, front_point, 0.05)
 
     # The back around the rear window.
@@ -566,11 +578,8 @@ def cabin_shell():
                       (-cab_half(ROOF_BASE_Y) * width, ROOF_BASE_Y)], 64, (-half, 0.92))
     m.sheet(outer, resample(rear_window_outline(), 64, (-0.6, 1.7)), 3, back_point, 0.04)
 
-    # Cowl: the slope from the hood's rear edge up to the windshield base.
-    m.prism([(FIREWALL_Z, HOOD_EDGE_Y), (FIREWALL_Z, WINDSHIELD_BASE[1]), WINDSHIELD_BASE,
-             (HOOD_REAR_Z, HOOD_TOP_Y), (HOOD_REAR_Z, HOOD_EDGE_Y)], -half, half, 8)
-
-    m.patch((CAB_BACK_Z, WINDSHIELD_TOP[0] + 0.07), (-1.0, 1.0), (18, 36), roof_point, 0.03)
+    m.patch((0.0, 1.0), (-1.0, 1.0), (8, 44), cowl_point, 0.03)
+    m.patch((0.0, 1.0), (-1.0, 1.0), (18, 36), roof_point, 0.03)
     return m
 
 
@@ -583,7 +592,7 @@ def cabin_trim():
     for side in (1, -1):
         m.sheet(opening, rebate, 1, lambda z, y, depth: side_point(z, y, 0.012 + depth), 0.012, side)
         # The maker's badge on the cowl side.
-        m.box((side * CAB_HALF_WIDTH, 1.76, 1.33), (side * (CAB_HALF_WIDTH + 0.006), 1.83, 1.48))
+        m.box((side * (CAB_HALF_WIDTH - 0.006), 1.70, 1.33), (side * (CAB_HALF_WIDTH + 0.004), 1.76, 1.46))
     m.sweep([front_point(u, v, -0.005) for u, v in resample(windshield_outline(), 112, (-1.0, WINDSHIELD_BASE[1]))], 0.016, True)
     m.sweep([back_point(u, v, -0.006) for u, v in resample(rear_window_outline(), 48, (-0.6, 1.7))], 0.016, True)
     m.sweep([front_point(0.0, lerp(WINDSHIELD_BASE[1] + 0.055, ROOF_BASE_Y - 0.055, i / 8), -0.004) for i in range(9)], 0.016)
@@ -718,7 +727,7 @@ def hood_point(z, t, depth=0.0):
     crease down the middle; its nose rolls down in a quarter round over the grille."""
     s = clamp01((z - HOOD_REAR_Z) / (HOOD_FRONT_Z - HOOD_REAR_Z))
     a = abs(t)
-    half = HOOD_HALF_WIDTH * (1 - 0.02 * (2 * s - 1) ** 2)
+    half = lerp(HOOD_REAR_HALF, HOOD_HALF_WIDTH, smoothstep(0.0, 0.55, s))
     ridge = lerp(HOOD_TOP_Y, HOOD_EDGE_Y + HOOD_FRONT_RISE, s * s)
     nose = clamp01((s - 0.80) / 0.20)
     drop = (ridge - HOOD_EDGE_Y + 0.0) * 0.86 * (1 - math.sqrt(max(0.0, 1 - nose * nose)))
@@ -811,7 +820,7 @@ def door_trim(name, side):
     m = Mesh(name, "M_Rubber", side, (CAB_HALF_WIDTH, DOOR_WINDOW_Y, DOOR_Z[1]))
     window = resample(window_outline(), 56, (DOOR_Z[0], DOOR_Y[0]))
     m.sweep([side_point(z, y, -0.004) for z, y in window], 0.013, True)
-    post_z = DOOR_Z[1] - 0.30
+    post_z = DOOR_Z[1] - 0.42
     m.sweep([side_point(post_z, lerp(DOOR_WINDOW_Y + 0.03, DOOR_Y[1] - 0.075, i / 4), -0.003) for i in range(5)], 0.011)
     handle = [side_point(z, 1.76, -0.016) for z in (0.20, 0.24, 0.30, 0.36, 0.38)]
     m.sweep(handle, 0.011)
@@ -832,13 +841,13 @@ def side_glass(name, side):
 
 def mirror(name, side):
     x0, x1 = MIRROR_MAX_X - 0.18, MIRROR_MAX_X
-    z = 1.34
+    z = 1.20
     m = Mesh(name, "M_Rubber", side, (CAB_HALF_WIDTH, 1.96, z))
     # The head: a rounded slab.
     loop = resample(fillet_loop([(x0, 2.00), (x1, 2.00), (x1, 2.40), (x0, 2.40)], 0.035), 28, (x0, 2.00))
     m.loft([[(u, v, z + offset) for u, v in loop] for offset in (-0.025, 0.025)])
     # The arms, a bent tube from the door frame to the head and a brace from below.
-    top = windshield_z(2.34) - 0.03
+    top = a_pillar_z(2.34) - 0.03
     m.sweep([(CAB_HALF_WIDTH, 2.34, top), (CAB_HALF_WIDTH + 0.06, 2.38, top + 0.04), (x0 - 0.02, 2.38, z - 0.02), (x0 + 0.08, 2.38, z)], 0.011)
     m.sweep([(CAB_HALF_WIDTH, 1.96, z - 0.05), (CAB_HALF_WIDTH + 0.08, 2.0, z - 0.02), (x0 + 0.08, 2.03, z)], 0.011)
     return m
@@ -913,7 +922,7 @@ def grille_back(name="Grille_Panel_Back"):
 def windshield():
     m = Mesh("Windshield", "M_Glass", 1, (0.0, WINDSHIELD_BASE[1], WINDSHIELD_BASE[0]))
     loop = resample(windshield_outline(), 112, (-1.0, WINDSHIELD_BASE[1]))
-    m.sheet(loop, shrink_loop(loop, 0.02), 2, lambda x, y, depth: front_point(x, y, 0.022 + depth), 0.008)
+    m.sheet(loop, shrink_loop(loop, 0.02), 10, lambda x, y, depth: front_point(x, y, 0.022 + depth), 0.008)
     return m
 
 
@@ -948,8 +957,8 @@ def tail_lamp(name, side):
 
 
 def wiper(name, x):
-    m = Mesh(name, "M_Steel", 1, (x, 2.0, windshield_z(2.0)))
-    m.strut((x, 2.0, windshield_z(2.0) + 0.012), (x - 0.34, 2.18, windshield_z(2.18) + 0.012), 0.012)
+    m = Mesh(name, "M_Steel", 1, (x, 2.0, front_z(x, 2.0)))
+    m.strut((x, 2.0, front_z(x, 2.0) + 0.012), (x - 0.34, 2.18, front_z(x - 0.34, 2.18) + 0.012), 0.012)
     return m
 
 

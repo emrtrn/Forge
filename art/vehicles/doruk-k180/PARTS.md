@@ -1,7 +1,8 @@
 # Doruk K-180: düğüm listesi
 
-Düğüm adları `doruk-k180_greybox.py` ile aynıdır. `partId` değerleri sonraki oturumda
-`*.deformable.json` içine yazılır; bu greybox'ta `dent`/`detach` bağlı değildir.
+Düğüm adları `doruk-k180_greybox.py` ile aynıdır. `partId` değerleri `*.deformable.json` içinde tutulur.
+Bağlı olan: `Front_Bumper` → `front_bumper`, `dent` (VC-2). Diğer parçalar ve `detach` henüz bağlı değildir.
+Yeni parça bağlarken sözleşme §7'deki Doruk K-180 ölçüm kurallarına bak.
 
 Sınıf: **A** = ilk dalgada göçer ve kopar. **B** = yalnız kopar. **C** = yalnız göçer.
 **D** = sonra (fracture, kıymık, P2/P3). **–** = kopmaz.

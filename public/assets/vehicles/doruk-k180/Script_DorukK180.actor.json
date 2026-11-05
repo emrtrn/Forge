@@ -27,6 +27,11 @@
           1.6,
           -0.3
         ],
+        "primitives": [
+          { "shape": "box", "size": [2.45, 2.1, 5.42], "center": [0, 1.6, -1.19] },
+          { "shape": "box", "size": [2.4, 1.2, 1.56], "center": [0, 1.15, 2.3] },
+          { "shape": "box", "size": [2.4, 0.26, 0.22], "center": [0, 0.85, 3.19] }
+        ],
         "simulatePhysics": true,
         "linearDamping": 0.01,
         "angularDamping": 0.6,
@@ -48,6 +53,12 @@
       "props": {
         "asset": "assets/vehicles/doruk-k180/DorukK180.vehicle.json"
       },
+      "parent": "root"
+    },
+    {
+      "id": "dents",
+      "component": "Deformable",
+      "props": {},
       "parent": "root"
     }
   ],

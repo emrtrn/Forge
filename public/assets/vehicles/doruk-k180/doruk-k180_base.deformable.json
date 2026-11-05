@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "enabled": true,
+  "mode": "impact",
+  "dentImpulse": 600,
+  "fullImpulse": 20000,
+  "radius": 0.5,
+  "maxDepth": 0.25,
+  "plasticity": 0.5,
+  "maxDents": 32,
+  "collisionPolicy": "visual_only",
+  "parts": [
+    {
+      "id": "front_bumper",
+      "nodes": [
+        "Front_Bumper"
+      ],
+      "zone": {
+        "min": [
+          -1.25,
+          0.67,
+          3.05
+        ],
+        "max": [
+          1.25,
+          1.03,
+          3.35
+        ]
+      }
+    }
+  ]
+}

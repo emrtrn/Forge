@@ -791,7 +791,7 @@ test("Doruk K-180 fender tears off at speed and leaves the wheel on", async ({ p
   await driveUntil(page, async () => /detached 1/.test(await readDeform()));
   const { dented, pieces, nodes } = await truckParts(page, "actor:1");
   console.log(`[doruk smoke] fender tear ${JSON.stringify(dented)} ${await readDeform()}`);
-  expect(pieces.map((piece) => [piece.name, piece.meshes])).toEqual([["detached-fender_left", ["Fender_FL"]]]);
+  expect(pieces.map((piece) => [piece.name, piece.meshes.sort()])).toEqual([["detached-fender_left", ["Fender_FL", "Fender_FL_Marker"]]]);
   expect(nodes).not.toContain("Fender_FL");
   for (const kept of ["Wheel_FL", "Wheel_FL_Rim", "Engine_Block", "Hood", "Door_L"]) expect(nodes).toContain(kept);
   for (const untouched of UNDER_THE_PANELS) expect(dented).not.toContain(untouched);
@@ -821,13 +821,13 @@ test("Doruk K-180 grille dents under a low beam, with its lamps, and the radiato
 const postAhead = (y: number, height: number, gap: number) => (level: any): void => {
   level.instances = [];
   const floor = level.blockingVolumes[0];
-  level.blockingVolumes = [floor, { ...floor, id: "smoke-post", name: "Smoke Post", position: [0.8, y, 3.33 + gap], size: [0.22, height, 0.5] }];
+  level.blockingVolumes = [floor, { ...floor, id: "smoke-post", name: "Smoke Post", position: [0.88, y, 3.33 + gap], size: [0.22, height, 0.5] }];
   level.worldSettings.pauseMenuWidget = "menu";
   level.actors = [{ classRef: TRUCK, name: "Driven K-180", position: [0, 0, 0], rotation: [0, 0, 0] }];
 };
 
 test("Doruk K-180 headlight dents with its socket on a soft knock and stays on", async ({ page }) => {
-  const { errors, readDeform, open } = await sceneRig(page, postAhead(1.27, 0.4, 0.25), 1);
+  const { errors, readDeform, open } = await sceneRig(page, postAhead(1.25, 0.36, 0.25), 1);
   await open();
   await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Headlight_L");
   await driveUntil(page, async () => (await truckParts(page, "actor:0")).dented.includes("Headlight_L"));
@@ -841,7 +841,7 @@ test("Doruk K-180 headlight dents with its socket on a soft knock and stays on",
 });
 
 test("Doruk K-180 headlight falls out on a hard hit, its socket keeps the dent, a load agrees", async ({ page }, testInfo) => {
-  const { errors, stats, readDeform, open } = await sceneRig(page, postAhead(1.27, 0.4, 10), 1);
+  const { errors, stats, readDeform, open } = await sceneRig(page, postAhead(1.25, 0.36, 10), 1);
   await open();
   await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Headlight_L");
   await driveUntil(page, async () => /detached 1/.test(await readDeform()));
@@ -871,7 +871,7 @@ test("Doruk K-180 headlight falls out on a hard hit, its socket keeps the dent, 
 });
 
 test("Doruk K-180 turn signal falls off on a hit, and the panel behind it dents", async ({ page }) => {
-  const { errors, readDeform, open } = await sceneRig(page, postAhead(1.52, 0.16, 10), 1);
+  const { errors, readDeform, open } = await sceneRig(page, postAhead(1.505, 0.14, 10), 1);
   await open();
   await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Turn_Signal_L");
   await driveUntil(page, async () => /detached 1/.test(await readDeform()));

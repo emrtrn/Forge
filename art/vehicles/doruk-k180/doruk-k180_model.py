@@ -87,12 +87,12 @@ EXPOSED_HIDDEN = {"Front_Bumper", "Hood", "Grille_Panel", "Door_L", "Fender_FL",
                   "Turn_Signal_L", "Turn_Signal_R", "Wiper_L", "Wiper_R"}
 
 MATERIALS = {
-    "M_Body": (0.13, 0.23, 0.37, 0.45),
-    "M_Grille": (0.62, 0.59, 0.52, 0.5),
+    "M_Body": (0.055, 0.14, 0.27, 0.5),
+    "M_Grille": (0.40, 0.39, 0.36, 0.45),
     "M_Steel": (0.05, 0.05, 0.055, 0.6),
     "M_Wood": (0.36, 0.25, 0.14, 0.8),
     "M_Tyre": (0.018, 0.018, 0.018, 0.9),
-    "M_Rim": (0.30, 0.28, 0.25, 0.5),
+    "M_Rim": (0.075, 0.075, 0.08, 0.55),
     "M_Glass": (0.20, 0.30, 0.34, 0.1),
     "M_Lamp": (0.90, 0.85, 0.65, 0.2),
     "M_Amber": (0.85, 0.36, 0.04, 0.3),
@@ -548,6 +548,10 @@ def cabin_shell():
     for side in (1, -1):
         m.sheet(outer, opening, 3, side_point, 0.05, side)
 
+    # Behind the fender's tail: the cab side carries on to the cowl.
+    for side in (1, -1):
+        m.box((side * (half - 0.02), 1.08, FIREWALL_Z), (side * half, HOOD_EDGE_Y + 0.02, HOOD_REAR_Z), (1, 3, 2))
+
     # The front around the windshield.
     outer = resample([(-cab_half(1.82), 1.82), (cab_half(1.82), 1.82), (cab_half(ROOF_BASE_Y), ROOF_BASE_Y),
                       (-cab_half(ROOF_BASE_Y), ROOF_BASE_Y)], 112, (-cab_half(1.82), 1.82))
@@ -572,9 +576,11 @@ def cabin_trim():
     m = Mesh("Cabin_Trim", "M_Rubber")
     # The door seal: a dark rebate behind the shut line, which also keeps daylight out.
     opening = resample(door_outline(DOOR_GAP * 2), 80, (DOOR_Z[0], DOOR_Y[0]))
-    rebate = resample(door_outline(-0.035), 80, (DOOR_Z[0], DOOR_Y[0]))
+    rebate = resample(door_outline(-0.012), 80, (DOOR_Z[0], DOOR_Y[0]))
     for side in (1, -1):
-        m.sheet(opening, rebate, 1, lambda z, y, depth: side_point(z, y, 0.012 + depth), 0.02, side)
+        m.sheet(opening, rebate, 1, lambda z, y, depth: side_point(z, y, 0.012 + depth), 0.012, side)
+        # The maker's badge on the cowl side.
+        m.box((side * CAB_HALF_WIDTH, 1.60, 1.33), (side * (CAB_HALF_WIDTH + 0.006), 1.67, 1.48))
     m.sweep([front_point(u, v, -0.005) for u, v in resample(windshield_outline(), 112, (-1.0, 1.85))], 0.016, True)
     m.sweep([back_point(u, v, -0.006) for u, v in resample(rear_window_outline(), 48, (-0.6, 1.7))], 0.016, True)
     m.sweep([front_point(0.0, 1.875 + i * 0.57 / 8, -0.004) for i in range(9)], 0.016)
@@ -699,19 +705,30 @@ def front_bumper():
     return m
 
 
+def smoothstep(a, b, value):
+    t = clamp01((value - a) / (b - a))
+    return t * t * (3 - 2 * t)
+
+
 def hood_point(z, t, depth=0.0):
-    """t runs from -1 to 1 across the hood, which is crowned and curves back at its corners."""
+    """t runs from -1 to 1 across the hood: crowned, creased down the middle, with a
+    stepped shoulder each side, curving back at the nose and rounded at the rear corners."""
     s = (z - HOOD_REAR_Z) / (HOOD_FRONT_Z - HOOD_REAR_Z)
     half = HOOD_HALF_WIDTH * (1 - 0.025 * (2 * s - 1) ** 2)
     ridge = lerp(HOOD_TOP_Y, HOOD_EDGE_Y + HOOD_FRONT_RISE, s * s)
     roll = 0.045 * clamp01((s - 0.88) / 0.12) ** 2
-    y = HOOD_EDGE_Y + (ridge - HOOD_EDGE_Y - roll) * (1 - abs(t) ** 2.7) - depth
-    return (t * (half - depth * 0.5), y, z - 0.09 * t * t * s)
+    a = abs(t)
+    y = HOOD_EDGE_Y + (ridge - HOOD_EDGE_Y - roll) * (1 - a ** 2.7) - depth
+    fade = math.sin(math.pi * clamp01(s)) ** 0.4
+    y += 0.016 * fade * (1 - smoothstep(0.0, 0.11, a))  # centre crease
+    y -= 0.010 * fade * smoothstep(0.58, 0.66, a)  # shoulder
+    rear = 0.07 * a ** 6 * (1 - clamp01(s / 0.2)) ** 2
+    return (t * (half - depth * 0.5), y, z - 0.09 * t * t * s + rear)
 
 
 def hood():
     m = Mesh("Hood", "M_Body", 1, (0.0, HOOD_TOP_Y, HOOD_REAR_Z))
-    m.patch((HOOD_REAR_Z, HOOD_FRONT_Z + 0.02), (-1.0, 1.0), (20, 30), hood_point, 0.025)
+    m.patch((HOOD_REAR_Z, HOOD_FRONT_Z + 0.02), (-1.0, 1.0), (22, 44), hood_point, 0.025)
     return m
 
 
@@ -721,13 +738,15 @@ def fender(name, side):
     ahead = HOOD_FRONT_Z - FRONT_AXLE_Z
     behind = FRONT_AXLE_Z - FIREWALL_Z
     top = HOOD_EDGE_Y - AXLE_Y
-    inner, outer = FENDER_INNER_X, FENDER_OUTER_X + 0.012
+    inner, wide = FENDER_INNER_X, FENDER_OUTER_X + 0.012
     ra = ARCH_RADIUS
     rings = []
     steps = 44
     for i in range(steps + 1):
         degrees = lerp(FENDER_FRONT_ANGLE, FENDER_REAR_ANGLE, i / steps)
         angle = math.radians(degrees)
+        # The tail eases in towards the door instead of ending proud of it.
+        outer = lerp(wide, CAB_HALF_WIDTH + 0.02, smoothstep(135.0, FENDER_REAR_ANGLE, degrees))
         c, s = math.cos(angle), math.sin(angle)
         n = 8.0
         rb = ((abs(c) / (ahead if c >= 0 else behind)) ** n + (s / top) ** n) ** (-1 / n)
@@ -744,12 +763,42 @@ def fender(name, side):
     return m
 
 
+def fender_marker(name, side):
+    m = Mesh(name, "M_Amber", side, (1.19, 1.36, 2.66))
+    m.revolve((1.19, 1.36, 2.66), [(-0.006, 0.002), (-0.006, 0.034), (0.012, 0.03), (0.02, 0.018), (0.024, 0.002)], "x", 16)
+    return m
+
+
+def inner_fender(name, side):
+    """The wheel well's inner wall and roof: what shows once the fender has gone."""
+    m = Mesh(name, "M_Steel", side, (0.62, 1.15, FRONT_AXLE_Z))
+    x0, x1 = 0.62, FENDER_INNER_X + 0.01
+    radius = ARCH_RADIUS + 0.03
+    low = 0.76
+    start = math.asin((low - AXLE_Y) / radius)
+    arch = [(FRONT_AXLE_Z + radius * math.cos(a), AXLE_Y + radius * math.sin(a))
+            for a in (lerp(start, math.pi - start, i / 36) for i in range(37))]
+    outer = resample([(HOOD_FRONT_Z - 0.02, low), (HOOD_FRONT_Z - 0.02, HOOD_EDGE_Y - 0.02),
+                      (FIREWALL_Z + 0.03, HOOD_EDGE_Y - 0.02), (FIREWALL_Z + 0.03, low)], 72, (HOOD_FRONT_Z, low))
+    hole = resample(arch, 72, (HOOD_FRONT_Z, low))
+    m.sheet(outer, hole, 2, lambda z, y, depth: (x0 - depth, y, z), 0.012)
+    m.patch((0.0, 1.0), (x0, x1), (24, 3),
+            lambda t, x, depth: (x, AXLE_Y + (radius - depth) * math.sin(lerp(start, math.pi - start, t)),
+                                 FRONT_AXLE_Z + (radius - depth) * math.cos(lerp(start, math.pi - start, t))), 0.012)
+    return m
+
+
 def door(name, side):
     m = Mesh(name, "M_Body", side, (CAB_HALF_WIDTH, DOOR_WINDOW_Y, DOOR_Z[1]))
     count = 80
     outer = resample(door_outline(), count, (DOOR_Z[0], DOOR_Y[0]))
     inner = resample(window_outline(), count, (DOOR_Z[0], DOOR_Y[0]))
     m.sheet(outer, inner, 9, side_point, DOOR_SKIN)
+    # Pressed lines: the belt under the window and a frame round the lower panel.
+    belt = DOOR_WINDOW_Y - 0.035
+    m.sweep([side_point(lerp(DOOR_Z[0] + 0.05, DOOR_Z[1] - 0.05, i / 18), belt, -0.002) for i in range(19)], 0.009, sides=6, squash=0.5)
+    frame = resample(fillet_loop([(0.22, 1.05), (1.14, 1.05), (1.14, 1.50), (0.22, 1.50)], 0.07), 64, (0.22, 1.05))
+    m.sweep([side_point(z, y, -0.002) for z, y in frame], 0.008, True, sides=6, squash=0.5)
     return m
 
 
@@ -791,9 +840,10 @@ def mirror(name, side):
     return m
 
 
-HEADLIGHT = (0.80, 1.28)
-HEADLIGHT_RADIUS = 0.115
-SIGNAL_Y = 1.525
+HEADLIGHT = (0.88, 1.25)
+HEADLIGHT_RADIUS = 0.135
+SOCKET_RADIUS = 0.146
+SIGNAL_Y = 1.505
 
 
 def circle(centre, radius, count, start=None):
@@ -803,33 +853,56 @@ def circle(centre, radius, count, start=None):
 
 
 def grille_panel():
-    """The cast surround: a stepped centre frame, two lamp pods with real sockets, and the bars."""
+    """One cast surround from fender to fender: a shallow raised centre, two lamp pods with
+    real sockets, a rolled lip along its whole outer edge, and the bars."""
     m = Mesh("Grille_Panel", "M_Grille", 1, (0.0, 1.33, 3.00))
     z1 = 3.08
+    centre_x = 0.64
+    # The centre, a hair proud of the pods.
+    corners = [(-centre_x, 1.005), (centre_x, 1.005), (centre_x, 1.655), (0.0, 1.676), (-centre_x, 1.655)]
+    outer = resample(fillet_loop(corners, (0.0, 0.0, 0.0, 1.6, 0.0), 10), 84, (-centre_x, 1.005))
+    hole_loop = fillet_loop([(-0.575, 1.075), (0.575, 1.075), (0.575, 1.595), (-0.575, 1.595)], 0.05, 8)
+    hole = resample(hole_loop, 84, (-centre_x, 1.005))
+    front = z1 + 0.008
+    m.sheet(outer, hole, 3, lambda u, v, depth: (u, v, front - depth), 0.10)
+    m.sweep([(u, v, front + 0.002) for u, v in hole], 0.012, True, sides=6)
+    # The lamp pods.
+    pod = fillet_loop([(centre_x, 1.005), (1.12, 1.005), (1.12, 1.47), (0.98, 1.59), (0.72, 1.63), (centre_x, 1.655)],
+                      (0.0, 0.09, 0.10, 0.20, 0.10, 0.0), 8)
     place = lambda u, v, depth: (u, v, z1 - depth)
-    # Centre frame.
-    outer = resample(fillet_loop([(-0.58, 1.00), (0.58, 1.00), (0.58, 1.66), (-0.58, 1.66)], 0.03), 56, (-0.58, 1.00))
-    hole = resample(fillet_loop([(-0.50, 1.07), (0.50, 1.07), (0.50, 1.59), (-0.50, 1.59)], 0.045), 56, (-0.58, 1.00))
-    m.sheet(outer, hole, 3, lambda u, v, depth: (u, v, z1 + 0.012 - depth), 0.10)
-    # Lamp pods.
-    pod = fillet_loop([(0.58, 1.02), (1.03, 1.02), (1.03, 1.64), (0.58, 1.64)], (0.0, 0.10, 0.14, 0.0))
+    cx, cy = HEADLIGHT
     for side in (1, -1):
-        outer = resample(pod, 56, (0.58, 1.02))
-        sock = circle(HEADLIGHT, 0.126, 56, (0.58, 1.02))
-        m.sheet(outer, sock, 4, place, 0.08, side)
-        cx, cy = HEADLIGHT
-        m.cylinder((side * cx, cy, 3.01), 0.126, 0.02, "z", 24)  # socket floor
-        # The lamp's bezel, proud of the pod.
-        m.revolve((side * cx, cy, 3.085), [(-0.012, 0.122), (-0.012, 0.150), (0.006, 0.146), (0.014, 0.130), (0.008, 0.120)], "z", 32)
-        # The signal's housing above it.
-        lens = fillet_loop([(cx - 0.125, SIGNAL_Y - 0.052), (cx + 0.125, SIGNAL_Y - 0.052), (cx + 0.125, SIGNAL_Y + 0.052), (cx - 0.125, SIGNAL_Y + 0.052)], 0.035)
-        m.loft([[(side * u, v, z) for u, v in resample(lens, 28, (cx - 0.13, SIGNAL_Y - 0.05))] for z in (3.08, 3.098)])
-    # Bars: six across, three upright behind them.
+        outer_pod = resample(pod, 72, (centre_x, 1.005))
+        m.sheet(outer_pod, circle(HEADLIGHT, SOCKET_RADIUS, 72, (centre_x, 1.005)), 4, place, 0.08, side)
+        m.cylinder((side * cx, cy, 3.01), SOCKET_RADIUS, 0.02, "z", 28)  # socket floor
+    # A rolled lip along the top and the outer edges.
+    edge = [p for p in pod if p[0] > centre_x + 0.001 or p[1] > 1.6]
+    edge = sorted(edge, key=lambda p: -p[0])  # from the outer side, up and over to the centre
+    top = [(u, v, z1 + 0.003) for u, v in edge]
+    crown = [(u, v, front + 0.003) for u, v in fillet_loop(corners, (0.0, 0.0, 0.0, 1.6, 0.0), 10) if v > 1.6]
+    crown = sorted(crown, key=lambda p: -p[0])
+    mirrored = [(-u, v, w) for u, v, w in reversed(top)]
+    m.sweep(top + crown + mirrored, 0.012, sides=6)
+    # Bars: six across, three upright behind them, a badge in the middle.
     for i in range(6):
-        y = lerp(1.115, 1.545, i / 5)
-        m.sweep([(lerp(-0.51, 0.51, k / 8), y, 3.055) for k in range(9)], 0.017, sides=6, squash=0.6)
-    for x in (-0.30, 0.0, 0.30):
-        m.box((x - 0.018, 1.06, 3.02), (x + 0.018, 1.60, 3.05))
+        y = lerp(1.115, 1.555, i / 5)
+        m.sweep([(lerp(-0.585, 0.585, k / 8), y, 3.066) for k in range(9)], 0.023, sides=8, squash=0.5)
+    for x in (-0.33, 0.0, 0.33):
+        m.box((x - 0.016, 1.06, 3.015), (x + 0.016, 1.60, 3.05))
+    m.revolve((0.0, 1.335, 3.08), [(-0.006, 0.002), (-0.006, 0.04), (0.008, 0.036), (0.012, 0.002)], "z", 16)
+    return m
+
+
+def grille_back(name="Grille_Panel_Back"):
+    """The dark behind the bars, the lamp bezels and the signal housings."""
+    m = Mesh(name, "M_Rubber", 1, (0.0, 1.33, 3.00))
+    m.box((-0.585, 1.06, 2.995), (0.585, 1.61, 3.012), (6, 4, 1))
+    cx, cy = HEADLIGHT
+    for side in (1, -1):
+        m.revolve((side * cx, cy, 3.085), [(-0.012, SOCKET_RADIUS - 0.004), (-0.012, SOCKET_RADIUS + 0.03), (0.006, SOCKET_RADIUS + 0.026),
+                                           (0.015, SOCKET_RADIUS + 0.008), (0.008, SOCKET_RADIUS - 0.006)], "z", 36)
+        lens = fillet_loop([(cx - 0.125, SIGNAL_Y - 0.05), (cx + 0.125, SIGNAL_Y - 0.05), (cx + 0.125, SIGNAL_Y + 0.05), (cx - 0.125, SIGNAL_Y + 0.05)], 0.035)
+        m.loft([[(side * u, v, z) for u, v in resample(lens, 28, (cx - 0.13, SIGNAL_Y - 0.05))] for z in (3.08, 3.098)])
     return m
 
 
@@ -851,7 +924,7 @@ def headlight(name, side):
     """A domed lens in the socket."""
     m = Mesh(name, "M_Lamp", side, (HEADLIGHT[0], HEADLIGHT[1], 3.03))
     m.revolve((HEADLIGHT[0], HEADLIGHT[1], 3.05), [(-0.03, HEADLIGHT_RADIUS), (0.018, HEADLIGHT_RADIUS),
-                                                    (0.032, 0.095), (0.042, 0.06), (0.047, 0.02), (0.048, 0.001), (-0.03, 0.001)], "z", 32)
+                                                    (0.034, 0.112), (0.045, 0.07), (0.047, 0.02), (0.048, 0.001), (-0.03, 0.001)], "z", 32)
     return m
 
 
@@ -1070,12 +1143,14 @@ def build():
 
     b.add(front_bumper(), parts)
     b.add(hood(), parts)
-    b.add(grille_panel(), parts)
+    b.add(grille_back(), b.add(grille_panel(), parts))
     b.add(windshield(), parts)
     b.add(rear_window(), parts)
     fender_names = {"L": "Fender_FL", "R": "Fender_FR"}
     for suffix, side in SIDES:
-        b.add(fender(fender_names[suffix], side), parts)
+        fender_object = b.add(fender(fender_names[suffix], side), parts)
+        b.add(fender_marker(f"{fender_names[suffix]}_Marker", side), fender_object)
+        b.add(inner_fender(f"Inner_Fender_{suffix}", side), chassis)
         door_object = b.add(door(f"Door_{suffix}", side), parts)
         b.add(side_glass(f"SideGlass_{suffix}", side), door_object)
         b.add(door_trim(f"Door_{suffix}_Trim", side), door_object)

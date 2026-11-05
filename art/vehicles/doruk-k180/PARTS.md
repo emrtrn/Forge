@@ -1,7 +1,7 @@
 # Doruk K-180: düğüm listesi
 
 Düğüm adları `doruk-k180_model.py` ile aynıdır. `partId` değerleri `*.deformable.json` içinde tutulur.
-Bağlı olanlar, `dent` + `detach`: `Front_Bumper` → `front_bumper`, `Door_L/R` → `door_left/right` (cam kapıyla gider), `Mirror_L/R` → `mirror_left/right`, `Hood` → `hood`, `Fender_FL/FR` → `fender_left/right`.
+Bağlı olanlar, `dent` + `detach`: `Front_Bumper` → `front_bumper`, `Door_L/R` → `door_left/right` (cam ve ayna kapıyla gider), `Mirror_L/R` → `mirror_left/right` (kapının çocuğu, tek başına da kopar), `Hood` → `hood`, `Fender_FL/FR` → `fender_left/right`.
 `dent` + `detach`, `alsoDents` ile: `Headlight_L/R` → `headlight_left/right`, `Turn_Signal_L/R` → `turn_signal_left/right`.
 Aynı şekilde: `Tail_Lamp_L/R` → `tail_lamp_left/right`, `Rear_Bumper` → `rear_bumper`, `Tailgate` + `Cargo_Latch_L/R` → `tailgate`, `Wood_Side_Panel_L/R` + dört `Cargo_Stake` → `bed_side_left/right`.
 Yalnız `dent`: `Grille_Panel` + `Grille_Panel_Back` → `front_grille` (far yuvası bu meshtedir), `Fuel_Tank` → `fuel_tank`.
@@ -20,12 +20,12 @@ DorukK180
 │   │   └── Cabin_Trim       – cam kauçukları, ön cam orta dikmesi, yağmur oluğu, kapı fitili
 │   ├── Cabin_Interior       – koltuk, torpido, direksiyon, pedal, vites
 │   ├── Engine_Block         – motor ve radyatör kutusu
-│   ├── Inner_Fender_L/R     – iç davlumbaz, çamurluk kopunca görünür
+│   ├── Inner_Fender_L/R     – kapalı iç davlumbaz: kemerden motor görünmez, çamurluk kopunca açığa çıkar
 │   ├── Tow_Hook_L/R         – şasiye bağlı, tampon kopunca yerinde kalır
 │   ├── Fuel_Tank            C  sol, iki aks arası
 │   ├── Rear_Bumper          D
 │   ├── Cab_Step_L/R         D
-│   └── Mudflap_FL/FR/RL/RR  D
+│   └── Mudflap_FL/FR/RL/RR  D  önler torpido duvarına bağlı, arkalar şasiye gergili
 ├── PARTS
 │   ├── Front_Bumper         A  P0 demonstratör, pivot: arka yüz ortası
 │   ├── Hood                 A  pivot: arka menteşe hattı
@@ -33,8 +33,8 @@ DorukK180
 │   │   └── Fender_FL/FR_Marker  yan işaret lambası, çamurlukla kopar
 │   ├── Door_L/R             A  pivot: ön menteşe hattı
 │   │   ├── SideGlass_L/R    D  kapının çocuğu, kapıyla kopar
-│   │   └── Door_L/R_Trim    –  cam kauçuğu, havalandırma dikmesi, kol, menteşe; kapıyla kopar
-│   ├── Mirror_L/R           B  pivot: kol bağlantısı
+│   │   ├── Door_L/R_Trim    –  cam kauçuğu, havalandırma dikmesi, kol, menteşe; kapıyla kopar
+│   │   └── Mirror_L/R       B  iki ayağı kapıda, pivot: alt ayak; kapıyla kopar, tek başına da kopar
 │   ├── Grille_Panel         D  far yuvalarını içerir
 │   │   └── Grille_Panel_Back    koyu arka plan, far çerçeveleri, sinyal yuvaları
 │   ├── Windshield           D  fracture, R-11 bekler

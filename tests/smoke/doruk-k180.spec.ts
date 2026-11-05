@@ -636,11 +636,13 @@ test("Doruk K-180 door tears off with its window at speed, and a save keeps it o
   const torn = await truckParts(page, "actor:1");
   console.log(`[doruk smoke] door tear ${JSON.stringify(torn.dented)} ${await readDeform()}`);
   expect(torn.pieces.filter((piece) => piece.name.endsWith("door_left")).map((piece) => piece.meshes.sort()))
-    .toEqual([["Door_L", "Door_L_Trim", "SideGlass_L"]]);
+    .toEqual([["Door_L", "Door_L_Trim", "Mirror_L", "SideGlass_L"]]);
   expect(torn.pieces.find((piece) => piece.name.endsWith("door_left"))!.dented).toBe(true);
   expect(torn.nodes).not.toContain("Door_L");
   expect(torn.nodes).not.toContain("SideGlass_L");
-  for (const kept of ["Door_R", "SideGlass_R", "Mirror_L", "Mirror_R", "Front_Bumper", "Cabin_Interior"]) expect(torn.nodes).toContain(kept);
+  // Both of the mirror's arms stand on the door.
+  expect(torn.nodes).not.toContain("Mirror_L");
+  for (const kept of ["Door_R", "SideGlass_R", "Mirror_R", "Front_Bumper", "Cabin_Interior"]) expect(torn.nodes).toContain(kept);
   for (const untouched of BEHIND_THE_DOOR) expect(torn.dented).not.toContain(untouched);
   // The car backs out of the picture.
   await page.keyboard.down("KeyS");
@@ -660,6 +662,7 @@ test("Doruk K-180 door tears off with its window at speed, and a save keeps it o
   const loaded = await truckParts(page, "actor:1");
   expect(loaded.nodes).not.toContain("Door_L");
   expect(loaded.nodes).not.toContain("SideGlass_L");
+  expect(loaded.nodes).not.toContain("Mirror_L");
   expect(loaded.nodes).toContain("Door_R");
   expect(errors).toEqual([]);
 });

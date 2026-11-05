@@ -230,7 +230,9 @@ engine/editor.
   `detach` (`impulse`, `massKg`, `kick`) tears its live nodes off into a body of
   their own, dents included. `alsoDents` lists parts a hit on this one also dents at
   the same spot, each with a dent of its own (a lamp and the panel it sits in), one
-  step only. The save-game keeps which parts are gone
+  step only. A part whose node sits under another part's node rides on it (a mirror
+  on a door): it can leave alone, and otherwise leaves with its carrier, in its piece
+  and in the box of its body. The save-game keeps which parts are gone
   (`detachedParts`), not the loose piece; loading a save from before the hit puts
   the part back. Such a piece starts inside its car, so the pair passes through until apart
   (`PhysicsSubsystem.passThroughUntilApart`): Rapier reads hooks only on a step

@@ -13,6 +13,8 @@
  *   that part's meshes. If it finds no surface there it lands on the body.
  * - A part that tears off moves as it is: its live nodes change parent, so the
  *   dents, materials and world pose carry over. Nothing is swapped for a clean copy.
+ * - A part whose node sits under another part's node rides on it, as a mirror on a
+ *   door: it can leave alone, and leaves with the part that carries it.
  */
 import {
   BufferGeometry,
@@ -162,9 +164,11 @@ export class DentTarget {
   /** Takes a part off the object with its dents; null when it has nothing left to take. */
   detachPart(id: string): DetachedPiece | null {
     const meshes = this.ensureMeshes();
-    const items = meshes.filter((item) => item.part === id);
-    if (items.length === 0) return null;
-    const nodes = this.partNodes(items);
+    const own = meshes.filter((item) => item.part === id);
+    if (own.length === 0) return null;
+    const nodes = this.partNodes(own);
+    const riders = this.ridersOf(id, nodes);
+    const items = meshes.filter((item) => item.part === id || riders.has(item.part));
     const homes = nodes.map((node) => ({
       node, parent: node.parent, position: node.position.clone(), quaternion: node.quaternion.clone(), scale: node.scale.clone(),
     }));
@@ -197,6 +201,7 @@ export class DentTarget {
     for (const node of nodes) object.attach(node);
 
     this.forgetPart(id);
+    for (const rider of riders) this.forgetPart(rider!);
     const outward = new Vector3(centre.x, 0, centre.z);
     if (outward.lengthSq() > 0) outward.normalize().applyQuaternion(quaternion);
     const euler = new Euler().setFromQuaternion(quaternion, "XYZ");
@@ -233,17 +238,32 @@ export class DentTarget {
    * since, or a save says it is gone. {@link dispose} puts it back.
    */
   removePart(id: string): void {
-    const items = this.ensureMeshes().filter((item) => item.part === id);
-    for (const node of this.partNodes(items)) {
+    const meshes = this.ensureMeshes();
+    const nodes = this.partNodes(meshes.filter((item) => item.part === id));
+    const riders = this.ridersOf(id, nodes);
+    for (const node of nodes) {
       this.removed.push({ node, parent: node.parent });
       node.removeFromParent();
     }
-    for (const item of items) {
-      if (!item.written) continue;
+    for (const item of meshes) {
+      if ((item.part !== id && !riders.has(item.part)) || !item.written) continue;
       item.mesh.geometry = item.original;
       if (item.written.userData[DEFORM_CLONE_FLAG] === true) item.written.dispose();
     }
     this.forgetPart(id);
+    for (const rider of riders) this.forgetPart(rider!);
+  }
+
+  /** The other parts whose meshes hang under a part's nodes. */
+  private ridersOf(id: string, nodes: readonly Object3D[]): Set<string | null> {
+    const riders = new Set<string | null>();
+    for (const { mesh, part } of this.meshes ?? []) {
+      if (part === null || part === id) continue;
+      for (let node: Object3D | null = mesh; node; node = node === this.root ? null : node.parent) {
+        if (nodes.includes(node)) riders.add(part);
+      }
+    }
+    return riders;
   }
 
   /** Dents the object where an impact landed. `direction` is a world unit vector, into the object. */

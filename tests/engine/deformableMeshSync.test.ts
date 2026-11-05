@@ -307,6 +307,62 @@ export function registerDeformableMeshSyncTests(check: (label: string, run: () =
     assert.deepEqual(target.dentList.map((dent) => dent.part), [undefined]);
   });
 
+  /** The door, with a "Mirror" node of its own hanging under the door's node. */
+  const doorWithMirror = (): { car: ReturnType<typeof twoPieceObject>; mirror: Mesh; parts: DentPart[] } => {
+    const car = twoPieceObject();
+    const mirror = new Mesh(panel(1));
+    mirror.name = "Mirror";
+    mirror.position.set(1, 0, 0.5);
+    car.door.parent!.add(mirror);
+    const parts = [
+      { id: "mirror", nodes: ["Mirror"], zone: { min: [2, -1, 0.4], max: [4, 1, 1] } },
+      DOOR_PART,
+    ];
+    return { car, mirror, parts };
+  };
+
+  check("deformable mesh: a part under another part's node leaves with it", () => {
+    const { car, mirror, parts } = doorWithMirror();
+    const target = new DentTarget(car.root, { parts });
+    target.hit([3, 0, 0.6], INTO, 0.05, params);
+    assert.equal(target.lastPart, "mirror");
+    const dentedShape = positionsOf(mirror.geometry);
+    const piece = target.detachPart("door")!;
+    assert.equal(mirror.parent, car.door.parent, "the mirror stays on the door");
+    assert.equal(piece.object.children[0], car.door.parent);
+    assert.equal(mirror.geometry.getAttribute("position").count, dentedShape.length / 3);
+    assert.deepEqual(positionsOf(mirror.geometry), dentedShape, "and keeps its dent");
+    assert.deepEqual(target.dentList, [], "neither part's dents describe the object any more");
+    assert.equal(target.detachPart("mirror"), null, "it cannot leave a second time");
+    assert.deepEqual(target.unmatchedParts(), [], "a part that rode away is not a broken sidecar");
+    assert.equal(target.partAt([3, 0, 0.6], INTO, 0.5), null, "a later hit there finds the body");
+  });
+
+  check("deformable mesh: a part on another part's node can still leave alone", () => {
+    const { car, mirror, parts } = doorWithMirror();
+    const target = new DentTarget(car.root, { parts });
+    const piece = target.detachPart("mirror")!;
+    assert.equal(piece.object.children[0], mirror);
+    assert.ok(car.door.parent!.parent === car.root, "the door stays on the car");
+    assert.equal(target.lastPart, null);
+    assert.ok(target.detachPart("door"), "and leaves on its own later");
+  });
+
+  check("deformable mesh: a removed part takes the parts on its node with it", () => {
+    const { car, mirror, parts } = doorWithMirror();
+    const target = new DentTarget(car.root, { parts });
+    const doorNode = car.door.parent!;
+    target.removePart("door");
+    target.removePart("mirror");
+    assert.equal(doorNode.parent, null);
+    target.restore([{ point: [3, 0, 0.5], direction: INTO, depth: 0.1, part: "mirror" }], params);
+    assert.deepEqual(target.dentList, [], "a saved dent on the mirror is gone with it");
+    assert.deepEqual(target.unmatchedParts(), []);
+    target.dispose();
+    assert.equal(doorNode.parent, car.root);
+    assert.equal(mirror.parent, doorNode);
+  });
+
   check("deformable mesh: a removed part leaves the object and its old dents stay off the body", () => {
     const car = twoPieceObject();
     const doorNode = car.door.parent!;

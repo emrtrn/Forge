@@ -39,3 +39,6 @@ public/layouts/WbTestValley.landscapes/
 
 # Ad-hoc Playwright reports and traces
 /output/
+
+# Blender numbered backups of the art/ masters
+*.blend[0-9]*

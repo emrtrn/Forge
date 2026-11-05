@@ -327,13 +327,190 @@
       ]
     },
     {
+      "id": "fuel_tank",
+      "nodes": [
+        "Fuel_Tank"
+      ],
+      "zone": {
+        "min": [
+          0.55,
+          0.46,
+          -1.25
+        ],
+        "max": [
+          1.45,
+          1.25,
+          -0.2
+        ]
+      }
+    },
+    {
+      "id": "tail_lamp_left",
+      "nodes": [
+        "Tail_Lamp_L"
+      ],
+      "zone": {
+        "min": [
+          0.72,
+          0.87,
+          -3.95
+        ],
+        "max": [
+          1.15,
+          1.05,
+          -3.75
+        ]
+      },
+      "detach": {
+        "impulse": 8000,
+        "massKg": 1,
+        "kick": 1
+      },
+      "alsoDents": [
+        "rear_bumper"
+      ]
+    },
+    {
+      "id": "tail_lamp_right",
+      "nodes": [
+        "Tail_Lamp_R"
+      ],
+      "zone": {
+        "min": [
+          -1.15,
+          0.87,
+          -3.95
+        ],
+        "max": [
+          -0.72,
+          1.05,
+          -3.75
+        ]
+      },
+      "detach": {
+        "impulse": 8000,
+        "massKg": 1,
+        "kick": 1
+      },
+      "alsoDents": [
+        "rear_bumper"
+      ]
+    },
+    {
+      "id": "rear_bumper",
+      "nodes": [
+        "Rear_Bumper"
+      ],
+      "zone": {
+        "min": [
+          -1.15,
+          0.46,
+          -3.95
+        ],
+        "max": [
+          1.15,
+          1.25,
+          -3.75
+        ]
+      },
+      "detach": {
+        "impulse": 18000,
+        "massKg": 40,
+        "kick": 0.5
+      },
+      "alsoDents": [
+        "tail_lamp_left",
+        "tail_lamp_right"
+      ]
+    },
+    {
+      "id": "tailgate",
+      "nodes": [
+        "Tailgate",
+        "Cargo_Latch_L",
+        "Cargo_Latch_R"
+      ],
+      "zone": {
+        "min": [
+          -1.2,
+          1.25,
+          -3.95
+        ],
+        "max": [
+          1.2,
+          2.1,
+          -3.6
+        ]
+      },
+      "detach": {
+        "impulse": 12000,
+        "massKg": 50,
+        "kick": 0.5
+      }
+    },
+    {
+      "id": "bed_side_left",
+      "nodes": [
+        "Wood_Side_Panel_L",
+        "Cargo_Stake_L1",
+        "Cargo_Stake_L2",
+        "Cargo_Stake_L3",
+        "Cargo_Stake_L4"
+      ],
+      "zone": {
+        "min": [
+          1.1,
+          0.46,
+          -3.86
+        ],
+        "max": [
+          1.45,
+          2.1,
+          -0.06
+        ]
+      },
+      "detach": {
+        "impulse": 15000,
+        "massKg": 80,
+        "kick": 0.5
+      }
+    },
+    {
+      "id": "bed_side_right",
+      "nodes": [
+        "Wood_Side_Panel_R",
+        "Cargo_Stake_R1",
+        "Cargo_Stake_R2",
+        "Cargo_Stake_R3",
+        "Cargo_Stake_R4"
+      ],
+      "zone": {
+        "min": [
+          -1.45,
+          0.46,
+          -3.86
+        ],
+        "max": [
+          -1.1,
+          2.1,
+          -0.06
+        ]
+      },
+      "detach": {
+        "impulse": 15000,
+        "massKg": 80,
+        "kick": 0.5
+      }
+    },
+    {
       "id": "rigid_core",
       "nodes": [
         "Cabin_Interior",
         "Engine_Block",
         "Chassis_Frame",
         "Windshield",
-        "Rear_Window"
+        "Rear_Window",
+        "Bed_Base"
       ],
       "zone": {
         "min": [

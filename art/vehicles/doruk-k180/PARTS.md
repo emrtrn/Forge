@@ -3,8 +3,9 @@
 Düğüm adları `doruk-k180_greybox.py` ile aynıdır. `partId` değerleri `*.deformable.json` içinde tutulur.
 Bağlı olanlar, `dent` + `detach`: `Front_Bumper` → `front_bumper`, `Door_L/R` → `door_left/right` (cam kapıyla gider), `Mirror_L/R` → `mirror_left/right`, `Hood` → `hood`, `Fender_FL/FR` → `fender_left/right`.
 `dent` + `detach`, `alsoDents` ile: `Headlight_L/R` → `headlight_left/right`, `Turn_Signal_L/R` → `turn_signal_left/right`.
-Yalnız `dent`: `Grille_Panel` → `front_grille`, far yuvası bu meshtedir.
-Hiç göçmez: `Cabin_Interior`, `Engine_Block`, `Chassis_Frame`, `Windshield`, `Rear_Window` → `rigid_core` (bölgesi modelin dışında).
+Aynı şekilde: `Tail_Lamp_L/R` → `tail_lamp_left/right`, `Rear_Bumper` → `rear_bumper`, `Tailgate` + `Cargo_Latch_L/R` → `tailgate`, `Wood_Side_Panel_L/R` + dört `Cargo_Stake` → `bed_side_left/right`.
+Yalnız `dent`: `Grille_Panel` → `front_grille` (far yuvası bu meshtedir), `Fuel_Tank` → `fuel_tank`.
+Hiç göçmez: `Cabin_Interior`, `Engine_Block`, `Chassis_Frame`, `Windshield`, `Rear_Window`, `Bed_Base` → `rigid_core` (bölgesi modelin dışında).
 Kalan her mesh gövdedir. Aşağıdaki sınıflar ilk plandır; güncel durum bu listedir.
 Yeni parça bağlarken sözleşme §7'deki Doruk K-180 ölçüm kurallarına bak.
 

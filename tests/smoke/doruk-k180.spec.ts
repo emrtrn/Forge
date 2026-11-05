@@ -222,8 +222,8 @@ test("the Static Mesh Editor shows the Doruk K-180 parts from its sidecar", asyn
   const editor = page.locator(".sm-editor-overlay");
   await expect(editor.locator("[data-sm-status]")).toHaveText("Ready.", { timeout: 30_000 });
   const section = editor.locator("[data-sm-deformable]");
-  await expect(section.locator("[data-sm-deformable-parts]")).toHaveAttribute("data-zones", "14");
-  for (const part of ["mirror_left", "door_right", "front_bumper", "hood", "fender_left", "headlight_left", "turn_signal_right", "front_grille", "rigid_core"]) {
+  await expect(section.locator("[data-sm-deformable-parts]")).toHaveAttribute("data-zones", "21");
+  for (const part of ["mirror_left", "door_right", "front_bumper", "hood", "fender_left", "headlight_left", "turn_signal_right", "front_grille", "fuel_tank", "tail_lamp_left", "rear_bumper", "tailgate", "bed_side_right", "rigid_core"]) {
     await expect(section.locator(`[data-sm-part="${part}"]`)).toBeVisible();
   }
   await expect(section.locator('[data-sm-deformable-part-node] option[value="Front_Bumper"]')).toHaveCount(0);
@@ -881,5 +881,156 @@ test("Doruk K-180 turn signal falls off on a hit, and the panel behind it dents"
   expect(nodes).not.toContain("Turn_Signal_L");
   expect(nodes).toContain("Headlight_L");
   expect(dented).toContain("Grille_Panel");
+  expect(errors).toEqual([]);
+});
+
+/** The car stays pawn and meets the truck's left bed side, over the rear axle. */
+const bedSide = (truckZ: number) => (level: any): void => {
+  level.instances = [];
+  level.blockingVolumes = [level.blockingVolumes[0]];
+  level.actors = [level.actors[0], { classRef: TRUCK, name: "Parked K-180", position: [2.6, 0, truckZ], rotation: [0, 90, 0] }];
+};
+
+/** The car stays pawn and runs into the back of the truck, parked facing away. */
+const rearEnd = (tailZ: number) => (level: any): void => {
+  level.instances = [];
+  level.blockingVolumes = [level.blockingVolumes[0]];
+  level.actors = [level.actors[0], { classRef: TRUCK, name: "Parked K-180", position: [0, 0, tailZ + 3.9], rotation: [0, 0, 0] }];
+};
+
+/** An obstacle behind the truck: it backs into it from `gap` metres. */
+const behind = (x: number, y: number, size: [number, number, number], gap: number) => (level: any): void => {
+  level.instances = [];
+  const floor = level.blockingVolumes[0];
+  level.blockingVolumes = [floor, { ...floor, id: "smoke-rear", name: "Smoke Rear", position: [x, y, -3.9 - gap - size[2] / 2], size }];
+  level.actors = [{ classRef: TRUCK, name: "Driven K-180", position: [0, 0, 0], rotation: [0, 0, 0] }];
+};
+
+async function reverseUntil(page: Page, settle: () => Promise<boolean>): Promise<void> {
+  await page.locator("#game-canvas").click();
+  await page.keyboard.down("KeyS");
+  await expect.poll(settle, { timeout: 70_000 }).toBe(true);
+  await page.keyboard.up("KeyS");
+  await page.waitForTimeout(1500);
+}
+
+/** What rides under and inside the bed, and must not follow a side or tail hit. */
+const UNDER_THE_BED = ["Bed_Base", "Fuel_Tank", ...UNDER_THE_PANELS];
+
+test("Doruk K-180 bed side dents under a car at town speed, and the bed floor stays", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, bedSide(14));
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:1")).nodes).toContain("Wood_Side_Panel_L");
+  await driveUntil(page, async () => (await truckParts(page, "actor:1")).dented.includes("Wood_Side_Panel_L"));
+  const { dented, pieces } = await truckParts(page, "actor:1");
+  console.log(`[doruk smoke] bed side dent ${JSON.stringify(dented)} ${await readDeform()}`);
+  for (const untouched of [...UNDER_THE_BED, "Wood_Side_Panel_R"]) expect(dented).not.toContain(untouched);
+  expect(pieces).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 bed side tears off whole at speed, stakes and all", async ({ page }, testInfo) => {
+  const { errors, readDeform, open } = await sceneRig(page, bedSide(70));
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:1")).nodes).toContain("Wood_Side_Panel_L");
+  await driveUntil(page, async () => /detached 1/.test(await readDeform()));
+  const { dented, nodes, pieces } = await truckParts(page, "actor:1");
+  console.log(`[doruk smoke] bed side tear ${JSON.stringify(dented)} ${await readDeform()}`);
+  expect(pieces.map((piece) => [piece.name, piece.meshes.sort()])).toEqual([["detached-bed_side_left",
+    ["Cargo_Stake_L1", "Cargo_Stake_L2", "Cargo_Stake_L3", "Cargo_Stake_L4", "Wood_Side_Panel_L"]]]);
+  for (const kept of ["Bed_Base", "Tailgate", "Wood_Side_Panel_R", "Wheel_RL"]) expect(nodes).toContain(kept);
+  for (const untouched of UNDER_THE_BED) expect(dented).not.toContain(untouched);
+  await page.keyboard.down("KeyS");
+  await page.waitForTimeout(3500);
+  await page.keyboard.up("KeyS");
+  await page.waitForTimeout(1000);
+  await shootTruck(page, "actor:1", testInfo.outputPath("doruk-k180-torn-bed-side.png"), [-4, 2.4, -6.5], [-2, 1.2, 0]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 fuel tank dents under a car, and it stays on", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, (level) => {
+    bedSide(14)(level);
+    level.actors[1].position[0] = 0.72;
+  });
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:1")).nodes).toContain("Fuel_Tank");
+  await driveUntil(page, async () => (await truckParts(page, "actor:1")).dented.includes("Fuel_Tank"));
+  const { dented, nodes, pieces } = await truckParts(page, "actor:1");
+  console.log(`[doruk smoke] fuel tank ${JSON.stringify(dented)} ${await readDeform()}`);
+  for (const untouched of UNDER_THE_PANELS) expect(dented).not.toContain(untouched);
+  expect(nodes).toContain("Fuel_Tank");
+  expect(pieces).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 rear bumper dents under a car at town speed", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, rearEnd(14));
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:1")).nodes).toContain("Rear_Bumper");
+  await driveUntil(page, async () => (await truckParts(page, "actor:1")).dented.includes("Rear_Bumper"));
+  const { dented, pieces } = await truckParts(page, "actor:1");
+  console.log(`[doruk smoke] rear bumper dent ${JSON.stringify(dented)} ${await readDeform()}`);
+  for (const untouched of UNDER_THE_BED) expect(dented).not.toContain(untouched);
+  expect(pieces).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 rear bumper tears off at speed", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, rearEnd(70));
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:1")).nodes).toContain("Rear_Bumper");
+  await driveUntil(page, async () => /detached/.test(await readDeform()));
+  const { dented, nodes, pieces } = await truckParts(page, "actor:1");
+  console.log(`[doruk smoke] rear bumper tear ${JSON.stringify(pieces.map((piece) => piece.name))} ${JSON.stringify(dented)} ${await readDeform()}`);
+  expect(pieces.map((piece) => piece.name)).toContain("detached-rear_bumper");
+  expect(nodes).not.toContain("Rear_Bumper");
+  for (const kept of ["Tailgate", "Bed_Base"]) expect(nodes).toContain(kept);
+  for (const untouched of UNDER_THE_BED) expect(dented).not.toContain(untouched);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 tailgate dents on a slow back-up into a beam", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, behind(0, 1.9, [8, 1.3, 1], 0.5), 1);
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Tailgate");
+  await reverseUntil(page, async () => (await truckParts(page, "actor:0")).dented.includes("Tailgate"));
+  const { dented, nodes, pieces } = await truckParts(page, "actor:0");
+  console.log(`[doruk smoke] tailgate dent ${JSON.stringify(dented)} ${await readDeform()}`);
+  for (const untouched of UNDER_THE_BED) expect(dented).not.toContain(untouched);
+  expect(nodes).toContain("Tailgate");
+  expect(pieces).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 tailgate tears off with its latches on a full-speed back-up", async ({ page }, testInfo) => {
+  const { errors, readDeform, open } = await sceneRig(page, behind(0, 1.9, [8, 1.3, 1], 25), 1);
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Tailgate");
+  await reverseUntil(page, async () => /detached 1/.test(await readDeform()));
+  const { dented, nodes, pieces } = await truckParts(page, "actor:0");
+  console.log(`[doruk smoke] tailgate tear ${JSON.stringify(dented)} ${await readDeform()}`);
+  expect(pieces.map((piece) => [piece.name, piece.meshes.sort()])).toEqual([["detached-tailgate", ["Cargo_Latch_L", "Cargo_Latch_R", "Tailgate"]]]);
+  for (const kept of ["Bed_Base", "Wood_Side_Panel_L", "Rear_Bumper"]) expect(nodes).toContain(kept);
+  for (const untouched of UNDER_THE_BED) expect(dented).not.toContain(untouched);
+  await page.keyboard.down("KeyW");
+  await page.waitForTimeout(2500);
+  await page.keyboard.up("KeyW");
+  await page.waitForTimeout(1000);
+  await shootTruck(page, "actor:0", testInfo.outputPath("doruk-k180-torn-tailgate.png"), [2.2, 2.6, -11], [0, 1.2, -3]);
+  expect(errors).toEqual([]);
+});
+
+test("Doruk K-180 tail lamp falls off on a post, and the bumper under it dents", async ({ page }) => {
+  const { errors, readDeform, open } = await sceneRig(page, behind(0.92, 0.93, [0.24, 0.12, 0.5], 5), 1);
+  await open();
+  await expect.poll(async () => (await truckParts(page, "actor:0")).nodes).toContain("Tail_Lamp_L");
+  await reverseUntil(page, async () => /detached 1/.test(await readDeform()));
+  const { dented, nodes, pieces } = await truckParts(page, "actor:0");
+  console.log(`[doruk smoke] tail lamp ${JSON.stringify(dented)} ${await readDeform()}`);
+  expect(pieces.map((piece) => [piece.name, piece.meshes])).toEqual([["detached-tail_lamp_left", ["Tail_Lamp_L"]]]);
+  expect(nodes).not.toContain("Tail_Lamp_L");
+  expect(nodes).toContain("Tail_Lamp_R");
+  expect(dented).toContain("Rear_Bumper");
   expect(errors).toEqual([]);
 });

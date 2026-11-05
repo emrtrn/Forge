@@ -21,7 +21,7 @@ DorukK180
 │   │   └── Cabin_Trim       – cam kauçukları, ön cam orta dikmesi, yağmur oluğu, kapı fitili
 │   ├── Cabin_Interior       – koltuk, torpido, direksiyon, pedal, vites
 │   ├── Engine_Block         – motor ve radyatör kutusu
-│   ├── Inner_Fender_L/R     – kapalı iç davlumbaz: kemerden motor görünmez, çamurluk kopunca açığa çıkar
+│   ├── Inner_Fender_L/R     – kapalı iç davlumbaz: kemerden motor görünmez; kaput yanındaki oluğun koyu şeridi de bu meshte
 │   ├── Tow_Hook_L/R         – şasiye bağlı, tampon kopunca yerinde kalır
 │   ├── Fuel_Tank            C  sol, iki aks arası
 │   ├── Rear_Bumper          D

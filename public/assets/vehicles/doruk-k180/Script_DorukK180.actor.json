@@ -20,17 +20,17 @@
         "size": [
           2.45,
           2.1,
-          7.2
+          7.07
         ],
         "center": [
           0,
           1.6,
-          -0.3
+          -0.365
         ],
         "primitives": [
           { "shape": "box", "size": [2.45, 2.1, 5.42], "center": [0, 1.6, -1.19] },
-          { "shape": "box", "size": [2.4, 1.37, 1.56], "center": [0, 1.235, 2.3] },
-          { "shape": "box", "size": [2.4, 0.26, 0.22], "center": [0, 0.85, 3.19] }
+          { "shape": "box", "size": [2.4, 1.37, 1.43], "center": [0, 1.235, 2.235] },
+          { "shape": "box", "size": [2.4, 0.26, 0.22], "center": [0, 0.85, 3.06] }
         ],
         "simulatePhysics": true,
         "linearDamping": 0.01,

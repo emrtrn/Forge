@@ -36,7 +36,7 @@ WHEEL_RADIUS = 0.56
 AXLE_Y = WHEEL_RADIUS
 FRONT_AXLE_Z = 2.10
 REAR_AXLE_Z = -2.10
-NOSE_Z = 3.30
+NOSE_Z = 3.17
 TAIL_Z = -3.90
 FRONT_WHEEL_X = 2.05 / 2
 REAR_WHEEL_X = 1.80 / 2
@@ -47,6 +47,7 @@ ROOF_Y = 2.65
 CAB_HALF_WIDTH = 2.15 / 2
 HOOD_TOP_Y = 1.92
 BUMPER_Y = (0.72, 0.98)
+BUMPER_BACK_Z = 2.975
 BED_FRONT_Z = -0.10
 BED_HALF_WIDTH = 2.45 / 2
 BED_FLOOR_Y = 1.25
@@ -56,19 +57,24 @@ MIRROR_MAX_X = 2.80 / 2
 # --- Derived layout ----------------------------------------------------------
 CAB_BACK_Z = 0.02
 FIREWALL_Z = 1.30
-HOOD_REAR_Z = 1.60
-HOOD_FRONT_Z = 3.09
-FENDER_FRONT_Z = 3.04
-HOOD_FRONT_RISE = 0.13
-HOOD_EDGE_Y = 1.68
-HOOD_HALF_WIDTH = 0.94
-HOOD_CORNER_Y = 1.59  # the hood's front corner comes down to the grille's shoulder
-FENDER_INNER_X = 0.88  # tucks under the hood edge, so the seam shows no gap
+HOOD_REAR_Z = 1.68
+HOOD_FRONT_Z = 2.93  # just behind the fender's front and the grille frame: the frame leads
+FENDER_FRONT_Z = 2.945
+HOOD_NOSE_Y = 1.80  # the hood's centre line where its nose starts to roll over
+HOOD_FRONT_LIP_Y = 1.69  # the nose's lower edge, over the grille frame
+HOOD_EDGE_Y = 1.66  # the fender's shelf, the same height from nose to cowl
+HOOD_LIP_Y = 1.645  # the hood's side skirt ends down in the gutter, under the shelf
+HOOD_HALF_WIDTH = 0.98
+HOOD_REAR_HALF = 1.045
+LID_SQUARENESS = 5.0  # a lid's section: flat on top, a tight shoulder, straight sides
+COWL_EDGE_Y = 1.60  # where the cowl's sides go down behind the fender
+FENDER_INNER_X = 0.88  # under the hood; the front stretches further in, to the grille frame
+FENDER_FRONT_INNER_X = 0.70
+FENDER_FRONT_OUTSIDE_X = 1.08
 FENDER_OUTER_X = 1.20
 FENDER_FRONT_ANGLE = 20.0  # degrees round the arch, 0 = straight ahead of the axle
-FENDER_REAR_ANGLE = 165.0
-FENDER_SQUARENESS = 12.0  # superellipse exponent of the fender's hoop
-ARCH_RADIUS = 0.80
+FENDER_REAR_ANGLE = 171.0
+GUTTER_DEPTH = 0.032
 INNER_FENDER_X = 0.60  # clear of the tyre at full lock
 WINDSHIELD_BASE = (1.50, 1.94)  # (z, y)
 WINDSHIELD_TOP = (1.24, 2.46)
@@ -81,13 +87,12 @@ BED_PLANK_OUTER_X = 1.205
 BED_PLANK_DEPTH = 0.03
 BED_RAIL_TOP_Y = 1.30
 FRAME_Y = (0.78, 1.00)
-FRAME_FRONT_Z = 2.97  # the rails stop behind the grille; the tow lugs carry the bumper
+FRAME_FRONT_Z = 2.84  # the rails stop behind the grille; the tow lugs carry the bumper
 
 CYLINDER_SEGMENTS = 32
 SMOOTH_ANGLE = 38.0  # degrees; a sharper edge stays a crease
 DOOR_GAP = 0.012
 WINDSHIELD_WRAP = 0.13  # how far the windshield's corners sweep back, metres at x = 1
-HOOD_REAR_HALF = 1.06
 
 EXPOSED_HIDDEN = {"Front_Bumper", "Hood", "Grille_Panel", "Door_L", "Fender_FL", "Windshield",
                   "Mirror_L", "Wood_Side_Panel_L", "Headlight_L", "Headlight_R",
@@ -503,7 +508,7 @@ def chassis_frame():
         m.sweep([(side * 0.52, 0.86, REAR_AXLE_Z + 0.22), (side * 0.56, 0.60, REAR_AXLE_Z + 0.08)], 0.024, sides=8)
         m.cylinder((side * 0.86, AXLE_Y, FRONT_AXLE_Z), 0.075, 0.09, "x", 12)
         m.cylinder((side * 0.62, AXLE_Y, REAR_AXLE_Z), 0.085, 0.10, "x", 12)
-    for z in (2.90, 1.60, 0.20, -1.00, -2.10, -3.20, -3.70):
+    for z in (2.78, 1.60, 0.20, -1.00, -2.10, -3.20, -3.70):
         m.box((-0.41, 0.82, z - 0.04), (0.41, 0.96, z + 0.04))
     # Axles: an I beam in front, a banjo and pumpkin behind.
     m.sweep([(-0.86, AXLE_Y + 0.02, FRONT_AXLE_Z), (-0.5, AXLE_Y + 0.08, FRONT_AXLE_Z), (0.5, AXLE_Y + 0.08, FRONT_AXLE_Z), (0.86, AXLE_Y + 0.02, FRONT_AXLE_Z)], 0.045, sides=4)
@@ -581,13 +586,14 @@ def roof_point(u, t, depth=0.0):
 
 
 def cowl_point(u, t, depth=0.0):
-    """From the hood's rear edge (u = 0) to the windshield's base (u = 1): the hood's own
-    section widening into the cab, so the shoulder runs on into the door without a step."""
-    x0, y0, z0 = hood_point(HOOD_REAR_Z, t)
+    """From the hood's rear edge (u = 0) to the windshield's base (u = 1): a straight, flat
+    panel as wide as the cab, whose sides stand in the plane of the door."""
     base_y = WINDSHIELD_BASE[1]
-    x1 = t * cab_half(base_y)
-    z1 = front_z(x1, base_y)
-    return (lerp(x0, x1, u), lerp(y0, base_y, u * u * (3 - 2 * u)) - depth, lerp(z0 - 0.012, z1, u))
+    x = t * (CAB_HALF_WIDTH - 0.006 - depth)
+    top = lerp(HOOD_TOP_Y - 0.03, base_y, u)
+    n = lerp(LID_SQUARENESS, 16.0, u)
+    y = COWL_EDGE_Y + (top - COWL_EDGE_Y) * max(0.0, 1 - abs(t) ** n) ** (1 / n)
+    return (x, y - depth, lerp(HOOD_REAR_Z + 0.03, front_z(x, base_y), u))
 
 
 def cabin_shell():
@@ -596,10 +602,12 @@ def cabin_shell():
     m.box((-half + 0.02, 1.06, CAB_BACK_Z), (half - 0.02, 1.10, FIREWALL_Z), (10, 1, 10))  # floor
     m.box((-half, 0.92, FIREWALL_Z - 0.02), (half, WINDSHIELD_BASE[1], FIREWALL_Z + 0.02), (10, 6, 1))  # firewall
 
-    # Each side: the cab's silhouette around the door opening.
-    edge = [cowl_point(i / 8, 1.0) for i in range(9)]
-    corners = [(CAB_BACK_Z, 0.90), (FIREWALL_Z, 0.90), (FIREWALL_Z, 1.30), (edge[0][2], 1.60)]
-    corners += [(z, y) for _, y, z in edge] + [(a_pillar_z(ROOF_BASE_Y), ROOF_BASE_Y), (CAB_BACK_Z, ROOF_BASE_Y)]
+    # Each side: the cab's silhouette around the door opening. In front of the door it runs
+    # on behind the fender's sweep to the hood's rear edge, flat with the door.
+    base_y = WINDSHIELD_BASE[1]
+    corners = [(CAB_BACK_Z, 0.90), (1.38, 0.90), (1.62, 1.32), (HOOD_REAR_Z - 0.012, 1.58),
+               (HOOD_REAR_Z - 0.012, 1.86), (a_pillar_z(base_y), base_y),
+               (a_pillar_z(ROOF_BASE_Y), ROOF_BASE_Y), (CAB_BACK_Z, ROOF_BASE_Y)]
     outer, opening = radial_pair(fillet_loop(corners, 0.0), door_outline(DOOR_GAP), count=96)
     for side in (1, -1):
         m.sheet(outer, opening, 3, side_point, 0.05, side)
@@ -616,7 +624,7 @@ def cabin_shell():
                       (-cab_half(ROOF_BASE_Y) * width, ROOF_BASE_Y)], 64, (-half, 0.92))
     m.sheet(outer, resample(rear_window_outline(), 64, (-0.6, 1.7)), 3, back_point, 0.04)
 
-    m.patch((0.0, 1.0), (-1.0, 1.0), (8, 44), cowl_point, 0.03)
+    m.patch((0.0, 1.0), (-1.0, 1.0), (8, 56), lambda u, v, depth: cowl_point(u, math.sin(v * math.pi / 2), depth), 0.03)
     m.patch((0.0, 1.0), (-1.0, 1.0), (18, 36), roof_point, 0.03)
     return m
 
@@ -663,30 +671,30 @@ def cabin_interior():
 
 def engine_block():
     m = Mesh("Engine_Block", "M_Engine")
-    m.box((-0.24, 0.78, 1.74), (0.24, 1.22, 2.58), (3, 3, 4))  # block
-    m.box((-0.20, 1.22, 1.78), (0.20, 1.34, 2.54), (2, 1, 4))  # head
+    m.box((-0.24, 0.78, 1.64), (0.24, 1.22, 2.48), (3, 3, 4))  # block
+    m.box((-0.20, 1.22, 1.68), (0.20, 1.34, 2.44), (2, 1, 4))  # head
     loop = fillet_loop([(-0.16, 1.34), (0.16, 1.34), (0.16, 1.44), (-0.16, 1.44)], 0.04)
-    m.loft([[(x, y, z) for x, y in resample(loop, 20, (-0.16, 1.34))] for z in (1.80, 2.52)])  # rocker cover
-    m.revolve((0, 1.32, 2.62), [(-0.02, 0.04), (0.02, 0.04), (0.02, 0.20), (-0.02, 0.20)], "z", 20)  # fan shroud ring
+    m.loft([[(x, y, z) for x, y in resample(loop, 20, (-0.16, 1.34))] for z in (1.70, 2.42)])  # rocker cover
+    m.revolve((0, 1.32, 2.52), [(-0.02, 0.04), (0.02, 0.04), (0.02, 0.20), (-0.02, 0.20)], "z", 20)  # fan shroud ring
     for i in range(5):
         angle = 2 * math.pi * i / 5
-        m.strut((0, 1.32, 2.62), (0.19 * math.cos(angle), 1.32 + 0.19 * math.sin(angle), 2.62), 0.05, 0.008)  # fan
-    m.cylinder((0.33, 1.22, 2.44), 0.08, 0.18, "z", 14)  # alternator
-    m.cylinder((-0.34, 1.34, 2.08), 0.14, 0.14, "y", 18)  # air filter
-    m.sweep([(-0.26, 1.10, 2.40), (-0.34, 1.05, 2.20), (-0.34, 0.90, 1.90), (-0.34, 0.74, 1.55)], 0.04, sides=8)  # exhaust
-    m.box((-0.52, 0.95, 2.76), (0.52, 1.66, 2.90), (3, 3, 1))  # radiator
+        m.strut((0, 1.32, 2.52), (0.19 * math.cos(angle), 1.32 + 0.19 * math.sin(angle), 2.52), 0.05, 0.008)  # fan
+    m.cylinder((0.33, 1.22, 2.34), 0.08, 0.18, "z", 14)  # alternator
+    m.cylinder((-0.34, 1.34, 1.98), 0.14, 0.14, "y", 18)  # air filter
+    m.sweep([(-0.26, 1.10, 2.30), (-0.34, 1.05, 2.10), (-0.34, 0.90, 1.80), (-0.34, 0.74, 1.55)], 0.04, sides=8)  # exhaust
+    m.box((-0.52, 0.95, 2.63), (0.52, 1.64, 2.77), (3, 3, 1))  # radiator
     for i in range(8):
         y = lerp(1.0, 1.55, i / 7)
-        m.box((-0.50, y, 2.90), (0.50, y + 0.02, 2.92))
+        m.box((-0.50, y, 2.77), (0.50, y + 0.02, 2.79))
     return m
 
 
 def tow_hook(name, side):
-    m = Mesh(name, "M_Steel", side, (0.45, 0.66, 3.05))
-    m.box((0.41, 0.72, 2.95), (0.49, FRAME_Y[0], 3.08))
-    m.box((0.41, 0.64, 2.95), (0.49, 0.72, 3.22))
+    m = Mesh(name, "M_Steel", side, (0.45, 0.66, 2.92))
+    m.box((0.41, 0.72, 2.82), (0.49, FRAME_Y[0], 2.95))
+    m.box((0.41, 0.64, 2.82), (0.49, 0.72, 3.09))
     # A U shackle on a pin through the lug.
-    x, y, z = 0.45, 0.665, 3.20
+    x, y, z = 0.45, 0.665, 3.07
     span = 0.062
     u = [(x + span * math.cos(a), y - 0.055 - span * math.sin(a), z) for a in (math.pi * i / 12 for i in range(13))]
     m.sweep([(x + span, y + 0.01, z)] + u + [(x - span, y + 0.01, z)], 0.015, sides=8)
@@ -744,23 +752,24 @@ def front_mudflap(name, side):
     x0, x1, inside = 0.86, 1.19, CAB_HALF_WIDTH - 0.04
     top = 0.96
     m = Mesh(name, "M_Tyre", side, (x0, top, z))
-    outline = [(x0, 0.32), (x1, 0.32), (x1, 0.70), (inside, 0.78), (inside, top), (x0, top)]
+    outline = [(x0, 0.32), (x1, 0.32), (x1, 0.58), (inside, 0.66), (inside, top), (x0, top)]
     loop = resample(fillet_loop(outline, (0.04, 0.04, 0.03, 0.03, 0.0, 0.0)), 28, (x0, 0.32))
     m.loft([[(u, v, z + offset) for u, v in loop] for offset in (-0.012, 0.012)])
     return m
 
 
 def front_bumper():
-    m = Mesh("Front_Bumper", "M_Steel", 1, (0.0, sum(BUMPER_Y) / 2, 3.10))
+    z0, z1 = BUMPER_BACK_Z, NOSE_Z - 0.005
+    m = Mesh("Front_Bumper", "M_Steel", 1, (0.0, sum(BUMPER_Y) / 2, z0))
     y0, y1 = BUMPER_Y
-    section = resample(fillet_loop([(3.10, y0), (3.295, y0), (3.295, y1), (3.10, y1)], 0.03), 28, (3.10, y0))
+    section = resample(fillet_loop([(z0, y0), (z1, y0), (z1, y1), (z0, y1)], 0.03), 28, (z0, y0))
     rings = []
     for i in range(33):
         x = lerp(-FENDER_OUTER_X, FENDER_OUTER_X, i / 32)
-        end = clamp01((abs(x) - 0.92) / 0.28) ** 2
-        rings.append([(x, lerp(sum(BUMPER_Y) / 2, y, 1 - 0.14 * end), lerp(3.10, z, 1 - 0.28 * end)) for z, y in section])
+        end = clamp01((abs(x) - 1.10) / 0.10) ** 2  # a steel beam: square, with its ends just eased
+        rings.append([(x, lerp(sum(BUMPER_Y) / 2, y, 1 - 0.05 * end), lerp(z0, z, 1 - 0.08 * end)) for z, y in section])
     m.loft(rings)
-    m.box((-0.33, 0.785, 3.29), (0.33, 0.915, NOSE_Z), (6, 1, 1))  # number plate
+    m.box((-0.33, 0.785, NOSE_Z - 0.01), (0.33, 0.915, NOSE_Z), (6, 1, 1))  # number plate
     for x in (-0.86, -0.66, 0.66, 0.86):
         for y in (0.79, 0.91):
             m.cylinder((x, y, NOSE_Z - 0.006), 0.016, 0.012, "z", 8)
@@ -772,71 +781,87 @@ def smoothstep(a, b, value):
     return t * t * (3 - 2 * t)
 
 
-def fender_top_y(z):
-    """The top of the fender's hoop at z."""
-    ahead = (z - FRONT_AXLE_Z) / (FENDER_FRONT_Z - FRONT_AXLE_Z)
-    if ahead <= 0.0:
-        return HOOD_EDGE_Y
-    return AXLE_Y + (HOOD_EDGE_Y - AXLE_Y) * max(0.0, 1 - ahead ** FENDER_SQUARENESS) ** (1 / FENDER_SQUARENESS)
-
-
-def hood_edge_y(z):
-    """The hood's side edge: it lies on the fender and follows it down round the nose,
-    as far as the grille's shoulder, so its corner never stands over a gap."""
-    top, floor, k = fender_top_y(z), HOOD_CORNER_Y, 0.012
-    return (top + floor + math.sqrt((top - floor) ** 2 + k * k)) / 2
+def hood_half(s):
+    """Half the hood's width, s from its rear edge (0) to its nose (1): near enough parallel."""
+    return lerp(HOOD_REAR_HALF, HOOD_HALF_WIDTH, s)
 
 
 def hood_point(z, t, depth=0.0):
-    """t runs from -1 to 1 across the hood. It is a full, square-shouldered form with a
-    crease down the middle; its nose rolls down in a quarter round over the grille, and
-    its sides come down onto the fenders."""
+    """t runs from -1 to 1 across the hood. It is a lid: a flat, gently crowned top, a tight
+    shoulder and short straight sides that end in the gutter along the fender's shelf. Seen
+    from the side its centre line falls almost straight to a blunt nose."""
     s = clamp01((z - HOOD_REAR_Z) / (HOOD_FRONT_Z - HOOD_REAR_Z))
     a = abs(t)
-    half = lerp(HOOD_REAR_HALF, HOOD_HALF_WIDTH, smoothstep(0.0, 0.55, s))
-    ridge = lerp(HOOD_TOP_Y, HOOD_EDGE_Y + HOOD_FRONT_RISE, s * s)
-    nose = clamp01((s - 0.80) / 0.20)
-    drop = (ridge - HOOD_EDGE_Y + 0.0) * 0.86 * (1 - math.sqrt(max(0.0, 1 - nose * nose)))
-    edge = hood_edge_y(z - 0.06 * s)
-    y = edge + (ridge - drop - edge) * (1 - a ** 3.4) - depth
-    fade = math.sin(math.pi * s) ** 0.4
-    y += 0.022 * fade * (1 - smoothstep(0.0, 0.10, a))  # centre crease
-    y -= 0.012 * fade * smoothstep(0.66, 0.74, a)  # shoulder
-    rear = 0.07 * a ** 6 * (1 - clamp01(s / 0.2)) ** 2
-    return (t * (half - depth * 0.5), y, z - 0.06 * t * t * s + rear)
+    ridge = lerp(HOOD_TOP_Y, HOOD_NOSE_Y, s ** 1.6) - 0.035 * a * a
+    n = LID_SQUARENESS
+    y = HOOD_LIP_Y + (ridge - HOOD_LIP_Y) * max(0.0, 1 - a ** n) ** (1 / n)
+    # The nose rolls over in a quarter round.
+    nose = clamp01((s - 0.93) / 0.07)
+    lip = min(HOOD_FRONT_LIP_Y, y)
+    y = lip + (y - lip) * math.sqrt(max(0.0, 1 - nose * nose))
+    y += 0.014 * math.sin(math.pi * s) ** 0.4 * (1 - smoothstep(0.0, 0.05, a))  # centre spine
+    return (t * (hood_half(s) - depth), y - depth, z - 0.05 * t * t * s)
 
 
 def hood():
     m = Mesh("Hood", "M_Body", 1, (0.0, HOOD_TOP_Y, HOOD_REAR_Z))
-    m.patch((HOOD_REAR_Z, HOOD_FRONT_Z), (-1.0, 1.0), (28, 44), hood_point, 0.025)
+    # Rows close up towards the nose and the sides, where the lid turns.
+    place = lambda u, v, depth: hood_point(lerp(HOOD_REAR_Z, HOOD_FRONT_Z, 1 - (1 - u) ** 1.7), math.sin(v * math.pi / 2), depth)
+    m.patch((0.0, 1.0), (-1.0, 1.0), (32, 56), place, 0.025)
     return m
 
 
+def wheel_arch():
+    """The wheel opening in (z, y): a flat top, and a rear edge that runs down and back with
+    the fender's sweep. It goes on below the fender so a ray from the axle always leaves it."""
+    return fillet_loop([(2.78, 0.30), (2.76, 0.80), (2.47, 1.33), (1.70, 1.33), (1.37, 0.68), (1.33, 0.30)],
+                       (0.0, 0.02, 0.26, 0.22, 0.02, 0.0), 10)
+
+
+def fender_outline():
+    """The fender's edge in (z, y): a square front, a flat shelf, then a long sweep down and
+    back past the door's foot."""
+    return fillet_loop([(FENDER_FRONT_Z, 0.30), (FENDER_FRONT_Z, HOOD_EDGE_Y), (1.62, HOOD_EDGE_Y), (1.14, 0.60), (1.14, 0.30)],
+                       (0.0, 0.085, 0.24, 0.0, 0.0), 10)
+
+
 def fender(name, side):
-    """Hollow front fender: a rolled arch lip, a broad side and a rounded shoulder into the hood."""
+    """Hollow front fender: a raised band round the arch, a broad side, a tight shoulder and
+    a flat shelf with a gutter for the hood's side to stand in."""
     m = Mesh(name, "M_Body", side, (FENDER_INNER_X, HOOD_EDGE_Y, FRONT_AXLE_Z))
-    ahead = FENDER_FRONT_Z - FRONT_AXLE_Z
-    behind = FRONT_AXLE_Z - FIREWALL_Z
-    top = HOOD_EDGE_Y - AXLE_Y
-    inner, wide = FENDER_INNER_X, FENDER_OUTER_X + 0.012
-    ra = ARCH_RADIUS
+    axle = (FRONT_AXLE_Z, AXLE_Y)
+    arch, edge = wheel_arch(), fender_outline()
+    wide = FENDER_OUTER_X + 0.012
+    steps = 64
+    angles = [lerp(FENDER_FRONT_ANGLE, FENDER_REAR_ANGLE, i / steps) for i in range(steps + 1)]
+    angles = sorted(set(angles + [lerp(47.0, 60.0, i / 8) for i in range(9)]))  # the front corner
     rings = []
-    steps = 44
-    for i in range(steps + 1):
-        degrees = lerp(FENDER_FRONT_ANGLE, FENDER_REAR_ANGLE, i / steps)
+    for degrees in angles:
         angle = math.radians(degrees)
-        # The tail eases in towards the door instead of ending proud of it.
-        outer = lerp(wide, CAB_HALF_WIDTH + 0.02, smoothstep(135.0, FENDER_REAR_ANGLE, degrees))
         c, s = math.cos(angle), math.sin(angle)
-        n = FENDER_SQUARENESS
-        rb = ((abs(c) / (ahead if c >= 0 else behind)) ** n + (s / top) ** n) ** (-1 / n)
-        rb = max(rb, ra + 0.15)
-        h = min(0.17, (rb - ra - 0.09) * 0.7)
+        ra = math.hypot(*(a - b for a, b in zip(ray_exit(arch, axle, angle), axle)))
+        rim = ray_exit(edge, axle, angle)
+        rb = max(math.hypot(rim[0] - axle[0], rim[1] - axle[1]), ra + 0.09)
+        # The front stops outside the lamp sockets, then reaches in to the grille frame over
+        # the pods' shoulder; further back the hood covers it.
+        inner = lerp(FENDER_FRONT_OUTSIDE_X, FENDER_FRONT_INNER_X, smoothstep(43.0, 50.0, degrees))
+        inner = lerp(inner, FENDER_INNER_X, smoothstep(62.0, 80.0, degrees))
+        # The tail eases in towards the door instead of ending proud of it.
+        outer = lerp(wide, CAB_HALF_WIDTH + 0.02, smoothstep(112.0, FENDER_REAR_ANGLE, degrees))
+        band = min(0.105, (rb - ra) * 0.45)
+        h = max(0.012, min(0.085, (rb - ra - band - 0.02) * 0.7))
+        # The gutter only lies along the flat of the shelf.
+        on_shelf = smoothstep(HOOD_EDGE_Y - 0.03, HOOD_EDGE_Y - 0.005, rim[1])
+        gutter_x = min(hood_half(clamp01((rim[0] - HOOD_REAR_Z) / (HOOD_FRONT_Z - HOOD_REAR_Z))) + 0.012, outer - 0.11)
+        gutter_x = max(gutter_x, inner + 0.03)
+        drop = GUTTER_DEPTH * on_shelf
         section = [
-            (inner, ra), (outer - 0.03, ra), (outer, ra + 0.012), (outer, ra + 0.05), (outer - 0.016, ra + 0.075),
-            (outer - 0.018, rb - h), (outer - 0.035, rb - h * 0.55), (outer - 0.075, rb - h * 0.2), (outer - 0.15, rb - 0.006), (inner, rb),
-            (inner, rb - 0.03), (outer - 0.16, rb - 0.036), (outer - 0.09, rb - h * 0.2 - 0.03), (outer - 0.05, rb - h * 0.55 - 0.02),
-            (outer - 0.046, ra + 0.07), (outer - 0.05, ra + 0.03), (inner, ra + 0.03),
+            (inner, ra), (outer - 0.03, ra), (outer, ra + 0.012), (outer, ra + band), (outer - 0.022, ra + band + 0.018),
+            (outer - 0.024, rb - h), (outer - 0.034, rb - h * 0.55), (outer - 0.06, rb - h * 0.14), (outer - 0.10, rb),
+            (gutter_x, rb), (gutter_x - 0.012, rb - drop), (inner, rb - drop),
+            (inner, rb - drop - 0.024), (gutter_x - 0.03, rb - drop - 0.024), (outer - 0.11, rb - 0.03),
+            (outer - 0.07, rb - h * 0.14 - 0.03), (outer - 0.055, rb - h * 0.55 - 0.02),
+            (outer - 0.05, ra + band + 0.02), (outer - 0.05, ra + 0.03), (inner, ra + 0.03),
         ]
         rings.append([(x, AXLE_Y + r * s, FRONT_AXLE_Z + r * c) for x, r in section])
     m.loft(rings)
@@ -844,25 +869,32 @@ def fender(name, side):
 
 
 def fender_marker(name, side):
-    m = Mesh(name, "M_Amber", side, (1.19, 1.52, 2.70))
-    m.revolve((1.19, 1.52, 2.70), [(-0.006, 0.002), (-0.006, 0.034), (0.012, 0.03), (0.02, 0.018), (0.024, 0.002)], "x", 16)
+    m = Mesh(name, "M_Amber", side, (1.188, 1.51, 2.62))
+    m.revolve((1.188, 1.51, 2.62), [(-0.006, 0.002), (-0.006, 0.034), (0.012, 0.03), (0.02, 0.018), (0.024, 0.002)], "x", 16)
     return m
 
 
 def inner_fender(name, side):
     """The wheel well's closed inner wall and roof: they keep the engine bay out of sight
-    through the arch, and are what shows once the fender has gone."""
-    x0, x1 = INNER_FENDER_X, FENDER_INNER_X + 0.01
-    m = Mesh(name, "M_Steel", side, (x0, 1.15, FRONT_AXLE_Z))
-    radius = ARCH_RADIUS + 0.03
-    low = 0.76
-    start = math.asin((low - AXLE_Y) / radius)
-    wall = [(FENDER_FRONT_Z - 0.04, low), (FENDER_FRONT_Z - 0.04, HOOD_EDGE_Y - 0.02),
-            (FIREWALL_Z + 0.03, HOOD_EDGE_Y - 0.02), (FIREWALL_Z + 0.03, low)]
+    through the arch, and are what shows once the fender has gone. A dark strip lies in the
+    fender's gutter, for the line along the hood's side."""
+    x0, x1 = INNER_FENDER_X, FENDER_FRONT_OUTSIDE_X + 0.01
+    m = Mesh(name, "M_Rubber", side, (x0, 1.15, FRONT_AXLE_Z))
+    axle = (FRONT_AXLE_Z, AXLE_Y)
+    arch = wheel_arch()
+
+    def roof(t, x, depth):
+        angle = math.radians(lerp(16.0, 164.0, t))
+        z, y = ray_exit(arch, axle, angle)
+        grow = 0.03 - depth
+        return (x, y + grow * math.sin(angle), z + grow * math.cos(angle))
+
+    wall = [(FENDER_FRONT_Z - 0.04, 0.76), (FENDER_FRONT_Z - 0.04, HOOD_EDGE_Y - 0.02),
+            (FIREWALL_Z + 0.03, HOOD_EDGE_Y - 0.02), (FIREWALL_Z + 0.03, 0.76)]
     m.prism(wall, x0 - 0.012, x0)
-    m.patch((0.0, 1.0), (x0, x1), (24, 3),
-            lambda t, x, depth: (x, AXLE_Y + (radius - depth) * math.sin(lerp(start, math.pi - start, t)),
-                                 FRONT_AXLE_Z + (radius - depth) * math.cos(lerp(start, math.pi - start, t))), 0.012)
+    m.patch((0.0, 1.0), (x0, x1), (36, 3), roof, 0.012)
+    gutter = [(hood_half(i / 16) + 0.004, HOOD_EDGE_Y - GUTTER_DEPTH + 0.004, lerp(HOOD_REAR_Z, HOOD_FRONT_Z - 0.07, i / 16)) for i in range(17)]
+    m.sweep(gutter, 0.016, sides=6)
     return m
 
 
@@ -920,11 +952,18 @@ def mirror(name, side):
     return m
 
 
-HEADLIGHT = (0.88, 1.25)
-HEADLIGHT_RADIUS = 0.135
-SOCKET_RADIUS = 0.146
+HEADLIGHT = (0.90, 1.25)
+HEADLIGHT_RADIUS = 0.128
+SOCKET_RADIUS = 0.150
 SIGNAL_Y = 1.505
 GRILLE_BOTTOM_Y = 0.90  # behind the bumper, whose top is at 0.98
+POD_Z = 2.95  # the lamp pods' face
+POD_TOP_Y = 1.585  # the shoulder steps down from the frame to here
+FRAME_Z = 2.985  # the grille frame's face, the body's front
+FRAME_HALF = 0.71
+FRAME_Y_RANGE = (1.00, 1.665)
+OPENING_HALF = 0.655
+OPENING_Y = (1.07, 1.60)
 
 
 def circle(centre, radius, count, start=None):
@@ -933,56 +972,50 @@ def circle(centre, radius, count, start=None):
     return resample(points, count, start)
 
 
-def grille_top(x):
-    """The casting's top edge: it runs just under the hood's nose, so the two close."""
-    return hood_point(HOOD_FRONT_Z, x / HOOD_HALF_WIDTH)[1] - 0.02
-
-
 def grille_panel():
-    """One cast surround from fender to fender: a shallow raised centre and two lamp pods
-    with real sockets. It starts below the bumper's top, so no gap shows over the bumper,
-    and a rim runs round the grille opening only."""
-    m = Mesh("Grille_Panel", "M_Grille", 1, (0.0, 1.33, 3.00))
-    z1 = 3.08
-    centre_x = 0.64
-    # The centre, a hair proud of the pods.
-    top = [(lerp(centre_x, 0.0, i / 8), grille_top(lerp(centre_x, 0.0, i / 8))) for i in range(9)]
-    corners = [(-centre_x, GRILLE_BOTTOM_Y), (centre_x, GRILLE_BOTTOM_Y)] + top + [(-x, y) for x, y in reversed(top[:-1])]
-    hole_loop = fillet_loop([(-0.575, 1.075), (0.575, 1.075), (0.575, 1.595), (-0.575, 1.595)], 0.05, 8)
-    outer, hole = radial_pair(corners, hole_loop, (0.0, 1.335), 84)
-    front = z1 + 0.008
-    m.sheet(outer, hole, 3, lambda u, v, depth: (u, v, front - depth), 0.10)
-    m.sweep([(u, v, front + 0.002) for u, v in resample(hole_loop, 84, (-0.575, 1.075))], 0.012, True, sides=6)
-    # The lamp pods.
-    shoulder = [(lerp(HOOD_HALF_WIDTH, centre_x, i / 10), grille_top(lerp(HOOD_HALF_WIDTH, centre_x, i / 10))) for i in range(11)]
-    pod = fillet_loop([(centre_x, GRILLE_BOTTOM_Y), (1.12, GRILLE_BOTTOM_Y), (1.12, 1.47)] + shoulder,
-                      [0.0, 0.09, 0.10] + [0.0] * len(shoulder), 8)
-    place = lambda u, v, depth: (u, v, z1 - depth)
+    """The face: a thick frame round the grille stands proud of two lamp pods. Its top sits
+    under the hood's nose and the pods step down from it, with a bead round the frame's two
+    edges. The casting runs on behind the bumper, so no gap shows over it."""
+    m = Mesh("Grille_Panel", "M_Grille", 1, (0.0, 1.33, 2.90))
+    half, (bottom, top) = FRAME_HALF, FRAME_Y_RANGE
+    frame = fillet_loop([(-half, bottom), (half, bottom), (half, top - 0.03), (0.36, top - 0.008), (0.0, top),
+                         (-0.36, top - 0.008), (-half, top - 0.03)], (0.05, 0.05, 0.07, 0.0, 0.0, 0.0, 0.07), 8)
+    opening = fillet_loop([(-OPENING_HALF, OPENING_Y[0]), (OPENING_HALF, OPENING_Y[0]), (OPENING_HALF, OPENING_Y[1]),
+                           (-OPENING_HALF, OPENING_Y[1])], 0.05, 8)
+    outer, hole = radial_pair(frame, opening, (0.0, 1.335), 96)
+    m.sheet(outer, hole, 2, lambda u, v, depth: (u, v, FRAME_Z - depth), 0.09)
+    for loop, radius in ((frame, 0.015), (opening, 0.012)):
+        m.sweep([(u, v, FRAME_Z + 0.001) for u, v in resample(loop, 96, (-half, bottom))], radius, True, sides=6)
+    # The lamp pods, and the strip that carries the casting down behind the bumper.
+    pod = fillet_loop([(0.60, GRILLE_BOTTOM_Y), (1.12, GRILLE_BOTTOM_Y), (1.12, POD_TOP_Y), (0.60, POD_TOP_Y)], (0.0, 0.08, 0.09, 0.0), 8)
+    place = lambda u, v, depth: (u, v, POD_Z - depth)
     cx, cy = HEADLIGHT
     for side in (1, -1):
         outer_pod, socket = radial_pair(pod, circle(HEADLIGHT, SOCKET_RADIUS, 72), HEADLIGHT, 72)
-        m.sheet(outer_pod, socket, 4, place, 0.08, side)
-        m.cylinder((side * cx, cy, 3.01), SOCKET_RADIUS, 0.02, "z", 28)  # socket floor
+        m.sheet(outer_pod, socket, 4, place, 0.09, side)
+        m.cylinder((side * cx, cy, 2.87), SOCKET_RADIUS, 0.02, "z", 28)  # socket floor
+    m.box((-0.62, GRILLE_BOTTOM_Y, POD_Z - 0.09), (0.62, FRAME_Y_RANGE[0] + 0.02, POD_Z), (4, 1, 1))
     # Bars: six across, three upright behind them, a badge in the middle.
     for i in range(6):
-        y = lerp(1.115, 1.555, i / 5)
-        m.sweep([(lerp(-0.585, 0.585, k / 8), y, 3.066) for k in range(9)], 0.023, sides=8, squash=0.5)
-    for x in (-0.33, 0.0, 0.33):
-        m.box((x - 0.016, 1.06, 3.015), (x + 0.016, 1.60, 3.05))
-    m.revolve((0.0, 1.335, 3.08), [(-0.006, 0.002), (-0.006, 0.04), (0.008, 0.036), (0.012, 0.002)], "z", 16)
+        y = lerp(1.112, 1.558, i / 5)
+        m.sweep([(lerp(-OPENING_HALF - 0.01, OPENING_HALF + 0.01, k / 8), y, 2.958) for k in range(9)], 0.027, sides=8, squash=0.55)
+    for x in (-0.34, 0.0, 0.34):
+        m.box((x - 0.02, OPENING_Y[0] - 0.01, 2.90), (x + 0.02, OPENING_Y[1] + 0.01, 2.948))
+    m.revolve((0.0, 1.335, 2.968), [(-0.006, 0.002), (-0.006, 0.04), (0.008, 0.036), (0.012, 0.002)], "z", 16)
     return m
 
 
 def grille_back(name="Grille_Panel_Back"):
     """The dark behind the bars, the lamp bezels and the signal housings."""
-    m = Mesh(name, "M_Rubber", 1, (0.0, 1.33, 3.00))
-    m.box((-0.585, 1.06, 2.995), (0.585, 1.61, 3.012), (6, 4, 1))
+    m = Mesh(name, "M_Rubber", 1, (0.0, 1.33, 2.90))
+    m.box((-OPENING_HALF - 0.01, OPENING_Y[0] - 0.01, 2.882), (OPENING_HALF + 0.01, OPENING_Y[1] + 0.01, 2.90), (6, 4, 1))
     cx, cy = HEADLIGHT
     for side in (1, -1):
-        m.revolve((side * cx, cy, 3.085), [(-0.012, SOCKET_RADIUS - 0.004), (-0.012, SOCKET_RADIUS + 0.03), (0.006, SOCKET_RADIUS + 0.026),
-                                           (0.015, SOCKET_RADIUS + 0.008), (0.008, SOCKET_RADIUS - 0.006)], "z", 36)
+        # A dark sleeve down the socket, so the lamp sits deep, and a narrow lip round its mouth.
+        m.revolve((side * cx, cy, POD_Z), [(-0.08, SOCKET_RADIUS - 0.006), (-0.012, SOCKET_RADIUS - 0.006), (-0.002, SOCKET_RADIUS + 0.014),
+                                           (0.006, SOCKET_RADIUS + 0.012), (0.009, SOCKET_RADIUS + 0.002), (0.004, SOCKET_RADIUS - 0.010)], "z", 36)
         lens = fillet_loop([(cx - 0.125, SIGNAL_Y - 0.05), (cx + 0.125, SIGNAL_Y - 0.05), (cx + 0.125, SIGNAL_Y + 0.05), (cx - 0.125, SIGNAL_Y + 0.05)], 0.035)
-        m.loft([[(side * u, v, z) for u, v in resample(lens, 28, (cx - 0.13, SIGNAL_Y - 0.05))] for z in (3.08, 3.098)])
+        m.loft([[(side * u, v, z) for u, v in resample(lens, 28, (cx - 0.13, SIGNAL_Y - 0.05))] for z in (POD_Z - 0.01, POD_Z + 0.012)])
     return m
 
 
@@ -1001,18 +1034,20 @@ def rear_window():
 
 
 def headlight(name, side):
-    """A domed lens in the socket."""
-    m = Mesh(name, "M_Lamp", side, (HEADLIGHT[0], HEADLIGHT[1], 3.03))
-    m.revolve((HEADLIGHT[0], HEADLIGHT[1], 3.05), [(-0.03, HEADLIGHT_RADIUS), (0.018, HEADLIGHT_RADIUS),
-                                                    (0.034, 0.112), (0.045, 0.07), (0.047, 0.02), (0.048, 0.001), (-0.03, 0.001)], "z", 32)
+    """A domed lens set back in the socket."""
+    z = POD_Z - 0.078
+    m = Mesh(name, "M_Lamp", side, (HEADLIGHT[0], HEADLIGHT[1], z))
+    m.revolve((HEADLIGHT[0], HEADLIGHT[1], z), [(-0.03, HEADLIGHT_RADIUS), (0.018, HEADLIGHT_RADIUS),
+                                                (0.034, 0.106), (0.045, 0.066), (0.047, 0.02), (0.048, 0.001), (-0.03, 0.001)], "z", 32)
     return m
 
 
 def turn_signal(name, side):
     cx = HEADLIGHT[0]
-    m = Mesh(name, "M_Amber", side, (cx, SIGNAL_Y, 3.10))
+    z = POD_Z + 0.008
+    m = Mesh(name, "M_Amber", side, (cx, SIGNAL_Y, z))
     lens = fillet_loop([(cx - 0.10, SIGNAL_Y - 0.034), (cx + 0.10, SIGNAL_Y - 0.034), (cx + 0.10, SIGNAL_Y + 0.034), (cx - 0.10, SIGNAL_Y + 0.034)], 0.025)
-    m.loft([[(u, v, z) for u, v in resample(lens, 24, (cx - 0.1, SIGNAL_Y - 0.03))] for z in (3.095, 3.112)])
+    m.loft([[(u, v, w) for u, v in resample(lens, 24, (cx - 0.1, SIGNAL_Y - 0.03))] for w in (z, z + 0.015)])
     return m
 
 

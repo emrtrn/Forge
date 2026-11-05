@@ -11,6 +11,98 @@
   "collisionPolicy": "visual_only",
   "parts": [
     {
+      "id": "mirror_left",
+      "nodes": [
+        "Mirror_L"
+      ],
+      "zone": {
+        "min": [
+          1.05,
+          1.75,
+          1.2
+        ],
+        "max": [
+          1.45,
+          2.45,
+          1.55
+        ]
+      },
+      "detach": {
+        "impulse": 1500,
+        "massKg": 4,
+        "kick": 1
+      }
+    },
+    {
+      "id": "mirror_right",
+      "nodes": [
+        "Mirror_R"
+      ],
+      "zone": {
+        "min": [
+          -1.45,
+          1.75,
+          1.2
+        ],
+        "max": [
+          -1.05,
+          2.45,
+          1.55
+        ]
+      },
+      "detach": {
+        "impulse": 1500,
+        "massKg": 4,
+        "kick": 1
+      }
+    },
+    {
+      "id": "door_left",
+      "nodes": [
+        "Door_L"
+      ],
+      "zone": {
+        "min": [
+          0.975,
+          0.46,
+          0.07
+        ],
+        "max": [
+          1.45,
+          2.49,
+          1.28
+        ]
+      },
+      "detach": {
+        "impulse": 18000,
+        "massKg": 45,
+        "kick": 1
+      }
+    },
+    {
+      "id": "door_right",
+      "nodes": [
+        "Door_R"
+      ],
+      "zone": {
+        "min": [
+          -1.45,
+          0.46,
+          0.07
+        ],
+        "max": [
+          -0.975,
+          2.49,
+          1.28
+        ]
+      },
+      "detach": {
+        "impulse": 18000,
+        "massKg": 45,
+        "kick": 1
+      }
+    },
+    {
       "id": "front_bumper",
       "nodes": [
         "Front_Bumper"

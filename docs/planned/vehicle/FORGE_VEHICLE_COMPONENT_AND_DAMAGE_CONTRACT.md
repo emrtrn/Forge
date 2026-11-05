@@ -1,10 +1,10 @@
 # FORGE — Vehicle Component & Damage Contract
 
 **Dosya:** `FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`  
-**Sürüm:** v1.2 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, Doruk K-180 greybox'ı (VC-1), ön tampon göçüğü (VC-2) ve kopması (VC-3) tamam  
+**Sürüm:** v1.3 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, Doruk K-180 greybox'ı, ön tamponu, kapıları ve aynaları (VC-1…3, VC-5 ilk dilim) tamam  
 **Tarih:** 2026-11-05 (Europe/Istanbul)  
 **Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`; ilk özgün araç `RB-V-001 — Doruk K-180` (`VCD-D15`, 2026-11-05)  
-**Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattında VC-1 ve VC-2 kabul edildi, VC-3 kod tamam, görsel kabul bekliyor.  
+**Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattında VC-1 ve VC-2 kabul edildi, VC-3 ve VC-5 ilk dilimi kod tamam, görsel kabul bekliyor.  
 **Yetki ayrımı:** Forge genel model, deformasyon, kırılma, kopma, kayıt ve editör altyapısını sağlar. Ridgebound hangi parçanın nasıl hasarlanacağını, eşikleri, onarım/ekonomi/oynanış sonuçlarını belirler. 
 
 **Girdi kaynakları:**
@@ -307,6 +307,9 @@ Faz 1 `PhysicsImpact` olayı fiziksel chassis collider'ından gelebilir; **motor
 - **`dentImpulse`, motorun duvar itişinin üstünde olmalı.** Rapier eşiği 1/60 s'lik parça başına filtreler, sonra kare içinde toplar. K-180 1. viteste 27,5 kN iter, yani parça başına yaklaşık 460 N·s; `dentImpulse` bunun altında kalırsa gazda duran araç duvarı kazır. 600 ile gaz tam açık 13,5 s itişte göçük hiç değişmedi; aynı değer 10 fps'te de geçerli çünkü filtre kare hızına bağlı değil. Darbeden hemen sonraki sekme gerçek bir ikinci temastır ve göçüğü artırabilir (ölçüldü: 0,123 → 0,150 m).
 - **Kopma eşiği ölçülen darbeden seçilir.** 4.500 kg kamyon, duvara dik, 10 fps: 22 km/sa 37.100 N·s, 36 km/sa 49.800 N·s, 50 km/sa 63.300 N·s (ölçüm için sidecar uçuşta `fullImpulse: 200000`, `plasticity: 1`, `maxDepth: 2` yapıldı, böylece göçük doğrudan darbeyi okur). `front_bumper.detach.impulse = 45000`, 22 km/sa darbe göçertir, yaklaşık 30 km/sa üstü koparır. Aynı ölçümde `fullImpulse: 20000` yaklaşık 12 km/sa'e denk düşer.
 - **Bilinçli sınır:** `VCD-D05` gereği tampon kopsa da çarpıştırıcıdaki tampon kutusu kalır; kamyon duvara görünmez 22 cm kala durur.
+- **Bölge sırası ve tabanı.** Ayna kolu kapı bölgesinin içinde olduğu için ayna bölgeleri listede kapılardan öncedir. Kapı bölgesi `y = 0,46`'ya iner: otomobil yüksekliğindeki darbede ilk yüzey `Cab_Step` olabilir, bölge dar kalırsa darbe gövdeye düşer.
+- **Yüzey araması çizgi boyunca ±2 m bakar.** `locateDent` çarpana en yakın yüzeyi alır, temas noktasının önündekiler dahil. Kabin önündeki dar engel `y ≈ 2,1`'de kalırsa 1,7 m öndeki ızgara köşesi yarıçap içine girer ve darbe aynaya değil gövdeye düşer. Ayna önden yalnız tavan hizasında (`y ≈ 2,35`) yakalanır; yandan her yükseklikte aynanın kendisi en yakın yüzeydir.
+- **Yan darbe ölçümü, 1.200 kg otomobil, 10 fps:** 35 km/sa 11.900 N·s, 64 km/sa 22.000 N·s, 82 km/sa 27.200 N·s. Kapı `detach` 18.000 N·s: 35 km/sa göçertir, 82 km/sa koparır. Ayna `detach` 1.500 N·s. `SideGlass_*` kapının çocuğu olduğu için kapıyla gider. `maxDepth: 0,25` tüm parçalar için ortak olduğu için sınırdaki kapı göçüğü hesapla koltuğa değer (kapı x 1,025 → 0,775, koltuk x 0,92); ölçülmedi, görsel kabulde bakılmalı.
 
 ## 8. Fizik sahipliği ve collision sözleşmesi
 
@@ -393,7 +396,7 @@ Faz 1 `PhysicsImpact` olayı fiziksel chassis collider'ından gelebilir; **motor
 | **VC-2** | `front_bumper` için `dent` (VM-1 hazırsa veriyle bağlanır) | 2 art arda darbe aynı tamponu büker; başka araç değişmez; save/reload shape aynı (`doruk-k180` smoke) | **[TAMAM — 2026-11-05, kullanıcı kabul etti]** |
 | **VC-3** | `front_bumper` için `detach` | Önceki göçük aynı mesh üstünde; part tek doğar; araca bağlı görünmez (`doruk-k180` smoke) | **[KOD TAMAM — 2026-11-05, görsel kabul kullanıcıda]** |
 | **VC-4** | `RB-V-001` için save/restore ve bütçe doğrulaması | Tekrarlı save/load, parçanın geri takılmaması, bellek stabilliği | **[KAYIT TAMAM — 2026-11-05; bellek ve hücre çıkışı K-180'de ölçülmedi, `R-07`]** |
-| **VC-5** | Kaput, kapı, cam gibi diğer part profilleri | Her malzeme için ayrı test; tek genel “hasar” efekti yok | **[SONRA]** |
+| **VC-5** | Kaput, kapı, cam gibi diğer part profilleri | Her malzeme için ayrı test; tek genel “hasar” efekti yok | **[İLK DİLİM KOD TAMAM — 2026-11-05: kapı ve ayna; kaput, çamurluk ve cam sırada]** |
 
 **Geliştirme sırası notu:** Faz 7 kodu ve r187 kapısı kapandı; açık olan Faz 7 görsel kabulü motor hattını bekletmez. Yeni commit'ler bu belgeden daha güncel kanıt getirebilir; fark tarih ve commit ile kaydedilir.
 
@@ -428,8 +431,9 @@ Motor hattı kapandı. Aşağıdaki liste açık işlerin tek yeridir; biten mad
 
 | ID | İş | Not |
 |---|---|---|
-| `R-02` | Doruk K-180 kalan parçaları (VC-5) | Tampon göçüyor, kopuyor, kaydediliyor. Sırada kapı, kaput, çamurluk ve ayna; her biri §7 kurallarına uyar. Adaylar `art/vehicles/doruk-k180/PARTS.md` içinde. |
-| `R-18` | Doruk K-180 gövde yedeği | `parts` dışındaki her mesh tek gövde sayılır. Bugün yalnız tampon parça olduğu için yan veya kaput darbesi motor, şasi ve kabin içini birlikte göçertir (kaput hizasında ölçüldü). Kapı, kaput ve çamurluk parça olunca daralır; kalan iç mesh'ler için ayrıca karar gerekir. |
+| `R-02` | Doruk K-180 kalan parçaları (VC-5) | Tampon, kapılar ve aynalar bağlı. Sırada kaput ve çamurluklar; her biri §7 kurallarına uyar. Adaylar `art/vehicles/doruk-k180/PARTS.md` içinde. |
+| `R-18` | Doruk K-180 gövde yedeği | `parts` dışındaki her mesh tek gövde sayılır. Kapı hizasında çözüldü: yan darbede kabin içi, motor ve karşı kapı göçmüyor. Kaput ve çamurluk hizası hâlâ açık: oradaki darbe motoru ve şasiyi birlikte göçertir. Kaput ve çamurluk parça olunca daralır. |
+| `R-19` | Gövdenin zemine vurması | Sert durmada kuyruk yere değince `Bed_Base`, `Rear_Bumper`, `Tail_Lamp_R` göçtü (ölçüldü). `dentImpulse: 600`, 4.500 kg için yaklaşık 0,13 m/s'lik temas demek. Arazide taban vurma ve sert iniş gövdeyi göçertebilir. Zeminle temasın ayrı eşik alıp almayacağı kullanıcı kararı; arazide ölçülmedi. |
 | `R-03` | Ridgebound'daki Gaz-52 kopyası | `public/assets/vehicles/gaz52` orada eski: `Deformable` bileşeni ve `gaz-52_base.deformable.json` yok. Yalnız araç Ridgebound'a taşınacaksa gerekir. |
 
 **Yayımdan önce çözülmeli:**
@@ -564,8 +568,9 @@ Sonraki araçlar için `[ARAÇ ADI]` ve `[GÖRSEL YOLU]` alanlarını doldurup y
 | 2026-11-04 | `VCD-007` / v0.7 | Static Mesh Editor `Parts` listesi, `Fit Zone`, viewport tel kutuları, Test Hit parça bilgisi | **[TAMAM]** |
 | 2026-11-04 | `VCD-008` / v0.8 | Kalan işler §11.2'de toplandı; `RB-V-001` modelleme istemi §13.2'ye yazıldı | **[SIRADA: R-01]** |
 | 2026-11-04 | `VCD-009` / v0.9 | Kullanıcı: araç henüz seçilmedi, yeni konseptler üretiliyor; model Forge'da kalabilir. `R-00` ve `VCD-D15` eklendi, §13.2 aracı seçilebilir hale geldi | **[SIRADA: R-00]** |
+| 2026-11-05 | `VCD-013` / v1.3 | VC-5 ilk dilim: `door_left/right`, `mirror_left/right`. 35 km/sa otomobil kapıyı göçertir, kabin içi, motor ve karşı kapı değişmez; 82 km/sa kapıyı camıyla koparır, kayıt geri takmaz; tavan hizasındaki dal aynayı tek başına koparır. `R-18` daraldı, `R-19` eklendi. `missed 1` kamyonda değil, Reference Car'da ölçüldü | **[VC-5 İLK DİLİM KOD TAMAM, SIRADA: görsel kabul, kaput ve çamurluk]** |
 | 2026-11-05 | `VCD-012` / v1.2 | VC-3: `front_bumper.detach` (45.000 N·s, 70 kg, kick 0,5). 50 km/sa duvar darbesinde tek parça, göçüğüyle kopar; kancalar şasiye bağlı kalır; kamyon sürülür; ikinci temas parça üretmez. Kazadan önceki kayıt tamponu geri getirir, kazadan sonraki kayıt iki yüklemede de geri getirmez. Editörde kopma kaydırıcısı 100.000'e çıktı. Kullanıcı VC-2 göçüğünü kabul etti | **[VC-3 KOD TAMAM, SIRADA: görsel kabul, VC-5]** |
 | 2026-11-05 | `VCD-011` / v1.1 | VC-2: `front_bumper` sidecar'ı, `Deformable` bileşeni, üç kutulu çarpıştırıcı. Duvar darbesi yalnız tamponu göçertiyor (144/432 vertex, 0,246 m, `maxDepth` 0,25); ikinci kamyon ve paylaşılan model değişmiyor; kayıt sonrası biçim aynı. §7 ölçüm kuralları, `R-18` eklendi; kullanıcı VC-1 görünümünü kabul etti, `R-01` kapandı | **[VC-2 KOD TAMAM, SIRADA: görsel kabul, VC-3]** |
 | 2026-11-05 | `VCD-010` / v1.0 | Kullanıcı: ilk araç Doruk K-180 (`VCD-D15` kapandı), Blender 5.2 LTS, mavi kamyon PNG'si referans dışı. VC-1: deterministik `bpy` greybox, tek GLB, manifest, `vehicle.json`, `actor.json`, `doruk-k180` smoke | **[VC-1 KOD TAMAM, SIRADA: görsel kabul, R-02]** |
 
-**Devam protokolü:** motor hattı kapandı, sıradaki iş VC-3 görsel kabulü; ardından VC-5 (`R-02`). Her aşama sonunda belge sürümü yükseltilir; Drive kopyası varsa **aynı dosya ID'sinde** güncellenir. Uygulama başka bir oturumda gerçekleştirilirse commit/fixture, test sonucunu ve açık riskleri bu belgenin yeni sürüm kaydına ekle.
+**Devam protokolü:** motor hattı kapandı, sıradaki iş VC-3 ve VC-5 ilk dilim görsel kabulü; ardından kaput ve çamurluk (`R-02`). Her aşama sonunda belge sürümü yükseltilir; Drive kopyası varsa **aynı dosya ID'sinde** güncellenir. Uygulama başka bir oturumda gerçekleştirilirse commit/fixture, test sonucunu ve açık riskleri bu belgenin yeni sürüm kaydına ekle.

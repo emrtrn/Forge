@@ -190,6 +190,46 @@ export function registerDeformableMeshSyncTests(check: (label: string, run: () =
     assert.deepEqual(positionsOf(replayed.body.geometry), positionsOf(live.body.geometry));
   });
 
+  check("deformable mesh: alsoDents dents the panel too, and the panel keeps it when the lamp goes", () => {
+    const parts: DentPart[] = [
+      { ...DOOR_PART, alsoDents: ["panel", "no-such-part"] },
+      { id: "panel", nodes: ["Panel"], zone: { min: [-9, -9, 50], max: [9, 9, 51] } },
+    ];
+    const build = (): ReturnType<typeof twoPieceObject> => {
+      const car = twoPieceObject();
+      car.body.name = "Panel";
+      return car;
+    };
+    const live = build();
+    const target = new DentTarget(live.root, { parts });
+    assert.equal(target.hit([0.1, 0, 0.1], INTO, 0.1, params), "dented");
+    assert.equal(target.lastPart, "door");
+    assert.deepEqual(target.dentList.map((dent) => dent.part), ["door", "panel"]);
+    assert.ok(deepestWorld(live.body) > 0.01, `panel ${deepestWorld(live.body)}`);
+    const alone = new DentTarget(twoPieceObject().root, { parts: [DOOR_PART] });
+    alone.hit([0.1, 0, 0.1], INTO, 0.1, params);
+    assert.ok(target.lastMoved > alone.lastMoved, "the count covers both parts");
+
+    assert.ok(target.detachPart("door"));
+    assert.deepEqual(target.dentList.map((dent) => dent.part), ["panel"]);
+    const replayed = build();
+    new DentTarget(replayed.root, { parts }).restore(target.dentList, params);
+    assert.deepEqual(positionsOf(replayed.body.geometry), positionsOf(live.body.geometry), "a load gives the panel the same shape");
+  });
+
+  check("deformable mesh: a second hit deepens the part and its linked panel, one list entry each", () => {
+    const parts: DentPart[] = [
+      { ...DOOR_PART, alsoDents: ["panel"] },
+      { id: "panel", nodes: ["Panel"], zone: { min: [-9, -9, 50], max: [9, 9, 51] } },
+    ];
+    const car = twoPieceObject();
+    car.body.name = "Panel";
+    const target = new DentTarget(car.root, { parts });
+    target.hit([0.1, 0, 0.1], INTO, 0.05, params);
+    target.hit([0.1, 0, 0.1], INTO, 0.05, params);
+    assert.deepEqual(target.dentList.map((dent) => [dent.part, Number(dent.depth.toFixed(6))]), [["door", 0.1], ["panel", 0.1]]);
+  });
+
   check("deformable mesh: a detached part keeps its dented shape and its world pose", () => {
     const car = twoPieceObject();
     car.root.position.set(10, 1, -3);

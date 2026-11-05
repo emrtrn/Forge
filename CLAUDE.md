@@ -228,7 +228,9 @@ engine/editor.
   the Static Mesh Editor's Parts list does this, `fitPartZone`). Meshes outside
   the parts are the body; a dent's `part` goes to the save-game. A part's
   `detach` (`impulse`, `massKg`, `kick`) tears its live nodes off into a body of
-  their own, dents included. The save-game keeps which parts are gone
+  their own, dents included. `alsoDents` lists parts a hit on this one also dents at
+  the same spot, each with a dent of its own (a lamp and the panel it sits in), one
+  step only. The save-game keeps which parts are gone
   (`detachedParts`), not the loose piece; loading a save from before the hit puts
   the part back. Such a piece starts inside its car, so the pair passes through until apart
   (`PhysicsSubsystem.passThroughUntilApart`): Rapier reads hooks only on a step

@@ -76,6 +76,8 @@ BED_PLANK_OUTER_X = 1.205
 BED_PLANK_DEPTH = 0.03
 BED_RAIL_TOP_Y = 1.30
 FRAME_Y = (0.78, 1.00)
+LAMP_SOCKET_X = (0.675, 0.925)
+LAMP_SOCKET_Y = (1.155, 1.405)
 
 CYLINDER_SEGMENTS = 32
 
@@ -481,7 +483,13 @@ def grille_panel():
     m.box((-half, y0, z0), (half, y0 + 0.05, z1), (12, 1, 1))
     m.box((-half, y1 - 0.06, z0), (half, y1, z1), (12, 1, 1))
     for side in (1, -1):
-        m.box((side * slot, y0 + 0.05, z0), (side * half, y1 - 0.06, z1), (3, 4, 1))
+        # The lamp housing is a ring around a socket, so a dent shapes the hole.
+        hole_x, hole_y = LAMP_SOCKET_X, LAMP_SOCKET_Y
+        m.box((side * slot, y0 + 0.05, z0), (side * hole_x[0], y1 - 0.06, z1), (1, 4, 1))
+        m.box((side * hole_x[1], y0 + 0.05, z0), (side * half, y1 - 0.06, z1), (1, 4, 1))
+        m.box((side * hole_x[0], y0 + 0.05, z0), (side * hole_x[1], hole_y[0], z1), (2, 1, 1))
+        m.box((side * hole_x[0], hole_y[1], z0), (side * hole_x[1], y1 - 0.06, z1), (2, 2, 1))
+        m.box((side * hole_x[0], hole_y[0], z0), (side * hole_x[1], hole_y[1], z0 + 0.02), (2, 2, 1))
         m.box((side * 0.18, y0 + 0.05, z0 + 0.01), (side * 0.21, y1 - 0.06, z1 - 0.01))
     for y in (1.18, 1.32, 1.46):
         m.box((-slot, y, z0 + 0.01), (slot, y + 0.03, z1 - 0.01), (4, 1, 1))
@@ -503,8 +511,8 @@ def rear_window():
 
 
 def headlight(name, side):
-    m = Mesh(name, "M_Lamp", side, (0.80, 1.28, 3.08))
-    m.cylinder((0.80, 1.28, 3.09), 0.115, 0.04, "z", 24)
+    m = Mesh(name, "M_Lamp", side, (0.80, 1.28, 3.03))
+    m.cylinder((0.80, 1.28, 3.055), 0.115, 0.05, "z", 24)
     return m
 
 

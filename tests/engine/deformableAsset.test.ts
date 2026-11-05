@@ -13,6 +13,7 @@ const maximal: AssetDeformableDef = {
   parts: [{
     id: "door_left", nodes: ["Door_L", "Door_L_Trim"], zone: { min: [0.7, 0.4, -0.6], max: [1.3, 2.6, 0.45] },
     detach: { impulse: 1000000, massKg: 100000, kick: 50 },
+    alsoDents: ["door_frame"],
   }],
 };
 
@@ -70,6 +71,14 @@ export function registerDeformableAssetTests(check: (label: string, run: () => v
     const sent = { ...maximal, parts: [{ ...good, futureField: 1 }] };
     const saved = validateSaveDeformablePayload({ path: "assets/Panel.deformable.json", deformable: sent });
     assert.deepEqual(collectDroppedFields(sent, saved.deformable).paths, ["parts[0].futureField"]);
+  });
+
+  check("deformable asset: alsoDents keeps text ids once, never the part itself", () => {
+    const part = { id: "lamp", nodes: ["Lamp"], zone: { min: [0, 0, 0], max: [1, 1, 1] } };
+    const read = (alsoDents: unknown) => normalizeAssetDeformable({ parts: [{ ...part, alsoDents }] })!.parts![0]!.alsoDents;
+    assert.deepEqual(read(["panel", "panel", "", 3, "lamp"]), ["panel"]);
+    assert.equal(read([]), undefined);
+    assert.equal(read("panel"), undefined);
   });
 
   check("deformable asset: a part's detach needs an impulse and stays in bounds", () => {

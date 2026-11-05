@@ -51,6 +51,12 @@ export interface AssetDeformablePart {
   zone: DeformablePartZone;
   /** Omitted: the part stays on, however hard the hit. */
   detach?: DeformablePartDetach;
+  /**
+   * Parts a hit here also dents, at the same spot: the panel a lamp sits in. Each
+   * keeps a dent of its own, so the panel keeps its shape when the lamp falls out.
+   * One step only; an id that matches no part is ignored.
+   */
+  alsoDents?: string[];
 }
 
 export interface AssetDeformableDef {
@@ -174,7 +180,10 @@ function normalizePart(value: unknown): AssetDeformablePart | null {
   if (!id || nodes.length === 0 || !min || !max) return null;
   if (min[0] > max[0] || min[1] > max[1] || min[2] > max[2]) return null;
   const detach = normalizeDetach(input.detach);
-  return { id, nodes, zone: { min, max }, ...(detach ? { detach } : {}) };
+  const alsoDents = Array.isArray(input.alsoDents)
+    ? [...new Set(input.alsoDents.filter((other): other is string => typeof other === "string" && other.length > 0 && other !== id))]
+    : [];
+  return { id, nodes, zone: { min, max }, ...(detach ? { detach } : {}), ...(alsoDents.length > 0 ? { alsoDents } : {}) };
 }
 
 /** Valid parts only, the first of a repeated id wins. */

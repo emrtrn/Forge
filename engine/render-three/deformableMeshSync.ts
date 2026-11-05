@@ -266,17 +266,28 @@ export class DentTarget {
     }
     if (!centre) return "missed";
     this.landedOn = part;
-    const plan = planDent(this.dents, centre, dentDirection, depth, params, part);
-    if (plan.kind === "skip") return "skipped";
+    if (!this.place(part, centre, dentDirection, depth, params)) return "skipped";
+    let moved = this.moved;
+    for (const other of this.options.parts?.find(({ id }) => id === part)?.alsoDents ?? []) {
+      if (meshes.some((item) => item.part === other) && this.place(other, centre, dentDirection, depth, params)) moved += this.moved;
+    }
+    this.moved = moved;
+    return "dented";
+  }
+
+  /** Adds or deepens one part's dent; false when the list leaves no room for it. */
+  private place(part: string | null, centre: DentVec3, direction: DentVec3, depth: number, params: DentParams): boolean {
+    const plan = planDent(this.dents, centre, direction, depth, params, part);
+    if (plan.kind === "skip") return false;
     if (plan.kind === "add") {
       this.dents.push(plan.dent);
       this.push(plan.dent, params);
-      return "dented";
+      return true;
     }
     const existing = this.dents[plan.index]!;
     this.dents[plan.index] = { ...existing, depth: existing.depth + plan.extra };
     this.push({ ...existing, depth: plan.extra }, params);
-    return "dented";
+    return true;
   }
 
   /** Reapplies a saved dent list on a fresh object; the result equals the live shape. */

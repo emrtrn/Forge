@@ -36,6 +36,8 @@ export interface DentPart {
   readonly id: string;
   readonly nodes: readonly string[];
   readonly zone: { readonly min: DentVec3; readonly max: DentVec3 };
+  /** Parts a hit here also dents, at the same spot. */
+  readonly alsoDents?: readonly string[] | undefined;
 }
 
 export interface DentParams {

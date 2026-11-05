@@ -195,13 +195,117 @@
       }
     },
     {
+      "id": "headlight_left",
+      "nodes": [
+        "Headlight_L"
+      ],
+      "zone": {
+        "min": [
+          0.62,
+          1.1,
+          2.98
+        ],
+        "max": [
+          0.98,
+          1.46,
+          3.35
+        ]
+      },
+      "detach": {
+        "impulse": 12000,
+        "massKg": 2,
+        "kick": 1
+      },
+      "alsoDents": [
+        "front_grille",
+        "turn_signal_left"
+      ]
+    },
+    {
+      "id": "turn_signal_left",
+      "nodes": [
+        "Turn_Signal_L"
+      ],
+      "zone": {
+        "min": [
+          0.66,
+          1.46,
+          2.98
+        ],
+        "max": [
+          0.94,
+          1.6,
+          3.35
+        ]
+      },
+      "detach": {
+        "impulse": 8000,
+        "massKg": 0.5,
+        "kick": 1
+      },
+      "alsoDents": [
+        "front_grille",
+        "headlight_left"
+      ]
+    },
+    {
+      "id": "headlight_right",
+      "nodes": [
+        "Headlight_R"
+      ],
+      "zone": {
+        "min": [
+          -0.98,
+          1.1,
+          2.98
+        ],
+        "max": [
+          -0.62,
+          1.46,
+          3.35
+        ]
+      },
+      "detach": {
+        "impulse": 12000,
+        "massKg": 2,
+        "kick": 1
+      },
+      "alsoDents": [
+        "front_grille",
+        "turn_signal_right"
+      ]
+    },
+    {
+      "id": "turn_signal_right",
+      "nodes": [
+        "Turn_Signal_R"
+      ],
+      "zone": {
+        "min": [
+          -0.94,
+          1.46,
+          2.98
+        ],
+        "max": [
+          -0.66,
+          1.6,
+          3.35
+        ]
+      },
+      "detach": {
+        "impulse": 8000,
+        "massKg": 0.5,
+        "kick": 1
+      },
+      "alsoDents": [
+        "front_grille",
+        "headlight_right"
+      ]
+    },
+    {
       "id": "front_grille",
       "nodes": [
-        "Grille_Panel",
-        "Headlight_L",
-        "Headlight_R",
-        "Turn_Signal_L",
-        "Turn_Signal_R"
+        "Grille_Panel"
       ],
       "zone": {
         "min": [
@@ -214,7 +318,13 @@
           1.6,
           3.35
         ]
-      }
+      },
+      "alsoDents": [
+        "headlight_left",
+        "headlight_right",
+        "turn_signal_left",
+        "turn_signal_right"
+      ]
     },
     {
       "id": "rigid_core",

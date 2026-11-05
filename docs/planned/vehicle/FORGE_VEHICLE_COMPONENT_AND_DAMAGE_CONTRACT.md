@@ -1,7 +1,7 @@
 # FORGE — Vehicle Component & Damage Contract
 
 **Dosya:** `FORGE_VEHICLE_COMPONENT_AND_DAMAGE_CONTRACT.md`  
-**Sürüm:** v1.6 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, Doruk K-180 greybox'ı ve hasar parçaları (VC-1…3, VC-5) tamam, cam `R-11` bekler  
+**Sürüm:** v1.7 — tasarım sözleşmesi; motor hattı VM-1…3, kararlı aktör kimliği ve parça arayüzü uygulandı, Doruk K-180 greybox'ı ve hasar parçaları (VC-1…3, VC-5) tamam, cam `R-11` bekler  
 **Tarih:** 2026-11-05 (Europe/Istanbul)  
 **Kapsam:** Forge genel motor/editör varlık–araç–hasar entegrasyonu; ilk motor denemesi `Gaz-52`; ilk özgün araç `RB-V-001 — Doruk K-180` (`VCD-D15`, 2026-11-05)  
 **Durum:** **[MOTOR HATTI TAMAM]**. Kullanıcı §12'deki kapalı kararları ve §11'deki sırayı 2026-11-04'te onayladı. `parts`, `detach` ve `logical` kayıt koddadır (§5, §9); `RB-V-001` hattında VC-1 ve VC-2 kabul edildi, VC-3 ve VC-5 kod tamam, görsel kabul bekliyor.  
@@ -85,7 +85,7 @@ Aşağıdaki durum `main` @ `731ae7ae` koduna göredir. Kod tarandı; "ölçüld
 
 ### 3.1. Ana ilkeler
 
-- **Tek düzenlenebilir Blender master:** `art/vehicles/doruk-k180/Doruk-K180_Master.blend`. Greybox aşamasında otorite aynı klasördeki `doruk-k180_greybox.py` script'idir; `.blend` onun çıktısıdır ve elle düzenleme sonraki üretimde silinir. Prosedürel parçalar Claude/Codex `bpy` ile üretilebilir; script ve araç sürümü tutulur (Blender 5.2 LTS sürümüne kilitli).
+- **Tek düzenlenebilir Blender master:** `art/vehicles/doruk-k180/Doruk-K180_Master.blend`. Otorite aynı klasördeki `doruk-k180_model.py` script'idir; `.blend` onun çıktısıdır ve elle düzenleme sonraki üretimde silinir. Prosedürel parçalar Claude/Codex `bpy` ile üretilebilir; script ve araç sürümü tutulur (Blender 5.2 LTS sürümüne kilitli).
 - **İlk Forge teslimi tek ana araç GLB:** bir kök ve alt düğüm hiyerarşisi; her hasar alacak bileşen bağımsız node/mesh. Malzeme, dönüş, pivot korunur.
 - **Ayrı model çıktıları isteğe bağlı:** Blender master kaynak korunarak, parçaya özel fracture bake veya mevcut entegrasyonun gerektirdiği fallback için `.glb` dışa aktarılabilir. **İkinci elde çizilmiş temiz yedek** olarak tasarlanmaz.
 - **Hasar için net parça sınırları:** tampon, kaput, cam ve kapılar mümkünse komşu mesh'lerle kaynak vertex paylaşmayan ayrık mesh olmalı; kopma anında görünmeyen arka yüz ve açık bağlantı noktaları oyun estetiğine göre ele alınmalı.
@@ -575,6 +575,7 @@ Sonraki araçlar için `[ARAÇ ADI]` ve `[GÖRSEL YOLU]` alanlarını doldurup y
 | 2026-11-04 | `VCD-007` / v0.7 | Static Mesh Editor `Parts` listesi, `Fit Zone`, viewport tel kutuları, Test Hit parça bilgisi | **[TAMAM]** |
 | 2026-11-04 | `VCD-008` / v0.8 | Kalan işler §11.2'de toplandı; `RB-V-001` modelleme istemi §13.2'ye yazıldı | **[SIRADA: R-01]** |
 | 2026-11-04 | `VCD-009` / v0.9 | Kullanıcı: araç henüz seçilmedi, yeni konseptler üretiliyor; model Forge'da kalabilir. `R-00` ve `VCD-D15` eklendi, §13.2 aracı seçilebilir hale geldi | **[SIRADA: R-00]** |
+| 2026-11-05 | `VCD-017` / v1.7 | Detay modelleme ilk geçiş: greybox script'i `doruk-k180_model.py` oldu; kabin, kaput, çamurluk, ızgara, tampon, tekerlek, şasi, motor, kasa kavisli geometriye geçti. Ölçü, düğüm adı ve hasar eşikleri korundu; `Cabin_Trim` ve `Door_*_Trim` düğümleri eklendi. 62 mesh, yaklaşık 82 bin vertex, 2,45 MB. Doku ve UV sonraki adım | **[SIRADA: görsel kabul, doku]** |
 | 2026-11-05 | `VCD-016` / v1.6 | VC-5 kasa dilimi: `fuel_tank`, `tail_lamp_*`, `rear_bumper`, `tailgate`, `bed_side_*`; `Bed_Base` `rigid_core`'a girdi. Toplam 21 parça, 25 smoke testi gerçek ~56 fps'te ve headless geçti | **[VC-5 KOD TAMAM, SIRADA: görsel kabul]** |
 | 2026-11-05 | `VCD-015` / v1.5 | `R-08` Doruk K-180 için kapandı: gerçek GPU ölçümü, eşikler korundu. Motor: parça alanı `alsoDents`. Far ve sinyaller ayrı parça, far yuvası greybox'ta boşluk oldu, göçer ve düşer, yuva göçüğü kalır. `R-21` eklendi | **[SIRADA: kasa parçaları]** |
 | 2026-11-05 | `VCD-014` / v1.4 | VC-5 ön dilim: `hood`, `fender_left/right`, yalnız göçen `front_grille`, hiç göçmeyen `rigid_core`. Motor, şasi, kabin içi ve cam hiçbir senaryoda göçmüyor, `R-18` kapandı. Kullanıcı `R-19`'u erteledi; `R-20` eklendi | **[VC-5 ÖN DİLİM KOD TAMAM, SIRADA: görsel kabul, kasa parçaları]** |

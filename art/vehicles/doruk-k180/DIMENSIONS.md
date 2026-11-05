@@ -1,7 +1,7 @@
 # Doruk K-180 (RB-V-001): ölçü sözleşmesi
 
 Kullanıcı onayı: 2026-11-05. Tekerlek yarıçapı kullanıcı tarafından Claude'a bırakıldı.
-Boy, en, yükseklik ve aks ölçüleri Blender çıktısından ölçülerek doğrulandı. Değerlerin kaynağı `doruk-k180_greybox.py` başındaki parametre bloğudur; bu tablo onunla aynı tutulur.
+Boy, en, yükseklik ve aks ölçüleri Blender çıktısından ölçülerek doğrulandı. Değerlerin kaynağı `doruk-k180_model.py` başındaki parametre bloğudur; bu tablo onunla aynı tutulur.
 Konsept görseli ölçü kaynağı değildir (sözleşme §3.3). Birim metre.
 
 | Ölçü | K-180 | Gaz-52 (GLB ölçümü) |

@@ -1,6 +1,6 @@
 # Doruk K-180: düğüm listesi
 
-Düğüm adları `doruk-k180_greybox.py` ile aynıdır. `partId` değerleri `*.deformable.json` içinde tutulur.
+Düğüm adları `doruk-k180_model.py` ile aynıdır. `partId` değerleri `*.deformable.json` içinde tutulur.
 Bağlı olanlar, `dent` + `detach`: `Front_Bumper` → `front_bumper`, `Door_L/R` → `door_left/right` (cam kapıyla gider), `Mirror_L/R` → `mirror_left/right`, `Hood` → `hood`, `Fender_FL/FR` → `fender_left/right`.
 `dent` + `detach`, `alsoDents` ile: `Headlight_L/R` → `headlight_left/right`, `Turn_Signal_L/R` → `turn_signal_left/right`.
 Aynı şekilde: `Tail_Lamp_L/R` → `tail_lamp_left/right`, `Rear_Bumper` → `rear_bumper`, `Tailgate` + `Cargo_Latch_L/R` → `tailgate`, `Wood_Side_Panel_L/R` + dört `Cargo_Stake` → `bed_side_left/right`.
@@ -17,6 +17,7 @@ DorukK180
 ├── CHASSIS
 │   ├── Chassis_Frame        – şasi, travers, aks, makas, şaft
 │   ├── Cabin_Shell          – taban, tavan, direkler, arka duvar, torpido duvarı
+│   │   └── Cabin_Trim       – cam kauçukları, ön cam orta dikmesi, yağmur oluğu, kapı fitili
 │   ├── Cabin_Interior       – koltuk, torpido, direksiyon, pedal, vites
 │   ├── Engine_Block         – motor ve radyatör kutusu
 │   ├── Tow_Hook_L/R         – şasiye bağlı, tampon kopunca yerinde kalır
@@ -29,7 +30,8 @@ DorukK180
 │   ├── Hood                 A  pivot: arka menteşe hattı
 │   ├── Fender_FL/FR         A  pivot: üst bağlantı
 │   ├── Door_L/R             A  pivot: ön menteşe hattı
-│   │   └── SideGlass_L/R    D  kapının çocuğu, kapıyla kopar
+│   │   ├── SideGlass_L/R    D  kapının çocuğu, kapıyla kopar
+│   │   └── Door_L/R_Trim    –  cam kauçuğu, havalandırma dikmesi, kol, menteşe; kapıyla kopar
 │   ├── Mirror_L/R           B  pivot: kol bağlantısı
 │   ├── Grille_Panel         D  far yuvalarını içerir
 │   ├── Windshield           D  fracture, R-11 bekler

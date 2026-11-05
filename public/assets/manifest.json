@@ -21306,6 +21306,84 @@
       "license": "CC-BY-4.0"
     },
     {
+      "id": "doruk-k180-base",
+      "name": "Doruk K-180",
+      "assetType": "staticMesh",
+      "category": "Vehicles",
+      "path": "assets/vehicles/doruk-k180/doruk-k180_base.glb",
+      "tags": [
+        "vehicle",
+        "truck"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 574532
+      },
+      "source": {
+        "origin": "forge",
+        "pack": "Doruk K-180 greybox (art/vehicles/doruk-k180)"
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "doruk-k180-vehicle",
+      "name": "Doruk K-180",
+      "assetType": "vehicle",
+      "category": "Vehicles",
+      "path": "assets/vehicles/doruk-k180/DorukK180.vehicle.json",
+      "tags": [
+        "vehicle"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 2405
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
+      "id": "script-doruk-k180-actor",
+      "name": "Script Doruk K-180.Actor",
+      "assetType": "prefab",
+      "category": "Vehicles",
+      "path": "assets/vehicles/doruk-k180/Script_DorukK180.actor.json",
+      "tags": [],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Vehicles",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1155
+      },
+      "license": "Project-local placeholder; replace before distribution if needed"
+    },
+    {
       "id": "kenney-grass",
       "name": "Grass",
       "assetType": "staticMesh",

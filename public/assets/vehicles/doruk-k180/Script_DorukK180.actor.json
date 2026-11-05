@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "type": "actor",
+  "name": "Script_DorukK180",
+  "parentClass": "actor",
+  "variables": [],
+  "components": [
+    {
+      "id": "root",
+      "component": "Transform",
+      "props": {}
+    },
+    {
+      "id": "chassis",
+      "component": "Collider",
+      "props": {
+        "shape": "box",
+        "isStatic": false,
+        "isSensor": false,
+        "size": [
+          2.45,
+          2.1,
+          7.2
+        ],
+        "center": [
+          0,
+          1.6,
+          -0.3
+        ],
+        "simulatePhysics": true,
+        "linearDamping": 0.01,
+        "angularDamping": 0.6,
+        "hideInGame": true
+      },
+      "parent": "root"
+    },
+    {
+      "id": "body",
+      "component": "MeshRenderer",
+      "props": {
+        "assetId": "doruk-k180-base"
+      },
+      "parent": "chassis"
+    },
+    {
+      "id": "vehicle",
+      "component": "Vehicle",
+      "props": {
+        "asset": "assets/vehicles/doruk-k180/DorukK180.vehicle.json"
+      },
+      "parent": "root"
+    }
+  ],
+  "interfaces": [],
+  "references": [],
+  "dispatchers": [],
+  "eventBindings": [],
+  "messageBindings": [],
+  "construction": null
+}

@@ -25,8 +25,10 @@
  * `structure.stairs`).
  *
  * The report gives the buildings per land use, lots too small for their role,
- * pads that need much cut or fill, and the walls, steps and terraces. A
- * protected settlement keeps its buildings and pads.
+ * pads that need much cut or fill, and the walls, steps and terraces; then the
+ * scene check (`sceneCheck.ts`) of every world-space road and street against
+ * the pads: one crossing a pad, or ending at a pad off its level (`scene: …`).
+ * A protected settlement keeps its buildings and pads.
  */
 import type { LayoutPlacement } from "../../scene/layout";
 import { SHAPE_PRIMITIVE_SIZE, shapeAssetId } from "../../scene/shapes";
@@ -35,6 +37,7 @@ import { roleLandUse } from "../landUse";
 import type { WorldPoint } from "../normalize";
 import { mulberry32, polygonsOverlap } from "../parcels";
 import type { GeneratedPad, GeneratedParcel } from "../recipe";
+import { checkScene, type CheckRoad } from "../sceneCheck";
 import type { GeneratedPlacement, StageInput, StageOutput, WorldStage } from "../stage";
 import { retainPad, STEP_RISE, terracePad, WALL_FALLOFF, WALL_THICKNESS, type PadStair, type PadWall } from "../terraces";
 import { LAND_USES, type LandUse } from "../vocabulary";
@@ -173,9 +176,27 @@ export const buildingsStage: WorldStage = {
       const { placement: _old, ...rest } = parcel;
       return placement === undefined ? rest : { ...rest, placement };
     });
+    warnings.push(...sceneWarnings(input, pads));
     return { placements, generated: { parcels, pads }, warnings };
   },
 };
+
+/** At most this many scene issues are listed one by one; the rest are counted. */
+const SCENE_ISSUES_LISTED = 8;
+
+/** Roads and streets (every world-space terrain spline) checked against the pads (`sceneCheck.ts`). */
+function sceneWarnings(input: StageInput, pads: readonly GeneratedPad[]): string[] {
+  const roads: CheckRoad[] = input.terrains.flatMap((terrain) => terrain.splines.flatMap((spline) => (
+    spline.coordinateSpace === "world" && spline.points.length > 0
+      ? [{ id: spline.id, points: spline.points.map((point) => point.position), width: spline.points[0]!.width }]
+      : []
+  )));
+  const issues = checkScene(roads, pads);
+  if (issues.length === 0) return [];
+  const listed = issues.slice(0, SCENE_ISSUES_LISTED).map((issue) => `scene: ${issue.message}`);
+  if (issues.length > SCENE_ISSUES_LISTED) listed.push(`scene: ${issues.length - SCENE_ISSUES_LISTED} more road/pad issues`);
+  return listed;
+}
 
 /**
  * Pads that overlap (corner lots on two streets) would ask for two levels on

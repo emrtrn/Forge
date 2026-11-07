@@ -39,7 +39,10 @@
 >      yok; gerekirse sonra.
 >    - d. Parsel–yol ilişkisi: parsel yoldan açıklıkla kaydırılır, parsele giden yol kenarda
 >      ve set kotunda biter.
->    - e. Sahne denetimi: yol–set kesişmesi, giriş kotu, eğim, rölyefin korunan alana değmesi.
+>    - e. ~~Sahne denetimi~~: `sceneCheck.ts`; `buildings` aşaması raporunda her dünya
+>      koordinatlı yol/sokak setlere karşı denetlenir: sete giren yol, set kenarında biten
+>      yolun (girişin) set kotundan sapması (`scene: …`). Eğim `roads` aşamasında (2b),
+>      rölyef koruması `macroRelief` testlerinde. TAMAM; test vadisinde temiz.
 >    - f. ~~Set kenarı testere dişi~~: `terrainPads` geçişi en az 2 ızgara aralığı
 >      (`PAD_MIN_FALLOFF_SPACINGS`; 27° kenarda çizgi sapması 0,55 m → 0,16 m) ve üst üste
 >      binen geçişler simetrik, sürekli karışır ("güçlü çekiş kazanır" sıçraması yok); WB'de

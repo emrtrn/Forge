@@ -155,6 +155,12 @@ export function registerWbTestValleyTests(check: Check): void {
     assert.ok(Number(unplaced[1]) <= 1, `${unplaced[1]} dwellings without a lot`);
   });
 
+  check("wb test valley: no road or street crosses a building pad (scene check)", () => {
+    const { plans } = chain();
+    const scene = plans.get("buildings")!.warnings.filter((warning) => warning.startsWith("scene: "));
+    assert.deepEqual(scene, []);
+  });
+
   check("wb test valley: land use ranks low ground by its street's level, so re-levelled parcels (Apply Pads) leave it up to date", () => {
     const { recipe, layout, terrains, profile } = chain();
     // Bumps of up to ±4 m under the parcels, as levelling pads would make; the road splines keep their level.

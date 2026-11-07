@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-1_-1",
+  "instances": [
+    {
+      "assetId": "wp-signpost",
+      "placements": [
+        {
+          "id": "signpost",
+          "role": "prop.signpost",
+          "position": [
+            -59,
+            96.02,
+            -101
+          ],
+          "name": "Signpost",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    }
+  ]
+}

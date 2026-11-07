@@ -1,0 +1,255 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-2_-2",
+  "instances": [
+    {
+      "assetId": "wp-cabin",
+      "placements": [
+        {
+          "id": "cabin",
+          "role": "building.cabin",
+          "position": [
+            -215,
+            148.69,
+            -227
+          ],
+          "name": "Cabin",
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "wp-woodpile",
+      "placements": [
+        {
+          "id": "woodpile",
+          "role": "prop.woodpile",
+          "position": [
+            -209.5,
+            148.69,
+            -226
+          ],
+          "name": "Woodpile",
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "wp-fence-module",
+      "placements": [
+        {
+          "id": "fence-north-0",
+          "role": "prop.fence",
+          "position": [
+            -225.5,
+            148.69,
+            -240
+          ],
+          "name": "Fence North 0",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "fence-north-1",
+          "role": "prop.fence",
+          "position": [
+            -222.5,
+            148.69,
+            -240
+          ],
+          "name": "Fence North 1",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "fence-north-2",
+          "role": "prop.fence",
+          "position": [
+            -219.5,
+            148.69,
+            -240
+          ],
+          "name": "Fence North 2",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "fence-north-3",
+          "role": "prop.fence",
+          "position": [
+            -216.5,
+            148.69,
+            -240
+          ],
+          "name": "Fence North 3",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "fence-north-4",
+          "role": "prop.fence",
+          "position": [
+            -213.5,
+            148.69,
+            -240
+          ],
+          "name": "Fence North 4",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "fence-north-5",
+          "role": "prop.fence",
+          "position": [
+            -210.5,
+            148.69,
+            -240
+          ],
+          "name": "Fence North 5",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "fence-north-6",
+          "role": "prop.fence",
+          "position": [
+            -207.5,
+            148.69,
+            -240
+          ],
+          "name": "Fence North 6",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "fence-north-7",
+          "role": "prop.fence",
+          "position": [
+            -204.5,
+            148.69,
+            -240
+          ],
+          "name": "Fence North 7",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        },
+        {
+          "id": "fence-west-0",
+          "role": "prop.fence",
+          "position": [
+            -227,
+            148.69,
+            -238.5
+          ],
+          "name": "Fence West 0",
+          "collision": false,
+          "rotationYDeg": 90,
+          "scale": 1
+        },
+        {
+          "id": "fence-west-1",
+          "role": "prop.fence",
+          "position": [
+            -227,
+            148.69,
+            -235.5
+          ],
+          "name": "Fence West 1",
+          "collision": false,
+          "rotationYDeg": 90,
+          "scale": 1
+        },
+        {
+          "id": "fence-west-2",
+          "role": "prop.fence",
+          "position": [
+            -227,
+            148.69,
+            -232.5
+          ],
+          "name": "Fence West 2",
+          "collision": false,
+          "rotationYDeg": 90,
+          "scale": 1
+        },
+        {
+          "id": "fence-west-3",
+          "role": "prop.fence",
+          "position": [
+            -227,
+            148.69,
+            -229.5
+          ],
+          "name": "Fence West 3",
+          "collision": false,
+          "rotationYDeg": 90,
+          "scale": 1
+        },
+        {
+          "id": "fence-west-4",
+          "role": "prop.fence",
+          "position": [
+            -227,
+            148.69,
+            -226.5
+          ],
+          "name": "Fence West 4",
+          "collision": false,
+          "rotationYDeg": 90,
+          "scale": 1
+        },
+        {
+          "id": "fence-west-5",
+          "role": "prop.fence",
+          "position": [
+            -227,
+            148.69,
+            -223.5
+          ],
+          "name": "Fence West 5",
+          "collision": false,
+          "rotationYDeg": 90,
+          "scale": 1
+        },
+        {
+          "id": "fence-west-6",
+          "role": "prop.fence",
+          "position": [
+            -227,
+            148.69,
+            -220.5
+          ],
+          "name": "Fence West 6",
+          "collision": false,
+          "rotationYDeg": 90,
+          "scale": 1
+        }
+      ]
+    }
+  ],
+  "actors": [
+    {
+      "classRef": "assets/vehicles/doruk-k180/Script_DorukK180.actor.json",
+      "position": [
+        -203.79,
+        148.83,
+        -222.07
+      ],
+      "id": "act-mw67y1oi-j0y8",
+      "rotationYDeg": 0,
+      "scale": 1
+    }
+  ]
+}

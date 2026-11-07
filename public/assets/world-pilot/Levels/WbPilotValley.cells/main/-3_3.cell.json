@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-3_3",
+  "instances": [
+    {
+      "assetId": "forest-rock-07",
+      "placements": [
+        {
+          "id": "rock-high-86",
+          "role": "prop.rock",
+          "position": [
+            -375.28,
+            200.441,
+            475.306
+          ],
+          "name": "rock-high-86",
+          "rotationYDeg": 96,
+          "scale": 2.41
+        }
+      ]
+    }
+  ]
+}

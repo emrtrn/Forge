@@ -1,0 +1,91 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "3_3",
+  "instances": [
+    {
+      "assetId": "forest-rock-02",
+      "placements": [
+        {
+          "id": "rock-high-14",
+          "role": "prop.rock",
+          "position": [
+            448.709,
+            235.714,
+            392.523
+          ],
+          "name": "rock-high-14",
+          "rotationYDeg": 44,
+          "scale": 2.6
+        },
+        {
+          "id": "rock-high-40",
+          "role": "prop.rock",
+          "position": [
+            417.025,
+            221.148,
+            397.825
+          ],
+          "name": "rock-high-40",
+          "rotationYDeg": 210,
+          "scale": 3.99
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-03",
+      "placements": [
+        {
+          "id": "rock-high-20",
+          "role": "prop.rock",
+          "position": [
+            435.849,
+            230.478,
+            402.167
+          ],
+          "name": "rock-high-20",
+          "rotationYDeg": 22,
+          "scale": 1.81
+        },
+        {
+          "id": "rock-high-58",
+          "role": "prop.rock",
+          "position": [
+            386.177,
+            207.908,
+            385.635
+          ],
+          "name": "rock-high-58",
+          "rotationYDeg": 32,
+          "scale": 3.94
+        },
+        {
+          "id": "rock-slope-2",
+          "role": "prop.rock",
+          "position": [
+            384.204,
+            208.391,
+            484.919
+          ],
+          "name": "rock-slope-2",
+          "collision": false,
+          "rotationYDeg": 308,
+          "scale": 1.02
+        },
+        {
+          "id": "rock-slope-12",
+          "role": "prop.rock",
+          "position": [
+            400.571,
+            216.769,
+            489.41
+          ],
+          "name": "rock-slope-12",
+          "rotationYDeg": 252,
+          "scale": 2.17
+        }
+      ]
+    }
+  ]
+}

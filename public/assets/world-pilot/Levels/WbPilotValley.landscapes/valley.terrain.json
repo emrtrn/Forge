@@ -149,7 +149,7 @@
     {
       "key": "3_2",
       "minHeight": 94.4800033569336,
-      "maxHeight": 115.0073013305664
+      "maxHeight": 115.10769653320312
     },
     {
       "key": "4_2",
@@ -376,9 +376,6 @@
   "splines": [
     {
       "id": "river",
-      "name": "River",
-      "smooth": true,
-      "coordinateSpace": "world",
       "points": [
         {
           "id": "p0",
@@ -692,7 +689,10 @@
           "startPointId": "p19",
           "endPointId": "p20"
         }
-      ]
+      ],
+      "name": "River",
+      "smooth": true,
+      "coordinateSpace": "world"
     },
     {
       "id": "wb-road-valley",
@@ -2610,9 +2610,9 @@
         {
           "id": "p20",
           "position": [
-            -168.817,
-            124.243,
-            -275.457
+            -166.66,
+            124.24,
+            -272.16
           ],
           "width": 4,
           "falloff": 3
@@ -2720,9 +2720,9 @@
         {
           "id": "p31",
           "position": [
-            -189.818,
-            139.978,
-            -169.758
+            -188.12,
+            139.98,
+            -169.27
           ],
           "width": 4,
           "falloff": 3
@@ -2730,9 +2730,9 @@
         {
           "id": "p32",
           "position": [
-            -194.283,
-            141.682,
-            -160.828
+            -191.05,
+            141.68,
+            -162.22
           ],
           "width": 4,
           "falloff": 3
@@ -2740,9 +2740,9 @@
         {
           "id": "p33",
           "position": [
-            -197.193,
-            142.791,
-            -160.141
+            -197.83,
+            142.79,
+            -163.06
           ],
           "width": 4,
           "falloff": 3

@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-2_0",
+  "instances": [
+    {
+      "assetId": "forest-rock-05",
+      "placements": [
+        {
+          "id": "rock-slope-20",
+          "role": "prop.rock",
+          "position": [
+            -134.135,
+            118.122,
+            35.878
+          ],
+          "name": "rock-slope-20",
+          "rotationYDeg": 61,
+          "scale": 2.43
+        }
+      ]
+    }
+  ]
+}

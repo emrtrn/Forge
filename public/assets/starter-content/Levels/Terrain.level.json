@@ -58,6 +58,10 @@
     {
       "assetId": "doruk-k180-base",
       "placements": []
+    },
+    {
+      "assetId": "shape:sphere",
+      "placements": []
     }
   ],
   "characters": [],

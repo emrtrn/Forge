@@ -1,0 +1,95 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-4_3",
+  "instances": [
+    {
+      "assetId": "forest-rock-02",
+      "placements": [
+        {
+          "id": "rock-high-15",
+          "role": "prop.rock",
+          "position": [
+            -460.074,
+            242.312,
+            428.247
+          ],
+          "name": "rock-high-15",
+          "rotationYDeg": 202,
+          "scale": 2.31
+        },
+        {
+          "id": "rock-high-54",
+          "role": "prop.rock",
+          "position": [
+            -494.142,
+            244.184,
+            471.441
+          ],
+          "name": "rock-high-54",
+          "rotationYDeg": 241,
+          "scale": 3.88
+        },
+        {
+          "id": "rock-high-56",
+          "role": "prop.rock",
+          "position": [
+            -388.429,
+            210.7,
+            437.226
+          ],
+          "name": "rock-high-56",
+          "rotationYDeg": 333,
+          "scale": 1.61
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-03",
+      "placements": [
+        {
+          "id": "rock-high-19",
+          "role": "prop.rock",
+          "position": [
+            -461.399,
+            237.757,
+            453.401
+          ],
+          "name": "rock-high-19",
+          "rotationYDeg": 182,
+          "scale": 3.56
+        },
+        {
+          "id": "rock-high-41",
+          "role": "prop.rock",
+          "position": [
+            -413.572,
+            219.204,
+            401.922
+          ],
+          "name": "rock-high-41",
+          "rotationYDeg": 192,
+          "scale": 1.9
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-07",
+      "placements": [
+        {
+          "id": "rock-high-79",
+          "role": "prop.rock",
+          "position": [
+            -481.597,
+            233.565,
+            485.218
+          ],
+          "name": "rock-high-79",
+          "rotationYDeg": 121,
+          "scale": 1.8
+        }
+      ]
+    }
+  ]
+}

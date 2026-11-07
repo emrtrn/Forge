@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-1_-3",
+  "instances": [
+    {
+      "assetId": "forest-rock-05",
+      "placements": [
+        {
+          "id": "rock-river-3",
+          "role": "prop.rock",
+          "position": [
+            -11.369,
+            96.008,
+            -280.848
+          ],
+          "name": "rock-river-3",
+          "rotationYDeg": 183,
+          "scale": 1.64
+        },
+        {
+          "id": "rock-river-5",
+          "role": "prop.rock",
+          "position": [
+            -9.16,
+            96.852,
+            -331.827
+          ],
+          "name": "rock-river-5",
+          "collision": false,
+          "rotationYDeg": 57,
+          "scale": 1.14
+        },
+        {
+          "id": "rock-river-13",
+          "role": "prop.rock",
+          "position": [
+            -12.649,
+            96.359,
+            -304.119
+          ],
+          "name": "rock-river-13",
+          "collision": false,
+          "rotationYDeg": 275,
+          "scale": 1.07
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-04",
+      "placements": [
+        {
+          "id": "rock-river-6",
+          "role": "prop.rock",
+          "position": [
+            -0.171,
+            97.29,
+            -364.884
+          ],
+          "name": "rock-river-6",
+          "rotationYDeg": 77,
+          "scale": 1.69
+        },
+        {
+          "id": "rock-river-9",
+          "role": "prop.rock",
+          "position": [
+            -17.362,
+            96.906,
+            -357.288
+          ],
+          "name": "rock-river-9",
+          "collision": false,
+          "rotationYDeg": 203,
+          "scale": 1.06
+        }
+      ]
+    }
+  ]
+}

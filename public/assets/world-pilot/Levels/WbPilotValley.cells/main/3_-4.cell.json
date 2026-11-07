@@ -1,0 +1,136 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "3_-4",
+  "instances": [
+    {
+      "assetId": "forest-rock-02",
+      "placements": [
+        {
+          "id": "rock-high-34",
+          "role": "prop.rock",
+          "position": [
+            446.805,
+            238.614,
+            -439.302
+          ],
+          "name": "rock-high-34",
+          "rotationYDeg": 102,
+          "scale": 3.57
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-03",
+      "placements": [
+        {
+          "id": "rock-high-8",
+          "role": "prop.rock",
+          "position": [
+            417.14,
+            226.904,
+            -461.009
+          ],
+          "name": "rock-high-8",
+          "rotationYDeg": 270,
+          "scale": 2.76
+        },
+        {
+          "id": "rock-high-21",
+          "role": "prop.rock",
+          "position": [
+            492.212,
+            261.382,
+            -394.879
+          ],
+          "name": "rock-high-21",
+          "rotationYDeg": 228,
+          "scale": 2.16
+        },
+        {
+          "id": "rock-high-28",
+          "role": "prop.rock",
+          "position": [
+            407.946,
+            221.892,
+            -423.36
+          ],
+          "name": "rock-high-28",
+          "rotationYDeg": 7,
+          "scale": 2.31
+        },
+        {
+          "id": "rock-high-44",
+          "role": "prop.rock",
+          "position": [
+            388.295,
+            214.477,
+            -407.06
+          ],
+          "name": "rock-high-44",
+          "rotationYDeg": 85,
+          "scale": 1.93
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-06",
+      "placements": [
+        {
+          "id": "rock-high-16",
+          "role": "prop.rock",
+          "position": [
+            476.537,
+            261.888,
+            -387.017
+          ],
+          "name": "rock-high-16",
+          "rotationYDeg": 174,
+          "scale": 3.19
+        },
+        {
+          "id": "rock-high-35",
+          "role": "prop.rock",
+          "position": [
+            475.654,
+            256.193,
+            -451.736
+          ],
+          "name": "rock-high-35",
+          "rotationYDeg": 223,
+          "scale": 2.46
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-07",
+      "placements": [
+        {
+          "id": "rock-high-33",
+          "role": "prop.rock",
+          "position": [
+            410.774,
+            225.272,
+            -440.74
+          ],
+          "name": "rock-high-33",
+          "rotationYDeg": 263,
+          "scale": 1.64
+        },
+        {
+          "id": "rock-high-61",
+          "role": "prop.rock",
+          "position": [
+            418.855,
+            228.882,
+            -434.879
+          ],
+          "name": "rock-high-61",
+          "rotationYDeg": 131,
+          "scale": 2.65
+        }
+      ]
+    }
+  ]
+}

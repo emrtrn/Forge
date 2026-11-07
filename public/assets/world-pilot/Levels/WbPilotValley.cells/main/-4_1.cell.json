@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-4_1",
+  "instances": [
+    {
+      "assetId": "forest-rock-02",
+      "placements": [
+        {
+          "id": "rock-high-25",
+          "role": "prop.rock",
+          "position": [
+            -491.978,
+            249.539,
+            151.352
+          ],
+          "name": "rock-high-25",
+          "rotationYDeg": 74,
+          "scale": 2.18
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-07",
+      "placements": [
+        {
+          "id": "rock-high-83",
+          "role": "prop.rock",
+          "position": [
+            -438.104,
+            231.409,
+            213.288
+          ],
+          "name": "rock-high-83",
+          "rotationYDeg": 159,
+          "scale": 3.92
+        }
+      ]
+    }
+  ]
+}

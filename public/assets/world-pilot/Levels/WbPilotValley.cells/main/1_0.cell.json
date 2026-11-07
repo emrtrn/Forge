@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "1_0",
+  "instances": [
+    {
+      "assetId": "forest-rock-03",
+      "placements": [
+        {
+          "id": "rock-slope-7",
+          "role": "prop.rock",
+          "position": [
+            128.534,
+            117.408,
+            119.298
+          ],
+          "name": "rock-slope-7",
+          "rotationYDeg": 269,
+          "scale": 1.78
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-05",
+      "placements": [
+        {
+          "id": "rock-slope-8",
+          "role": "prop.rock",
+          "position": [
+            235.348,
+            151.165,
+            2.546
+          ],
+          "name": "rock-slope-8",
+          "rotationYDeg": 54,
+          "scale": 1.93
+        }
+      ]
+    }
+  ]
+}

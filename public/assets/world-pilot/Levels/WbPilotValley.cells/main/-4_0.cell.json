@@ -1,0 +1,112 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-4_0",
+  "instances": [
+    {
+      "assetId": "forest-rock-02",
+      "placements": [
+        {
+          "id": "rock-high-9",
+          "role": "prop.rock",
+          "position": [
+            -484.562,
+            247.248,
+            95.485
+          ],
+          "name": "rock-high-9",
+          "rotationYDeg": 92,
+          "scale": 3.52
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-03",
+      "placements": [
+        {
+          "id": "rock-high-39",
+          "role": "prop.rock",
+          "position": [
+            -488.128,
+            252.329,
+            71.086
+          ],
+          "name": "rock-high-39",
+          "rotationYDeg": 117,
+          "scale": 3.62
+        },
+        {
+          "id": "rock-high-48",
+          "role": "prop.rock",
+          "position": [
+            -485.598,
+            252.16,
+            5.287
+          ],
+          "name": "rock-high-48",
+          "rotationYDeg": 9,
+          "scale": 2.06
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-06",
+      "placements": [
+        {
+          "id": "rock-high-32",
+          "role": "prop.rock",
+          "position": [
+            -443.193,
+            234.079,
+            20.898
+          ],
+          "name": "rock-high-32",
+          "rotationYDeg": 170,
+          "scale": 3.8
+        },
+        {
+          "id": "rock-high-47",
+          "role": "prop.rock",
+          "position": [
+            -473.33,
+            242.384,
+            102.211
+          ],
+          "name": "rock-high-47",
+          "rotationYDeg": 298,
+          "scale": 3.77
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-07",
+      "placements": [
+        {
+          "id": "rock-high-26",
+          "role": "prop.rock",
+          "position": [
+            -442.348,
+            233.926,
+            22.327
+          ],
+          "name": "rock-high-26",
+          "rotationYDeg": 228,
+          "scale": 3.18
+        },
+        {
+          "id": "rock-high-63",
+          "role": "prop.rock",
+          "position": [
+            -407.46,
+            217.032,
+            20.162
+          ],
+          "name": "rock-high-63",
+          "rotationYDeg": 49,
+          "scale": 2.38
+        }
+      ]
+    }
+  ]
+}

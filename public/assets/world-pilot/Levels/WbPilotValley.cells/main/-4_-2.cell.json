@@ -1,0 +1,105 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-4_-2",
+  "instances": [
+    {
+      "assetId": "forest-rock-02",
+      "placements": [
+        {
+          "id": "rock-high-51",
+          "role": "prop.rock",
+          "position": [
+            -466.343,
+            240.658,
+            -141.214
+          ],
+          "name": "rock-high-51",
+          "rotationYDeg": 139,
+          "scale": 2.25
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-06",
+      "placements": [
+        {
+          "id": "rock-high-72",
+          "role": "prop.rock",
+          "position": [
+            -468.541,
+            241.643,
+            -141.537
+          ],
+          "name": "rock-high-72",
+          "rotationYDeg": 309,
+          "scale": 3.85
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-07",
+      "placements": [
+        {
+          "id": "rock-high-69",
+          "role": "prop.rock",
+          "position": [
+            -466.546,
+            242.012,
+            -171.752
+          ],
+          "name": "rock-high-69",
+          "rotationYDeg": 232,
+          "scale": 2.48
+        },
+        {
+          "id": "rock-high-78",
+          "role": "prop.rock",
+          "position": [
+            -493.144,
+            257.861,
+            -214.811
+          ],
+          "name": "rock-high-78",
+          "rotationYDeg": 99,
+          "scale": 3.48
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-05",
+      "placements": [
+        {
+          "id": "rock-slope-21",
+          "role": "prop.rock",
+          "position": [
+            -456.257,
+            240.778,
+            -206.635
+          ],
+          "name": "rock-slope-21",
+          "rotationYDeg": 31,
+          "scale": 2.02
+        }
+      ]
+    },
+    {
+      "assetId": "forest-rock-08",
+      "placements": [
+        {
+          "id": "rock-slope-5",
+          "role": "prop.rock",
+          "position": [
+            -418.572,
+            224.122,
+            -165.908
+          ],
+          "name": "rock-slope-5",
+          "rotationYDeg": 301,
+          "scale": 2.01
+        }
+      ]
+    }
+  ]
+}

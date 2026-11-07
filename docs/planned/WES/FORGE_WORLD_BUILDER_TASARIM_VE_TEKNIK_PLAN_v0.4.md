@@ -11,28 +11,47 @@
 - Uygulama durumu 2 Kasım 2026: **F1 çekirdeği kapandı**; F1b referans altlığı ve elle plan düzeltme (15b/15c) mevcut. T35 dış analiz JSON önizleme/birleştirme ilk dilimi mevcut; gerçek görsel analizi ve üç görselle kabul açık (§9).
 - Bu sürümde üzerine kurulacağı editör araçlarının gerçek durumu kodla işaretlendi.
 
-> **Tek aktif hat (7 Kasım 2026).** World Builder'da yürüyen tek iş, dünya özetinden
-> level üretme hattıdır (karar 20–22; [pilot](../../world-builder/PILOT_MOUNTAIN_VALLEY.md),
-> [dünya özeti sözleşmesi](../../world-builder/WORLD_BRIEF.md)). Sıra:
+> **Tek aktif hat (7 Kasım 2026, akşam güncellemesi; kullanıcı onayı).** World Builder'da
+> yürüyen tek iş, oyun tasarımından level üretme hattıdır (karar 20–22;
+> [pilot](../../world-builder/PILOT_MOUNTAIN_VALLEY.md),
+> [dünya özeti sözleşmesi](../../world-builder/WORLD_BRIEF.md)). İlk gerçek sahne
+> Ridgebound V0 Derekavak, oyuna özel bir betikle (`Ridgebound/tools/world/build-derekavak.mjs`)
+> greybox'a getirildi ve World Builder'ın eksiklerini gerçek sahnede gösterdi. Hat bu
+> eksikleri Forge'a genel parça olarak taşır ve Derekavak'ı kabul testi yapar.
+> **Bitiş ölçüsü:** Derekavak gibi bir sahne oyuna özel betik olmadan, dünya özeti +
+> oyun verisiyle Forge'dan çıkar.
 >
-> 1. ~~Dünya özeti şeması + editörsüz `npm run world:brief`~~ (pilot adım 1–2, TAMAM).
-> 2. **Pilot adım 3:** çalıştırıcının geçici adımları genelleşir; kullanıcı kararı
->    (7 Kasım): önce özetten (`world:brief`), editörde arazi aşaması sonra, karar 19 aynen.
->    ~~3a makro arazi + su yatakları~~ (`engine/worldbuilder/briefTerrain.ts`: N vadi, en
->    alçak zemin, kesitlerden bağımsız su çizgileri). Sırada: 3b göl + `ridgeElevation`
->    (`macroRelief.ts` çekirdeği hazır, T11), 3c–3e boya / bitki / kaya kuralları bölge
->    profiline, 3f editörde arazi aşaması + tek undo.
-> 3. **Pilot adım 4:** T41 model listesi + rol → model bağlama (F3c).
-> 4. **Greybox onayı → aile başına detay onayı → detay ve bake** (karar 22).
-> 5. **F1b kabulü:** üç görselli WB-13, pilottan sonra.
+> 1. ~~Dünya özeti şeması + editörsüz `npm run world:brief`~~ (pilot adım 1–2) ve
+>    ~~3a makro arazi + su yatakları~~ (`engine/worldbuilder/briefTerrain.ts`). TAMAM.
+> 2. **Derekavak'tan genel parçalar**, her biri testli küçük adım:
+>    - a. ~~Dağ rölyefi~~: `macroRelief.ts` sırt odaklı çok katmanlı gürültü + mesafe bandı
+>      korumaları (köy kenarı bulanık tek çizgi). TAMAM.
+>    - b. Yol boy kesiti: hedef eğim, yarma/dolgu, kavşak ve parsel girişi kotu sabitleri,
+>      karşılanamayan eğimi aralığa eşit yayma (`route.ts` bugün yalnız güzergâh seçer).
+>    - c. Teraslı set + taş istinat duvarı + yol girişinde duvar boşluğu; çok setli alan
+>      (meydan); setler arası merdiven/rampa (Derekavak'ta da yok).
+>    - d. Parsel–yol ilişkisi: parsel yoldan açıklıkla kaydırılır, parsele giden yol kenarda
+>      ve set kotunda biter.
+>    - e. Sahne denetimi: yol–set kesişmesi, giriş kotu, eğim, rölyefin korunan alana değmesi.
+>    - f. Set kenarı testere dişi: döndürülmüş ped kenarı 1 m ızgarada basamaklanıyor
+>      (`terrainPads`, motor düzeltmesi).
+> 3. **Dünya özeti sabit koordinatlı girdi alır** (ana plandan yol çizgisi, parsel, yapı,
+>    yönlenme kuralı). Eski 3b (göl + `ridgeElevation`, artık 2a çekirdeğiyle) ve 3c–3e
+>    (boya / bitki / kaya kuralları bölge profiline) bu adımda birleşir.
+> 4. **Kabul:** Derekavak, Ridgebound'da kopya bir level'a dünya özetinden kurulur;
+>    bugünkü sahneyle eş ya da daha iyi, denetimler temiz. Kullanıcıya teslim edilen
+>    `Maps/Derekavak` sahnesine dokunulmaz.
+> 5. **Model listesi + rol → model bağlama** (T41, F3c; Derekavak'ın Blender greybox
+>    modelleri ilk örnek), greybox → aile başına detay onayı → detay ve bake (karar 22),
+>    editörde arazi aşaması (eski 3f), F1b WB-13 kabulü.
 >
 > §9'daki diğer satırlar bu hattın kullandığı ya da sonraya kalan parçalardır; ayrı
 > iş başlatmaz. Codex'le yürütülen Ridgebound/Derekavak metrik içe aktarma hattı
 > (P0, P1, Relief A, v0.3 konut incelemesi) **kaldırıldı**: oyuna özel veri ve
 > dönüştürücüler Forge'dan silindi, raporlar `Forge-Archive/ridgebound-world-import-2026-11-07/`
 > altında. Genel parçalar kaldı: `metricFrame.ts` (dünya özeti kullanır),
-> `referenceImport.ts` (T35), `planBlockout` aşaması, `macroRelief.ts`. Ridgebound
-> dünyası kendi deposundaki tasarım dokümanından bir dünya özetiyle bu hattan kurulur.
+> `referenceImport.ts` (T35), `planBlockout` aşaması, `macroRelief.ts`. Oyun verisi
+> (Derekavak ana planı, dünya özeti) oyunun deposunda kalır.
 
 **İlgili:** [WES v0.3](FORGE_WORLD_ENVIRONMENT_MEVSIM_HAVA_ZAMAN_TEKNIK_TASARIM_VE_UYGULAMA_PLANI_v0.3.md) · [OPEN_WORLD_PLAN](../OPEN_WORLD_PLAN.md) · [WORLD_TERRAIN_WATER_BODY_PLAN](../WORLD_TERRAIN_WATER_BODY_PLAN.md) · [TERRAIN_DEFORMATION_PLAN](../TERRAIN_DEFORMATION_PLAN.md) · [Forge Water System](../Forge_Water_System/README.md)
 
@@ -306,7 +325,7 @@ Terrain tarafında kirli bölge ve undo patch altyapısı mevcuttur (`engine/ter
 
 | ID | Araç | Durum | Kanıt / not |
 |---|---|---|---|
-| **T11** | Procedural Macro Terrain | KISMİ | Heightmap import + `noise/terrace/ramp` fırçaları. Tohumlu, koruma maskeli makro rölyef çekirdeği `engine/worldbuilder/macroRelief.ts` MEVCUT (dünya koordinatlı, tile dikişi tutarlı; `tests/engine/macroRelief.test.ts`); aşama, panel önizlemesi ve undo YENİ (pilot adım 3) |
+| **T11** | Procedural Macro Terrain | KISMİ | Heightmap import + `noise/terrace/ramp` fırçaları. Tohumlu, koruma maskeli makro rölyef çekirdeği `engine/worldbuilder/macroRelief.ts` MEVCUT (7 Kasım 2026'da Derekavak'ta işe yarayan sırt odaklı çok katmanlı gürültüye geçti: alan yönlü uzama, mesafe bandı korumaları, bulanık köy kenarı; dünya koordinatlı, tile dikişi tutarlı; `tests/engine/macroRelief.test.ts`); aşama, panel önizlemesi ve undo YENİ (pilot adım 3) |
 | **T12** | Erosion / Sediment | **MEVCUT** (fırça) | `terrainErosion.ts` termal + hidrolik. Bölge/recipe çağrısı küçük iş |
 | **T13** | Flow / Drainage Analyzer | YENİ | Akış yönü/birikimi, havza, çukur tespiti. Global map üzerinden worker |
 | **T14** | Road Cost Map & Route Solver | YENİ → **MEVCUT** (F1 adım 8a, `engine/worldbuilder/route.ts`; araç profili Offroad verisinden henüz okunmuyor, sınırlar bölge profilinden). **Serpantin** (2026-10-29, dağlık test açığı): ilk A* hâlâ sınırdan dik çıkarsa yön bilen ikinci A* (hücre × 16 yön, dönüş açısıyla orantılı ceza, traverseler sınırın %85'ine hedeflenir, ızgara ≤ 60 000 hücre) traverse + dönemeç üretir; yumuşatma köşe koruyan yeniden örneklemeyi de dener (dönemeç kirişi yoldan diktir). 24,7° yamaçta 20° sınırlı patika 12,3°'de kalıyor; `minTurnRadius`'tan dar dönemeçler `tightBends` olarak raporlanır (dönemeç genişletme/kavşak düzleme yok). `roads` aşaması v4 | Araç profili Offroad verisinden (`src/game`/proje) okunur. Ayrıntı §13.5 |
@@ -1046,6 +1065,7 @@ Forge'un sorumluluğu üç noktadadır: listeyi çıkarmak, gelen modeli normali
 | Sürüm | Tarih | Not |
 |---|---|---|
 | 0.4 eki | 07.11.2026 | Tek aktif hat: dünya özetinden level üretimi (başlıktaki kutu). Ridgebound/Derekavak metrik içe aktarma hattı Forge'dan kaldırıldı; raporları Forge-Archive'de. T11 satırına `macroRelief.ts` çekirdeği işlendi. |
+| 0.4 eki | 07.11.2026 akşam | Tek aktif hat Derekavak bulgularıyla güncellendi (kutu): Derekavak'tan genel parçalar (2a–2f), sabit koordinatlı dünya özeti, Derekavak kopya level kabul testi. 2a rölyef çekirdeği yenilendi. |
 | **0.4** | 28.10.2026 | Yerleşim, yol ağı ve bölge profili tasarımı (§13: L0–L7, veri sözleşmeleri, algoritmalar, OSM, model listesi, ölçek yolu). Kullanıcı kararları 11–14 (AI görseli önce, OSM ölçekli, köy/kasaba önce, hibrit giriş, hazır asset yok). Kod bulgusu: `LayoutPlacement`'ta `id` yok; T07/§5.5/§6.3 düzeltildi. T34–T41, WB-13–19, F1b ve F3a–F3d eklendi; açık kararlar 5 ve 6 kapandı; 15–19 eklendi. |
 | 0.3 | 27.10.2026 | `main@f9aa05f` repo doğrulaması: durum tablosu kodla değiştirildi; T01–T33'e durum/kanıt eklendi (4 MEVCUT, 18 KISMİ, 11 YENİ); "orkestrasyon katmanı" sınırı; 13 aşamaya mevcut araç sütunu; hibrit katman modeli, recipe/sahiplik sidecar önerisi, stage başına tek undo; açık kararlardan 5'i kapandı ya da karara bağlandı; `WbTestValley` fixture; WES v0.3 bağı. |
 | 0.2 | 26.10.2026 | WES entegrasyon eki, onaylı dört WES kararı, stage bağlantıları. |

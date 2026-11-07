@@ -16,6 +16,12 @@
  * Junctions (`junctions.ts`): where three or more roads meet, the two of the
  * highest class run through the node and the others end at their edge.
  *
+ * Heights (`roadProfile.ts`): each road's vertical profile is designed for its
+ * class's slope limit, cutting into or filling over ground that is steeper.
+ * Roads are solved by class (highest first, ties by edge id); a road takes the
+ * height of an earlier road where it joins or crosses it. Where joined heights
+ * force a steeper grade it is spread evenly and reported.
+ *
  * The spline lives on the World Terrain under the edge's start node (else its
  * end node). Ids derive from edge ids, so a re-run updates the same spline.
  */
@@ -23,8 +29,10 @@ import { resolveJunctions, type JunctionRoad } from "../junctions";
 import type { RoadEdge } from "../recipe";
 import type { ResolvedRoadClass } from "../roadClass";
 import { roadSpec, roadSpline, routeHeights, terrainAt } from "../roadSpline";
+import { designRoadNetwork } from "../roadProfile";
 import { MAX_ROUTE_POINTS, planRoute, type RouteResult } from "../route";
 import type { GeneratedSpline, StageOutput, StageTerrain, WorldStage } from "../stage";
+import { ROAD_CLASSES } from "../vocabulary";
 
 export { ROUTE_SPACING } from "../route";
 
@@ -38,13 +46,14 @@ export function roadSplineId(edgeId: string): string {
 export const roadsStage: WorldStage = {
   id: ROADS_STAGE_ID,
   label: "Roads",
-  version: 4,
+  version: 5,
   run(input): StageOutput {
     const { nodes, edges } = input.recipe.plan.roadGraph;
     const positions = new Map(nodes.map((node) => [node.id, node.position]));
     const routed: Array<{ edge: RoadEdge; terrain: StageTerrain; spec: ResolvedRoadClass; road: JunctionRoad }> = [];
     const warnings: string[] = [];
     const warned = new Set<string>();
+    const routes = new Map<string, RouteResult>();
     const warnOnce = (key: string, message: string): void => {
       if (warned.has(key)) return;
       warned.add(key);
@@ -78,6 +87,7 @@ export const roadsStage: WorldStage = {
         continue;
       }
       warnings.push(...routeWarnings(edge, route, spec));
+      routes.set(edge.id, route);
       if (heights.filled) warnings.push(`road ${edge.id} leaves the terrain; off-terrain points take the nearest height`);
       routed.push({
         edge, terrain, spec,
@@ -86,15 +96,37 @@ export const roadsStage: WorldStage = {
     }
 
     warnings.push(...resolveJunctions(routed.map((entry) => entry.road)).warnings);
-    const splines: GeneratedSpline[] = [];
-    for (const { edge, terrain, spec, road } of routed) {
-      const heights = routeHeights(road.points, input.sampleHeight);
+    const grounded: Array<(typeof routed)[number] & { ground: number[] }> = [];
+    for (const entry of routed) {
+      const heights = routeHeights(entry.road.points, input.sampleHeight);
       if (!heights) {
-        warnings.push(`road ${edge.id} has no terrain height left after its junction trim; skipped`);
+        warnings.push(`road ${entry.edge.id} has no terrain height left after its junction trim; skipped`);
         continue;
       }
-      splines.push({ landscapeId: terrain.id, edge: edge.id, spline: roadSpline(roadSplineId(edge.id), edge.id, road.points, heights.values, spec, terrain, warnOnce) });
+      grounded.push({ ...entry, ground: heights.values });
     }
+    // Highest class first, then edge id: the road a junction belongs to sets its height.
+    const rank = (entry: (typeof grounded)[number]): number => ROAD_CLASSES.indexOf(entry.edge.roadClass);
+    grounded.sort((a, b) => rank(a) - rank(b) || (a.edge.id < b.edge.id ? -1 : a.edge.id > b.edge.id ? 1 : 0));
+    const profiles = designRoadNetwork(grounded.map(({ edge, spec, road, ground }) => ({
+      id: edge.id, points: road.points, ground, width: spec.width, maxGrade: Math.tan(spec.maxSlopeDeg * Math.PI / 180),
+    })));
+    const splines: GeneratedSpline[] = [];
+    grounded.forEach(({ edge, terrain, spec, road }, index) => {
+      const profile = profiles[index]!;
+      const route = routes.get(edge.id)!;
+      if (route.steepLegs > 0) {
+        warnings.push(`road ${edge.id}: the ground under ${route.steepLegs} leg(s) is steeper than ${spec.maxSlopeDeg}° (steepest ${round1(route.maxGradeDeg!)}°); `
+          + `the road cuts up to ${round1(profile.maxCut)} m and fills up to ${round1(profile.maxFill)} m to keep the limit`);
+      }
+      if (profile.overLimit) {
+        warnings.push(`road ${edge.id}: the roads it joins force ${round1(Math.atan(profile.maxGrade) * 180 / Math.PI)}° (limit ${spec.maxSlopeDeg}°)`);
+      }
+      splines.push({ landscapeId: terrain.id, edge: edge.id, spline: roadSpline(roadSplineId(edge.id), edge.id, road.points, profile.heights, spec, terrain, warnOnce) });
+    });
+    // Splines keep the plan's edge order.
+    const order = new Map(edges.map((edge, index) => [edge.id, index]));
+    splines.sort((a, b) => order.get(a.edge!)! - order.get(b.edge!)!);
     return { placements: [], splines, warnings };
   },
 };
@@ -103,9 +135,6 @@ function routeWarnings(edge: RoadEdge, route: RouteResult, spec: ResolvedRoadCla
   const warnings: string[] = [];
   if (route.method === "solved") warnings.push(`road ${edge.id}: the planned line ${route.reason}; routed over the terrain instead`);
   if (route.method === "fallback") warnings.push(`road ${edge.id}: the planned line ${route.reason}; kept the planned line`);
-  if (route.steepLegs > 0) {
-    warnings.push(`road ${edge.id}: ${route.steepLegs} leg(s) steeper than ${spec.maxSlopeDeg}° (steepest ${round1(route.maxGradeDeg!)}°)`);
-  }
   if (route.tightBends > 0) {
     warnings.push(`road ${edge.id}: ${route.tightBends} bend(s) tighter than the ${spec.minTurnRadius} m turn radius (tightest ${round1(route.tightestRadius!)} m)`);
   }

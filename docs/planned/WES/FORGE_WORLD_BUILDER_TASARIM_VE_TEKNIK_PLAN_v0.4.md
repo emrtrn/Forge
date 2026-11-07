@@ -26,8 +26,9 @@
 > 2. **Derekavak'tan genel parçalar**, her biri testli küçük adım:
 >    - a. ~~Dağ rölyefi~~: `macroRelief.ts` sırt odaklı çok katmanlı gürültü + mesafe bandı
 >      korumaları (köy kenarı bulanık tek çizgi). TAMAM.
->    - b. Yol boy kesiti: hedef eğim, yarma/dolgu, kavşak ve parsel girişi kotu sabitleri,
->      karşılanamayan eğimi aralığa eşit yayma (`route.ts` bugün yalnız güzergâh seçer).
+>    - b. ~~Yol boy kesiti~~: `roadProfile.ts` (hedef eğim, yarma/dolgu, sabit kotlar,
+>      karşılanamayan eğimi aralığa eşit yayma, yol ağında kavşak/kesişme kotu önce çözülen
+>      yoldan); `roads` aşaması v5 bunu kullanır. TAMAM. Parsel girişi kotu 2d ile bağlanır.
 >    - c. Teraslı set + taş istinat duvarı + yol girişinde duvar boşluğu; çok setli alan
 >      (meydan); setler arası merdiven/rampa (Derekavak'ta da yok).
 >    - d. Parsel–yol ilişkisi: parsel yoldan açıklıkla kaydırılır, parsele giden yol kenarda

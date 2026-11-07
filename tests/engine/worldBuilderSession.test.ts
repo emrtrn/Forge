@@ -251,7 +251,7 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
     assert.deepEqual(view.planCounts, { water: 0, regions: 0, settlements: 1, landmarks: 1, roadNodes: 0, roadEdges: 0, owned: 0, pads: 0 });
     assert.deepEqual(view.stages, [
       { id: "planBlockout", label: "Plan blockout", version: 1, recordedVersion: null },
-      { id: "roads", label: "Roads", version: 4, recordedVersion: null },
+      { id: "roads", label: "Roads", version: 5, recordedVersion: null },
       { id: "settlementSites", label: "Settlement sites", version: 3, recordedVersion: null },
       { id: "streets", label: "Streets", version: 1, recordedVersion: null },
       { id: "parcels", label: "Parcels", version: 2, recordedVersion: null },

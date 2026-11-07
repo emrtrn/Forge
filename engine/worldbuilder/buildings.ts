@@ -28,6 +28,7 @@
 import { mergedPolygon } from "./landUse";
 import type { WorldPoint } from "./normalize";
 import type { BuildingRoleSpec, ParcelSpec } from "./regionProfile";
+import type { PadFrame } from "./terraces";
 import type { LandUse } from "./vocabulary";
 
 /** Placeholder colour per land use (§13.4 table); a fork's profile overrides per role. */
@@ -79,6 +80,9 @@ export interface PlannedBuilding {
   base: number;
   color: string;
   pad: { polygon: WorldPoint[]; height: number };
+  /** The pad rectangle (`front` towards the street) and the middle of its street edge. */
+  frame: PadFrame;
+  entrance: WorldPoint;
   /** Largest height the pad cuts or fills at a footprint corner, metres. */
   grading: number;
   /** The lot is smaller than the role's smallest footprint. */
@@ -141,6 +145,8 @@ export function planBuilding(request: BuildingRequest): PlannedBuilding | null {
         .map(([x, z]) => [round(x, 3), round(z, 3)]),
       height: padHeight,
     },
+    frame: { center, along: mid.tangent, inward, halfAlong: width / 2 + PAD_MARGIN, front: depth / 2 + frontMargin, back: depth / 2 + PAD_MARGIN },
+    entrance: [round(center[0] - inward[0] * (depth / 2 + frontMargin), 3), round(center[1] - inward[1] * (depth / 2 + frontMargin), 3)],
     grading: round(grading, 2),
     squeezed,
   };

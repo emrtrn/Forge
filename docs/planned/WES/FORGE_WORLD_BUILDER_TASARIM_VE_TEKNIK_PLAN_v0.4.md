@@ -29,8 +29,13 @@
 >    - b. ~~Yol boy kesiti~~: `roadProfile.ts` (hedef eğim, yarma/dolgu, sabit kotlar,
 >      karşılanamayan eğimi aralığa eşit yayma, yol ağında kavşak/kesişme kotu önce çözülen
 >      yoldan); `roads` aşaması v5 bunu kullanır. TAMAM. Parsel girişi kotu 2d ile bağlanır.
->    - c. Teraslı set + taş istinat duvarı + yol girişinde duvar boşluğu; çok setli alan
->      (meydan); setler arası merdiven/rampa (Derekavak'ta da yok).
+>    - c. ~~Teraslı set + istinat duvarı~~: `terraces.ts` + `buildings` aşaması v2. Pedin
+>      dışındaki zemin 0,8 m'den fazla yüksek/alçaksa taş istinat duvarı; sokak girişinde
+>      duvar boşluğu, kot farkı varsa basamak; açık parsel (meydan) zemini 2,5 m'den fazla
+>      değişiyorsa derinlik boyunca setlere bölünür, setler arası duvar + merdiven. Duvar,
+>      basamak ve setler ped verisi (`generated.pads[].walls/stairs/falloff/building`), bir
+>      kez ölçülür, ped aynı kaldıkça yeniden kullanılır (bake sonrası değişmez); duvarlı ped
+>      1 m geçişle işlenir. TAMAM. Araç rampası (setler arası) yok; gerekirse sonra.
 >    - d. Parsel–yol ilişkisi: parsel yoldan açıklıkla kaydırılır, parsele giden yol kenarda
 >      ve set kotunda biter.
 >    - e. Sahne denetimi: yol–set kesişmesi, giriş kotu, eğim, rölyefin korunan alana değmesi.

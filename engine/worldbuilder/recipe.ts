@@ -46,6 +46,7 @@ import {
   uniqueEntries,
   type WorldPoint,
 } from "./normalize";
+import type { PadStair, PadWall } from "./terraces";
 import {
   LAND_USES,
   type LandUse,
@@ -208,13 +209,20 @@ export interface GeneratedParcel {
  * Data only: the editor's Apply Pads bakes it into the terrain (decision 19).
  */
 export interface GeneratedPad {
-  /** The building placement standing on it. */
+  /** The building placement standing on it (a terrace of a split pad: its own id, see `building`). */
   id: string;
   settlement: string;
   /** Footprint plus margin, on the XZ plane. */
   polygon: WorldPoint[];
   /** Level of the pad, world metres. */
   height: number;
+  /** A terrace of a split pad: the building placement it belongs to. */
+  building?: string;
+  /** Blend into the terrain, metres (walled pads blend short); the editor default when absent. */
+  falloff?: number;
+  /** Retaining walls and steps (`engine/worldbuilder/terraces.ts`), measured once and kept with the pad. */
+  walls?: PadWall[];
+  stairs?: PadStair[];
 }
 
 /** A settlement's chosen site and resolved program (L1 + L2), written by the `settlementSites` stage. */
@@ -651,6 +659,49 @@ function normalizePads(ctx: Ctx, value: unknown, plan: WorldPlan): GeneratedPad[
     }
     // Field order matches what the stage writes.
     const result: GeneratedPad = { id, settlement: pad.settlement, polygon, height };
+    if (pad.building !== undefined) {
+      const building = requireId(c, `${p}.building`, pad.building);
+      if (building === null) return null;
+      result.building = building;
+    }
+    if (pad.falloff !== undefined) {
+      const falloff = requireNumber(c, `${p}.falloff`, pad.falloff, 0, 100);
+      if (falloff === null) return null;
+      result.falloff = falloff;
+    }
+    if (pad.walls !== undefined) {
+      if (!Array.isArray(pad.walls)) return reject(c, `${p}.walls`, "must be an array");
+      const walls: PadWall[] = [];
+      for (const [index, wall] of pad.walls.entries()) {
+        const at = `${p}.walls[${index}]`;
+        if (!isRecord(wall)) return reject(c, at, "must be an object");
+        const from = requirePoint(c, `${at}.from`, wall.from);
+        const to = requirePoint(c, `${at}.to`, wall.to);
+        const bottom = requireNumber(c, `${at}.bottom`, wall.bottom, -100_000, 100_000);
+        const top = requireNumber(c, `${at}.top`, wall.top, -100_000, 100_000);
+        if (from === null || to === null || bottom === null || top === null) return null;
+        if (!(top > bottom)) return reject(c, `${at}.top`, "must be above bottom");
+        walls.push({ from, to, bottom, top });
+      }
+      result.walls = walls;
+    }
+    if (pad.stairs !== undefined) {
+      if (!Array.isArray(pad.stairs)) return reject(c, `${p}.stairs`, "must be an array");
+      const stairs: PadStair[] = [];
+      for (const [index, stair] of pad.stairs.entries()) {
+        const at = `${p}.stairs[${index}]`;
+        if (!isRecord(stair)) return reject(c, at, "must be an object");
+        const foot = requirePoint(c, `${at}.foot`, stair.foot);
+        const head = requirePoint(c, `${at}.head`, stair.head);
+        const width = requireNumber(c, `${at}.width`, stair.width, 0.1, 100);
+        const low = requireNumber(c, `${at}.low`, stair.low, -100_000, 100_000);
+        const high = requireNumber(c, `${at}.high`, stair.high, -100_000, 100_000);
+        if (foot === null || head === null || width === null || low === null || high === null) return null;
+        if (!(high >= low)) return reject(c, `${at}.high`, "must not be below low");
+        stairs.push({ foot, head, width, low, high });
+      }
+      result.stairs = stairs;
+    }
     return result;
   });
 }

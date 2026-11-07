@@ -191,6 +191,42 @@ export function registerWorldBuildingTests(check: Check): void {
     assert.equal(planStage(buildingsStage, input(guarded, savedLayout, () => 5)).empty, true);
   });
 
+  check("world buildings: on a steep slope pads get retaining walls and steps, the square terraces; a bake changes nothing", () => {
+    const { recipe, layout } = village();
+    const steep = (_x: number, z: number) => 100 + z * 0.2;
+    const first = planStage(buildingsStage, input(recipe, layout, steep));
+    assert.deepEqual(first.errors, []);
+    applyPlacementGroupChanges(layout, first.groupChanges, "after");
+    const pads = first.recipeAfter.generated.pads;
+    const placed = layout.instances.flatMap((group) => group.placements);
+    const walls = placed.filter((placement) => placement.role === "structure.retainingWall");
+    const steps = placed.filter((placement) => placement.role === "structure.stairs");
+    assert.ok(walls.length > 0, "walls hold the cut and fill");
+    assert.ok(steps.length > 0, "entrances meeting a height difference get steps");
+    assert.equal(walls.length, pads.reduce((sum, pad) => sum + (pad.walls?.length ?? 0), 0), "one placement per wall");
+    assert.ok(pads.filter((pad) => pad.walls).every((pad) => pad.falloff === 1), "a walled pad blends in short");
+    // The square (an open lot) splits into terraces that belong to its building.
+    const terraces = pads.filter((pad) => pad.building !== undefined);
+    assert.ok(terraces.length > 0, "the square terraces");
+    const square = pads.find((pad) => pad.id === terraces[0]!.building)!;
+    assert.ok(terraces.every((pad) => pad.height !== square.height));
+    assert.match(first.warnings.join("\n"), /\d+ retaining walls, \d+ flights of steps, 1 lots on terraces/);
+    // The recipe round-trips them.
+    const { recipe: saved, issues } = normalizeWorldRecipe(JSON.parse(JSON.stringify(first.recipeAfter)));
+    assert.deepEqual(issues, []);
+    assert.deepEqual(saved!.generated.pads, pads);
+
+    // A bake flattens each pad and the ground a few metres around it (the falloff), which is
+    // exactly where the walls were measured: the stage keeps what it measured.
+    const bakedAround = (x: number, z: number) => {
+      const near = pads.find((pad) => sourceDistance([x, z], { kind: "polygon", polygon: pad.polygon }) <= 3);
+      return near ? near.height : steep(x, z);
+    };
+    const rerun = planStage(buildingsStage, input(saved!, layout, bakedAround));
+    assert.deepEqual({ added: rerun.added, updated: rerun.updated, removed: rerun.removed }, { added: [], updated: [], removed: [] });
+    assert.equal(rerun.empty, true);
+  });
+
   check("world buildings: without roles the stage asks for land use; pads must name a settlement", () => {
     const bare = createWorldRecipe("bare", 1);
     bare.plan.settlements.push({ id: "v1", source: "manual", center: [0, 0], type: "village" });

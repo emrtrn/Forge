@@ -537,7 +537,8 @@ export class WorldBuilderSession {
       this.host.onStatus("No building pads to apply; run Buildings first.", "warning");
       return;
     }
-    await this.host.applyPads(pads.map((pad) => ({ polygon: pad.polygon, height: pad.height, falloff: PAD_FALLOFF })));
+    // A walled pad carries its own short falloff, so its wall holds the step.
+    await this.host.applyPads(pads.map((pad) => ({ polygon: pad.polygon, height: pad.height, falloff: pad.falloff ?? PAD_FALLOFF })));
   }
 
   getView(): WorldBuilderView {
@@ -663,12 +664,12 @@ export class WorldBuilderSession {
     return this.planEditing && this.layerOptions.plan && this.recipe !== null && this.referencePreview === null;
   }
 
-  /** Recipe pads whose building placement is in the level. */
+  /** Recipe pads whose building placement is in the level (a terrace: the building it belongs to). */
   private standingPads(): GeneratedPad[] {
     const layout = this.host.layout();
     if (!this.recipe || !layout) return [];
     const ids = new Set(layout.instances.flatMap((group) => group.placements.flatMap((placement) => (placement.id ? [placement.id] : []))));
-    return this.recipe.generated.pads.filter((pad) => ids.has(pad.id));
+    return this.recipe.generated.pads.filter((pad) => ids.has(pad.building ?? pad.id));
   }
 
   private setRecipe(recipe: WorldRecipe | null): void {

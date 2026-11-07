@@ -556,13 +556,14 @@ export function validateAssetManifest(
     // foliage cell files
     // (`<level>.cells/...`) belong to their registered level, the same way; a
     // sidecar without one stays visible. Foliage Type assets are `*.foliagetype.json`.
-    // World Builder keeps a level's recipe (`<level>.worldrecipe.json`), and by
-    // convention its own region profile and reference image, beside it too.
+    // World Builder keeps a level's recipe (`<level>.worldrecipe.json`), its world
+    // brief (`<level>.worldbrief.json`), and by convention its own region profile
+    // and reference image, beside it too.
     // Cells first: a foliage cell is itself named `<x_z>.foliage.json`.
     const level = /^(.*)\.cells\/.+\.json$/i.exec(path)?.[1]
       ?? /^(.*)\.foam\/[a-f0-9]{64}\.foam\.json$/i.exec(path)?.[1]
       ?? /^(.*)\.landscapes\/[^/]+\.terrain\.json$/i.exec(path)?.[1]
-      ?? /^(.*)\.(?:foliage|meshpaint|worldrecipe|regionprofile)\.json$/i.exec(path)?.[1]
+      ?? /^(.*)\.(?:foliage|meshpaint|worldrecipe|worldbrief|regionprofile)\.json$/i.exec(path)?.[1]
       ?? /^(.*)\.reference\.(?:png|jpe?g|webp)$/i.exec(path)?.[1];
     if (level && [".level.json", ".layout.json"].some((ext) => manifestPaths.has(level + ext))) continue;
     addIssue({

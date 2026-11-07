@@ -1,0 +1,627 @@
+/**
+ * World brief: the general world summary a game design document is reduced to
+ * (plan v0.4 decision 20), stored beside its level as `<Level>.worldbrief.json`.
+ * The design document itself stays in the game's repository; Forge only reads
+ * this schema. `npm run world:brief` builds the level from it
+ * (`tools/world/worldBriefBuild.ts`, docs/world-builder/WORLD_BRIEF.md).
+ *
+ * Coordinates are the design document's: metres east and north (north up), and
+ * elevation above the document's datum. `frame` is the brief point that sits on
+ * the Forge world origin (`metricFrame.ts`): x = east - frame.east, z = frame.north - north,
+ * y = elevation - frame.elevation. Widths, depths and sizes are plain metres.
+ *
+ * `normalizeWorldBrief` is the single source of field shape. It is strict: any
+ * issue means the brief is not built. Dependency-free; no three.js.
+ */
+import { metricElevationToWorld, metricToWorld, type MetricFrame } from "./metricFrame";
+import {
+  arrayOf,
+  type Ctx,
+  idSet,
+  isFiniteNumber,
+  isOneOf,
+  isRecord,
+  issue,
+  normalizeAssetPath,
+  normalizeSeed,
+  pointList,
+  reject,
+  requireId,
+  requireNumber,
+  requirePoint,
+  requireRange,
+  requireToken,
+  round,
+  uniqueEntries,
+  WORLD_MAX_COORDINATE,
+  type WorldPoint,
+} from "./normalize";
+import {
+  createWorldRecipe,
+  PLAN_SOURCES,
+  REFERENCE_VIEWS,
+  ROAD_NODE_KINDS,
+  type PlanProvenance,
+  type PlanSource,
+  type ReferenceView,
+  type RoadNodeKind,
+  type WorldRecipe,
+} from "./recipe";
+import { ROAD_CLASSES, type RoadClass } from "./vocabulary";
+
+export const WORLD_BRIEF_SCHEMA_VERSION = 1;
+export const WORLD_BRIEF_SUFFIX = ".worldbrief.json";
+
+/** Where a model comes from (decision 21): Claude in Blender, Tripo AI, or a ready-made model. */
+export const MODEL_SOURCES = ["blender", "tripo", "ready"] as const;
+export type ModelSource = (typeof MODEL_SOURCES)[number];
+
+/** WES seasons and weather presets (`worldEnvironment.ts`); kept here so the schema stays dependency-free. */
+export const BRIEF_SEASONS = ["spring", "summer", "autumn", "winter"] as const;
+export type Season = (typeof BRIEF_SEASONS)[number];
+export const BRIEF_WEATHER_PRESETS = ["clear", "cloudy", "rain", "snow", "fog"] as const;
+export type WeatherPreset = (typeof BRIEF_WEATHER_PRESETS)[number];
+const SEASONS = BRIEF_SEASONS;
+const WEATHER_PRESETS = BRIEF_WEATHER_PRESETS;
+
+/** Tile sizes a new World Terrain may have (`WORLD_TERRAIN_CREATE_TILE_QUADS`); kept here so the schema stays dependency-free. */
+export const BRIEF_TILE_QUADS = [64, 128, 256] as const;
+export type BriefTileQuads = (typeof BRIEF_TILE_QUADS)[number];
+
+export const VALLEY_AXES = ["northSouth"] as const;
+export type ValleyAxis = (typeof VALLEY_AXES)[number];
+
+/** `[east, north]`, metres. */
+export type BriefPoint = [number, number];
+
+/** Where an element came from; `reference` means measured on the reference map. */
+export interface BriefProvenance {
+  source: PlanSource;
+  /** 0..1, only with `source: "reference"`. */
+  confidence?: number;
+}
+
+export interface BriefArea {
+  west: number;
+  east: number;
+  south: number;
+  north: number;
+}
+
+export interface BriefTerrain {
+  /** The Landscape actor id. */
+  id: string;
+  name: string;
+  tileQuads: BriefTileQuads;
+  spacing: number;
+  /** Lowest and highest elevation the terrain may hold. */
+  heightRange: [number, number];
+}
+
+/** One cut across a valley: the floor's and the rock line's east coordinates at `north`. */
+export interface BriefValleySection {
+  north: number;
+  floor: [number, number];
+  rock: [number, number];
+}
+
+export interface BriefValley extends BriefProvenance {
+  id: string;
+  axis: ValleyAxis;
+  /** North to south. */
+  sections: BriefValleySection[];
+  /** Floor elevation along the valley, north to south; linear between points. */
+  floorProfile: Array<{ north: number; elevation: number }>;
+  sideSlopeDeg: number;
+  ridgeElevation?: [number, number];
+  /** Land cover on both sides between the floor and the rock line, such as `forest.conifer`. */
+  slopeCover?: string;
+}
+
+export interface BriefRegion extends BriefProvenance {
+  id: string;
+  kind: string;
+  polygon: BriefPoint[];
+}
+
+export interface BriefWater extends BriefProvenance {
+  id: string;
+  /** Token such as `river`, `stream`, `lake`. */
+  kind: string;
+  /** Centre line in flow order (rivers); exactly one of `line` / `polygon`. */
+  line?: BriefPoint[];
+  polygon?: BriefPoint[];
+  /** Water surface width, metres. */
+  width?: number;
+  /** Bed depth below the ground beside it, metres. */
+  bedDepth?: number;
+  /** Water surface below the ground beside it, metres. */
+  surfaceDepth?: number;
+}
+
+export interface BriefRoadNode extends BriefProvenance {
+  id: string;
+  at: BriefPoint;
+  kind: RoadNodeKind;
+}
+
+export interface BriefRoadEdge extends BriefProvenance {
+  id: string;
+  from: string;
+  to: string;
+  roadClass: RoadClass;
+  /** Corridor hint for the route solver, not the final line. */
+  corridor?: BriefPoint[];
+}
+
+export interface BriefLandmark extends BriefProvenance {
+  id: string;
+  role: string;
+  at: BriefPoint;
+  /** Level ground under it: east-west and north-south size, and the falloff around it. */
+  pad?: { size: [number, number]; falloff: number };
+}
+
+export interface BriefSettlement extends BriefProvenance {
+  id: string;
+  /** Token such as `hamlet`, `village`, `town`. */
+  type: string;
+  center: BriefPoint;
+  radius?: number;
+  population?: number;
+  protected?: boolean;
+}
+
+/** A single object placed by role, such as a woodpile or a signpost. */
+export interface BriefProp {
+  id: string;
+  role: string;
+  at: BriefPoint;
+  /** Clockwise from north, degrees. */
+  rotationDeg: number;
+  scale: number;
+  collision: boolean;
+}
+
+export interface BriefEnvironment {
+  season: Season;
+  weather: { preset: WeatherPreset; intensity: number };
+  /** Fixed hour of day, 0..24; absent leaves the level's clock alone. */
+  hour?: number;
+}
+
+/** One model a role may use. A role with several rows has variants; `variant` groups them. */
+export interface BriefModel {
+  role: string;
+  source: ModelSource;
+  /** Public-root-relative model file. */
+  file: string;
+  variant?: string;
+}
+
+export interface WorldBrief {
+  schema: typeof WORLD_BRIEF_SCHEMA_VERSION;
+  type: "worldBrief";
+  /** The recipe id the brief builds. */
+  id: string;
+  name?: string;
+  seed: number;
+  frame: MetricFrame;
+  area: BriefArea;
+  terrain: BriefTerrain;
+  /** Public-root-relative `*.regionprofile.json`. */
+  regionProfile?: string;
+  /** Public-root-relative image covering `area`. */
+  reference?: { image: string; view: ReferenceView };
+  playerStart?: BriefPoint;
+  valleys: BriefValley[];
+  regions: BriefRegion[];
+  water: BriefWater[];
+  roads: { nodes: BriefRoadNode[]; edges: BriefRoadEdge[] };
+  landmarks: BriefLandmark[];
+  settlements: BriefSettlement[];
+  props: BriefProp[];
+  environment?: BriefEnvironment;
+  models: BriefModel[];
+}
+
+export interface WorldBriefNormalization {
+  brief: WorldBrief | null;
+  issues: string[];
+}
+
+const TOP_LEVEL_FIELDS = new Set([
+  "schema", "type", "id", "name", "seed", "frame", "area", "terrain", "regionProfile", "reference", "playerStart",
+  "valleys", "regions", "water", "roads", "landmarks", "settlements", "props", "environment", "models",
+]);
+
+/** `<Level>.worldbrief.json` beside a `.level.json` / `.layout.json` level. */
+export function worldBriefPath(levelPath: string): string {
+  const normalized = levelPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  const base = normalized.replace(/(\.level|\.layout)?\.json$/i, "");
+  if (!base || base === normalized) throw new Error("world brief requires a .json level path");
+  return `${base}${WORLD_BRIEF_SUFFIX}`;
+}
+
+/** The level a brief builds by default: `<Name>.worldbrief.json` → `<Name>.level.json`. */
+export function worldBriefLevelPath(briefPath: string): string {
+  const normalized = briefPath.replace(/\\/g, "/").replace(/^\/+/, "");
+  if (!normalized.endsWith(WORLD_BRIEF_SUFFIX) || normalized.length === WORLD_BRIEF_SUFFIX.length) {
+    throw new Error(`world brief path must end with ${WORLD_BRIEF_SUFFIX}`);
+  }
+  return `${normalized.slice(0, -WORLD_BRIEF_SUFFIX.length)}.level.json`;
+}
+
+function metres(ctx: Ctx, path: string, value: unknown): number | null {
+  return requireNumber(ctx, path, value, -WORLD_MAX_COORDINATE, WORLD_MAX_COORDINATE);
+}
+
+function positive(ctx: Ctx, path: string, value: unknown, max = WORLD_MAX_COORDINATE): number | null {
+  if (isFiniteNumber(value) && value > 0 && value <= max) return round(value);
+  return reject(ctx, path, `must be a number above 0 and at most ${max}`);
+}
+
+function optional<T>(value: unknown, read: () => T | null): T | undefined {
+  return value === undefined ? undefined : read() ?? undefined;
+}
+
+function insideArea(ctx: Ctx, path: string, point: BriefPoint, area: BriefArea | null): void {
+  if (!area) return;
+  if (point[0] < area.west || point[0] > area.east || point[1] < area.south || point[1] > area.north) {
+    issue(ctx, path, "lies outside the area");
+  }
+}
+
+function points(ctx: Ctx, path: string, value: unknown, minimum: number, area: BriefArea | null): BriefPoint[] | null {
+  const list = pointList(ctx, path, value, minimum);
+  list?.forEach((point, index) => insideArea(ctx, `${path}[${index}]`, point, area));
+  return list;
+}
+
+function point(ctx: Ctx, path: string, value: unknown, area: BriefArea | null): BriefPoint | null {
+  const result = requirePoint(ctx, path, value);
+  if (result) insideArea(ctx, path, result, area);
+  return result;
+}
+
+function provenance(ctx: Ctx, path: string, entry: Record<string, unknown>): BriefProvenance {
+  const source = entry.source === undefined ? "manual" : entry.source;
+  if (!isOneOf(PLAN_SOURCES, source)) {
+    issue(ctx, `${path}.source`, `must be one of ${PLAN_SOURCES.join(", ")}`);
+    return { source: "manual" };
+  }
+  if (entry.confidence === undefined) return { source };
+  if (source !== "reference") {
+    issue(ctx, `${path}.confidence`, "is only kept for source \"reference\"");
+    return { source };
+  }
+  const confidence = requireNumber(ctx, `${path}.confidence`, entry.confidence, 0, 1);
+  return confidence === null ? { source } : { source, confidence };
+}
+
+function eastPair(ctx: Ctx, path: string, value: unknown): [number, number] | null {
+  return requireRange(ctx, path, value, -WORLD_MAX_COORDINATE, WORLD_MAX_COORDINATE);
+}
+
+function normalizeArea(ctx: Ctx, value: unknown): BriefArea | null {
+  if (!isRecord(value)) return reject(ctx, "area", "must be an object");
+  const [west, east, south, north] = (["west", "east", "south", "north"] as const)
+    .map((side) => metres(ctx, `area.${side}`, value[side]));
+  if (west === null || east === null || south === null || north === null) return null;
+  if (west! >= east! || south! >= north!) return reject(ctx, "area", "must have west < east and south < north");
+  return { west: west!, east: east!, south: south!, north: north! };
+}
+
+function normalizeFrame(ctx: Ctx, value: unknown): MetricFrame | null {
+  if (value === undefined) return { east: 0, north: 0, elevation: 0 };
+  if (!isRecord(value)) return reject(ctx, "frame", "must be an object");
+  const east = metres(ctx, "frame.east", value.east ?? 0);
+  const north = metres(ctx, "frame.north", value.north ?? 0);
+  const elevation = metres(ctx, "frame.elevation", value.elevation ?? 0);
+  return east === null || north === null || elevation === null ? null : { east, north, elevation };
+}
+
+function normalizeTerrain(ctx: Ctx, value: unknown): BriefTerrain | null {
+  if (!isRecord(value)) return reject(ctx, "terrain", "must be an object");
+  const id = requireId(ctx, "terrain", value.id);
+  const name = typeof value.name === "string" && value.name.trim() ? value.name.trim() : reject(ctx, "terrain.name", "must be a non-empty string");
+  const tileQuads = (BRIEF_TILE_QUADS as readonly unknown[]).includes(value.tileQuads)
+    ? value.tileQuads as BriefTileQuads
+    : reject(ctx, "terrain.tileQuads", `must be one of ${BRIEF_TILE_QUADS.join(", ")}`);
+  const spacing = positive(ctx, "terrain.spacing", value.spacing, 64);
+  const heightRange = eastPair(ctx, "terrain.heightRange", value.heightRange);
+  if (heightRange && heightRange[0] === heightRange[1]) issue(ctx, "terrain.heightRange", "must span some height");
+  if (id === null || name === null || tileQuads === null || spacing === null || heightRange === null) return null;
+  return { id, name, tileQuads, spacing, heightRange };
+}
+
+function normalizeValley(ctx: Ctx, path: string, entry: Record<string, unknown>): BriefValley | null {
+  const id = requireId(ctx, path, entry.id);
+  const axis = isOneOf(VALLEY_AXES, entry.axis) ? entry.axis : reject(ctx, `${path}.axis`, `must be one of ${VALLEY_AXES.join(", ")}`);
+  const sections = arrayOf(ctx, `${path}.sections`, entry.sections, (c, p, raw): BriefValleySection | null => {
+    if (!isRecord(raw)) return reject(c, p, "must be an object");
+    const north = metres(c, `${p}.north`, raw.north);
+    const floor = eastPair(c, `${p}.floor`, raw.floor);
+    const rock = eastPair(c, `${p}.rock`, raw.rock);
+    if (north === null || !floor || !rock) return null;
+    if (floor[0] === floor[1]) return reject(c, `${p}.floor`, "must have some width");
+    if (rock[0] >= floor[0] || rock[1] <= floor[1]) return reject(c, `${p}.rock`, "must lie outside the floor on both sides");
+    return { north, floor, rock };
+  }).sort((a, b) => b.north - a.north);
+  if (sections.length < 2) issue(ctx, `${path}.sections`, "must list at least 2 sections");
+  sections.forEach((section, index) => {
+    if (index > 0 && section.north === sections[index - 1]!.north) issue(ctx, `${path}.sections`, `repeats north ${section.north}`);
+  });
+  const floorProfile = arrayOf(ctx, `${path}.floorProfile`, entry.floorProfile, (c, p, raw) => {
+    if (!isRecord(raw)) return reject(c, p, "must be an object");
+    const north = metres(c, `${p}.north`, raw.north);
+    const elevation = metres(c, `${p}.elevation`, raw.elevation);
+    return north === null || elevation === null ? null : { north, elevation };
+  }).sort((a, b) => b.north - a.north);
+  if (floorProfile.length < 1) issue(ctx, `${path}.floorProfile`, "must list at least 1 point");
+  floorProfile.forEach((at, index) => {
+    if (index > 0 && at.north === floorProfile[index - 1]!.north) issue(ctx, `${path}.floorProfile`, `repeats north ${at.north}`);
+  });
+  const sideSlopeDeg = requireNumber(ctx, `${path}.sideSlopeDeg`, entry.sideSlopeDeg, 0, 80);
+  const ridgeElevation = optional(entry.ridgeElevation, () => eastPair(ctx, `${path}.ridgeElevation`, entry.ridgeElevation));
+  const slopeCover = optional(entry.slopeCover, () => requireToken(ctx, `${path}.slopeCover`, entry.slopeCover));
+  if (id === null || axis === null || sideSlopeDeg === null) return null;
+  return {
+    id, axis, sections, floorProfile, sideSlopeDeg,
+    ...(ridgeElevation ? { ridgeElevation } : {}),
+    ...(slopeCover ? { slopeCover } : {}),
+    ...provenance(ctx, path, entry),
+  };
+}
+
+function normalizeEnvironment(ctx: Ctx, value: unknown): BriefEnvironment | null {
+  if (!isRecord(value)) return reject(ctx, "environment", "must be an object");
+  const season = isOneOf(SEASONS, value.season) ? value.season : reject(ctx, "environment.season", `must be one of ${SEASONS.join(", ")}`);
+  const weatherInput = value.weather === undefined ? {} : value.weather;
+  if (!isRecord(weatherInput)) return reject(ctx, "environment.weather", "must be an object");
+  const preset = weatherInput.preset === undefined ? "clear" : weatherInput.preset;
+  const weatherPreset = isOneOf(WEATHER_PRESETS, preset) ? preset : reject(ctx, "environment.weather.preset", `must be one of ${WEATHER_PRESETS.join(", ")}`);
+  const intensity = requireNumber(ctx, "environment.weather.intensity", weatherInput.intensity ?? 1, 0, 1);
+  const hour = optional(value.hour, () => requireNumber(ctx, "environment.hour", value.hour, 0, 24));
+  if (season === null || weatherPreset === null || intensity === null) return null;
+  return { season, weather: { preset: weatherPreset, intensity }, ...(hour === undefined ? {} : { hour }) };
+}
+
+export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
+  if (!isRecord(value)) return { brief: null, issues: ["brief must be an object"] };
+  if (value.schema !== WORLD_BRIEF_SCHEMA_VERSION) return { brief: null, issues: [`schema must be ${WORLD_BRIEF_SCHEMA_VERSION}`] };
+  if (value.type !== "worldBrief") return { brief: null, issues: ['type must be "worldBrief"'] };
+  const ctx: Ctx = { issues: [] };
+  for (const key of Object.keys(value)) if (!TOP_LEVEL_FIELDS.has(key)) issue(ctx, key, "is not a world brief field");
+
+  const id = requireId(ctx, "brief", value.id);
+  const name = optional(value.name, () => typeof value.name === "string" && value.name.trim() ? value.name.trim() : reject(ctx, "name", "must be a non-empty string"));
+  const seed = normalizeSeed(value.seed ?? 0) ?? reject(ctx, "seed", "must be an integer 0..4294967295");
+  const frame = normalizeFrame(ctx, value.frame);
+  const area = normalizeArea(ctx, value.area);
+  const terrain = normalizeTerrain(ctx, value.terrain);
+  const regionProfile = optional(value.regionProfile, () =>
+    normalizeAssetPath(value.regionProfile, ".regionprofile.json") ?? reject(ctx, "regionProfile", "must be a public-root-relative *.regionprofile.json"));
+  const reference = optional(value.reference, () => {
+    if (!isRecord(value.reference)) return reject(ctx, "reference", "must be an object");
+    const image = normalizeAssetPath(value.reference.image, null) ?? reject(ctx, "reference.image", "must be a public-root-relative path");
+    const view = value.reference.view === undefined ? "topDown" : value.reference.view;
+    if (!isOneOf(REFERENCE_VIEWS, view)) return reject(ctx, "reference.view", `must be one of ${REFERENCE_VIEWS.join(", ")}`);
+    return image === null ? null : { image, view };
+  });
+  const playerStart = optional(value.playerStart, () => point(ctx, "playerStart", value.playerStart, area));
+
+  const valleys = uniqueEntries(ctx, "valleys", value.valleys, normalizeValley);
+  const regions = uniqueEntries(ctx, "regions", value.regions, (c, p, entry): BriefRegion | null => {
+    const regionId = requireId(c, p, entry.id);
+    const kind = requireToken(c, `${p}.kind`, entry.kind);
+    const polygon = points(c, `${p}.polygon`, entry.polygon, 3, area);
+    return regionId === null || kind === null || !polygon ? null : { id: regionId, kind, polygon, ...provenance(c, p, entry) };
+  });
+  const water = uniqueEntries(ctx, "water", value.water, (c, p, entry): BriefWater | null => {
+    const waterId = requireId(c, p, entry.id);
+    const kind = requireToken(c, `${p}.kind`, entry.kind);
+    if ((entry.line === undefined) === (entry.polygon === undefined)) return reject(c, p, "needs exactly one of line / polygon");
+    const line = optional(entry.line, () => points(c, `${p}.line`, entry.line, 2, area));
+    const polygon = optional(entry.polygon, () => points(c, `${p}.polygon`, entry.polygon, 3, area));
+    const width = optional(entry.width, () => positive(c, `${p}.width`, entry.width, 10_000));
+    const bedDepth = optional(entry.bedDepth, () => positive(c, `${p}.bedDepth`, entry.bedDepth, 1_000));
+    const surfaceDepth = optional(entry.surfaceDepth, () => requireNumber(c, `${p}.surfaceDepth`, entry.surfaceDepth, 0, 1_000));
+    if (bedDepth !== undefined && surfaceDepth !== undefined && surfaceDepth >= bedDepth) {
+      issue(c, `${p}.surfaceDepth`, "must be less than bedDepth");
+    }
+    if (waterId === null || kind === null || (!line && !polygon)) return null;
+    return {
+      id: waterId, kind, ...(line ? { line } : {}), ...(polygon ? { polygon } : {}),
+      ...(width === undefined ? {} : { width }), ...(bedDepth === undefined ? {} : { bedDepth }),
+      ...(surfaceDepth === undefined ? {} : { surfaceDepth }), ...provenance(c, p, entry),
+    };
+  });
+
+  const roadsInput = value.roads === undefined ? {} : value.roads;
+  if (!isRecord(roadsInput)) issue(ctx, "roads", "must be an object");
+  const roadsRecord = isRecord(roadsInput) ? roadsInput : {};
+  const nodes = uniqueEntries(ctx, "roads.nodes", roadsRecord.nodes, (c, p, entry): BriefRoadNode | null => {
+    const nodeId = requireId(c, p, entry.id);
+    const at = point(c, `${p}.at`, entry.at, area);
+    const kind = entry.kind === undefined ? "end" : entry.kind;
+    if (!isOneOf(ROAD_NODE_KINDS, kind)) return reject(c, `${p}.kind`, `must be one of ${ROAD_NODE_KINDS.join(", ")}`);
+    return nodeId === null || !at ? null : { id: nodeId, at, kind, ...provenance(c, p, entry) };
+  });
+  const nodeIds = idSet(nodes);
+  const edges = uniqueEntries(ctx, "roads.edges", roadsRecord.edges, (c, p, entry): BriefRoadEdge | null => {
+    const edgeId = requireId(c, p, entry.id);
+    const from = typeof entry.from === "string" && nodeIds.has(entry.from) ? entry.from : reject(c, `${p}.from`, "must name a road node");
+    const to = typeof entry.to === "string" && nodeIds.has(entry.to) ? entry.to : reject(c, `${p}.to`, "must name a road node");
+    if (from !== null && from === to) return reject(c, p, "must join two different nodes");
+    const roadClass = isOneOf(ROAD_CLASSES, entry.roadClass) ? entry.roadClass : reject(c, `${p}.roadClass`, `must be one of ${ROAD_CLASSES.join(", ")}`);
+    const corridor = optional(entry.corridor, () => points(c, `${p}.corridor`, entry.corridor, 1, area));
+    if (edgeId === null || from === null || to === null || roadClass === null) return null;
+    return { id: edgeId, from, to, roadClass, ...(corridor ? { corridor } : {}), ...provenance(c, p, entry) };
+  });
+
+  const landmarks = uniqueEntries(ctx, "landmarks", value.landmarks, (c, p, entry): BriefLandmark | null => {
+    const landmarkId = requireId(c, p, entry.id);
+    const role = requireToken(c, `${p}.role`, entry.role);
+    const at = point(c, `${p}.at`, entry.at, area);
+    const pad = optional(entry.pad, () => {
+      if (!isRecord(entry.pad)) return reject(c, `${p}.pad`, "must be an object");
+      const size = entry.pad.size;
+      const pair = Array.isArray(size) && size.length === 2
+        ? [positive(c, `${p}.pad.size[0]`, size[0], 10_000), positive(c, `${p}.pad.size[1]`, size[1], 10_000)]
+        : [reject(c, `${p}.pad.size`, "must be [eastWest, northSouth] metres"), null];
+      const falloff = requireNumber(c, `${p}.pad.falloff`, entry.pad.falloff ?? 0, 0, 10_000);
+      return pair[0] === null || pair[1] === null || falloff === null ? null : { size: [pair[0], pair[1]] as [number, number], falloff };
+    });
+    return landmarkId === null || role === null || !at ? null : { id: landmarkId, role, at, ...(pad ? { pad } : {}), ...provenance(c, p, entry) };
+  });
+  const settlements = uniqueEntries(ctx, "settlements", value.settlements, (c, p, entry): BriefSettlement | null => {
+    const settlementId = requireId(c, p, entry.id);
+    const type = requireToken(c, `${p}.type`, entry.type);
+    const center = point(c, `${p}.center`, entry.center, area);
+    const radius = optional(entry.radius, () => positive(c, `${p}.radius`, entry.radius, 100_000));
+    const population = optional(entry.population, () =>
+      Number.isInteger(entry.population) && (entry.population as number) >= 0 ? entry.population as number : reject(c, `${p}.population`, "must be a whole number"));
+    const protectedFlag = optional(entry.protected, () => typeof entry.protected === "boolean" ? entry.protected : reject(c, `${p}.protected`, "must be a boolean"));
+    if (settlementId === null || type === null || !center) return null;
+    return {
+      id: settlementId, type, center,
+      ...(radius === undefined ? {} : { radius }), ...(population === undefined ? {} : { population }),
+      ...(protectedFlag === undefined ? {} : { protected: protectedFlag }), ...provenance(c, p, entry),
+    };
+  });
+  const props = uniqueEntries(ctx, "props", value.props, (c, p, entry): BriefProp | null => {
+    const propId = requireId(c, p, entry.id);
+    const role = requireToken(c, `${p}.role`, entry.role);
+    const at = point(c, `${p}.at`, entry.at, area);
+    const rotationDeg = requireNumber(c, `${p}.rotationDeg`, entry.rotationDeg ?? 0, -360, 360);
+    const scale = positive(c, `${p}.scale`, entry.scale ?? 1, 1_000);
+    const collision = entry.collision === undefined ? true : typeof entry.collision === "boolean" ? entry.collision : reject(c, `${p}.collision`, "must be a boolean");
+    if (propId === null || role === null || !at || rotationDeg === null || scale === null || collision === null) return null;
+    return { id: propId, role, at, rotationDeg, scale, collision };
+  });
+  const environment = optional(value.environment, () => normalizeEnvironment(ctx, value.environment));
+  const models = arrayOf(ctx, "models", value.models, (c, p, entry): BriefModel | null => {
+    if (!isRecord(entry)) return reject(c, p, "must be an object");
+    const role = requireToken(c, `${p}.role`, entry.role);
+    const source = isOneOf(MODEL_SOURCES, entry.source) ? entry.source : reject(c, `${p}.source`, `must be one of ${MODEL_SOURCES.join(", ")}`);
+    const file = normalizeAssetPath(entry.file, null) ?? reject(c, `${p}.file`, "must be a public-root-relative path");
+    const variant = optional(entry.variant, () => requireToken(c, `${p}.variant`, entry.variant));
+    if (role === null || source === null || file === null) return null;
+    return { role, source, file, ...(variant ? { variant } : {}) };
+  });
+  const modelKeys = new Set<string>();
+  models.forEach((model, index) => {
+    const key = `${model.role}|${model.variant ?? ""}|${model.file}`;
+    if (modelKeys.has(key)) issue(ctx, `models[${index}]`, "repeats a role, variant and file");
+    modelKeys.add(key);
+  });
+
+  if (ctx.issues.length > 0 || id === null || seed === null || !frame || !area || !terrain) {
+    return { brief: null, issues: ctx.issues.length > 0 ? ctx.issues : ["brief is incomplete"] };
+  }
+  return {
+    brief: {
+      schema: WORLD_BRIEF_SCHEMA_VERSION, type: "worldBrief", id, ...(name ? { name } : {}), seed, frame, area, terrain,
+      ...(regionProfile ? { regionProfile } : {}), ...(reference ? { reference } : {}), ...(playerStart ? { playerStart } : {}),
+      valleys, regions, water, roads: { nodes, edges }, landmarks, settlements, props,
+      ...(environment ? { environment } : {}), models,
+    },
+    issues: [],
+  };
+}
+
+/** A brief point in Forge world `[x, z]`. */
+export function briefToWorld(brief: Pick<WorldBrief, "frame">, at: readonly [number, number]): WorldPoint {
+  return metricToWorld(at, brief.frame);
+}
+
+export function briefElevationToWorld(brief: Pick<WorldBrief, "frame">, elevation: number): number {
+  return metricElevationToWorld(elevation, brief.frame);
+}
+
+/** The area as a world XZ box. */
+export function briefWorldBounds(brief: Pick<WorldBrief, "frame" | "area">): { min: WorldPoint; max: WorldPoint } {
+  const [x0, z0] = briefToWorld(brief, [brief.area.west, brief.area.north]);
+  const [x1, z1] = briefToWorld(brief, [brief.area.east, brief.area.south]);
+  return { min: [x0, z0], max: [x1, z1] };
+}
+
+function planProvenance(entry: BriefProvenance): PlanProvenance {
+  return entry.source === "reference"
+    ? { source: "reference", observed: true, ...(entry.confidence === undefined ? {} : { confidence: entry.confidence }) }
+    : { source: entry.source };
+}
+
+/** A valley's floor and its two slope bands as world polygons, north to south then back. */
+export function briefValleyRegions(brief: Pick<WorldBrief, "frame">, valley: BriefValley): {
+  floor: WorldPoint[];
+  west: WorldPoint[];
+  east: WorldPoint[];
+} {
+  const band = (west: (section: BriefValleySection) => number, east: (section: BriefValleySection) => number): WorldPoint[] => [
+    ...valley.sections.map((section) => briefToWorld(brief, [west(section), section.north])),
+    ...[...valley.sections].reverse().map((section) => briefToWorld(brief, [east(section), section.north])),
+  ];
+  return {
+    floor: band((section) => section.floor[0], (section) => section.floor[1]),
+    west: band((section) => section.rock[0], (section) => section.floor[0]),
+    east: band((section) => section.floor[1], (section) => section.rock[1]),
+  };
+}
+
+/** The recipe plan a brief describes; stages turn it into geometry. */
+export function worldBriefRecipe(brief: WorldBrief): WorldRecipe {
+  const recipe = createWorldRecipe(brief.id, brief.seed);
+  if (brief.regionProfile) recipe.regionProfile = brief.regionProfile;
+  if (brief.reference) {
+    const { min, max } = briefWorldBounds(brief);
+    recipe.reference = { image: brief.reference.image, origin: min, size: [round(max[0] - min[0]), round(max[1] - min[1])], view: brief.reference.view };
+  }
+  const world = (at: BriefPoint): WorldPoint => briefToWorld(brief, at);
+  for (const water of brief.water) {
+    recipe.plan.water.push({
+      id: water.id, kind: water.kind,
+      ...(water.line ? { path: water.line.map(world) } : {}),
+      ...(water.polygon ? { polygon: water.polygon.map(world) } : {}),
+      ...planProvenance(water),
+    });
+  }
+  for (const valley of brief.valleys) {
+    const bands = briefValleyRegions(brief, valley);
+    const seen = planProvenance(valley);
+    recipe.plan.regions.push({ id: `${valley.id}-floor`, kind: "valley", polygon: bands.floor, ...seen });
+    if (valley.slopeCover) {
+      recipe.plan.regions.push(
+        { id: `${valley.id}-west`, kind: valley.slopeCover, polygon: bands.west, ...seen },
+        { id: `${valley.id}-east`, kind: valley.slopeCover, polygon: bands.east, ...seen },
+      );
+    }
+  }
+  for (const region of brief.regions) {
+    recipe.plan.regions.push({ id: region.id, kind: region.kind, polygon: region.polygon.map(world), ...planProvenance(region) });
+  }
+  for (const landmark of brief.landmarks) {
+    recipe.plan.landmarks.push({ id: landmark.id, kind: landmark.role, position: world(landmark.at), ...planProvenance(landmark) });
+  }
+  for (const settlement of brief.settlements) {
+    recipe.plan.settlements.push({
+      id: settlement.id, type: settlement.type, center: world(settlement.center),
+      ...(settlement.radius === undefined ? {} : { radius: settlement.radius }),
+      ...(settlement.population === undefined ? {} : { population: settlement.population }),
+      ...(settlement.protected === undefined ? {} : { protected: settlement.protected }),
+      ...planProvenance(settlement),
+    });
+  }
+  for (const node of brief.roads.nodes) {
+    recipe.plan.roadGraph.nodes.push({ id: node.id, position: world(node.at), kind: node.kind, ...planProvenance(node) });
+  }
+  for (const edge of brief.roads.edges) {
+    recipe.plan.roadGraph.edges.push({
+      id: edge.id, from: edge.from, to: edge.to, roadClass: edge.roadClass,
+      ...(edge.corridor ? { guide: edge.corridor.map(world) } : {}),
+      ...planProvenance(edge),
+    });
+  }
+  return recipe;
+}

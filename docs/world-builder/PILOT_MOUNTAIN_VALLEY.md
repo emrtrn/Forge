@@ -1,6 +1,6 @@
 # World Builder pilotu — dağ vadisi
 
-Durum: greybox sahne üretildi, hazır bitki modelleri bekleniyor (7 Kasım 2026).
+Durum: greybox sahne dünya özetinden üretiliyor; 1. ve 2. adım tamam, 3. adım sırada (7 Kasım 2026).
 
 Tasarım dokümanından dünya üretme hattının ilk uçtan uca denemesi. Amaç oyun değil,
 hattın nerede kırıldığını görmektir. Tekrar eden adımlar pilottan sonra otomatikleşir.
@@ -9,22 +9,45 @@ karar 20–22.
 
 ## Üretim
 
-`npm run world:pilot` sahneyi editörsüz üretir:
-`public/assets/world-pilot/Levels/WbPilotValley.level.json` (Content Browser'da
-görünür, editörde düzenlenip commit'lenir; üretici `tools/world/wbPilotValley.ts`).
-Var olan level'ın üstüne yazmaz; `npm run world:pilot -- --force` sıfırdan kurar ve
-editörde yapılan değişiklikleri siler. Greybox modelleri `art/world-pilot/wp_greybox.py`
+Pilot artık bir dünya özetinden üretilir:
+`public/assets/world-pilot/Levels/WbPilotValley.worldbrief.json`. Vadi kesitleri, nehir,
+yol uçları, kulübe ve proplar, mevsim ve model kaynakları bu dosyadadır
+([WORLD_BRIEF.md](WORLD_BRIEF.md)).
+
+`npm run world:brief -- <özet> [--out <level>] [--force]` level'ı editörsüz ve editörün
+kayıt biçiminde yazar; partition açık bir level'ın üstüne `--force` ile yazıldığında hücreleri
+yeniden böler ve eski hücreleri siler. `npm run world:pilot` pilot özetiyle aynı komuttur.
+Var olan level'ın üstüne `--force` olmadan yazmaz; `--force` editörde yapılan değişiklikleri
+(partition ayarı dışında) siler. Denemeler `--out` ile ayrı bir yola yapılır.
+
+Level: `public/assets/world-pilot/Levels/WbPilotValley.level.json` (Content Browser'da
+görünür, editörde düzenlenip commit'lenir). Greybox modelleri `art/world-pilot/wp_greybox.py`
 üretir. Foliage tipleri `public/assets/world-pilot/foliage/*.foliagetype.json`
 dosyalarıdır; hazır model gelince yalnız `meshAssetId` değişir.
 
+### Adımlar
+
+1. **Dünya özeti** — TAMAM (7 Kasım): genel şema + normalizer, pilot sabitleri özete taşındı.
+2. **Editörsüz çalıştırıcı** — TAMAM (7 Kasım): `world:brief`; aşamalar `planStage` ile,
+   kayıt editörün yolundan (partition, eski hücre temizliği, mm yuvarlama). Arazi, nehir
+   yatağı, boya, bitki ve ped bu adımda çalıştırıcının içinde "geçici adım"dır.
+   Eski çıktıyla fark: yamaç eğimi artık gerçek `tan 20°` (kotlarda en çok 1,3 cm).
+3. **Geçici adımlardan aşamalara** — BAŞLANMADI: makro arazi, nehir yatağı + su, boya,
+   bitki kuralları, ped.
+4. **Model listesi ve rol → model bağlama** (T41) — BAŞLANMADI.
+
+Ölçüt: ikinci bir dünya yalnız yeni bir özet dosyasıyla, kod yazmadan üretilebilir.
+
 ## Pilotun gösterdikleri
 
-- Zincir editörsüz çalışıyor: arazi, ped, gerçek `roads` aşaması ve spline bake.
+- Zincir editörsüz çalışıyor: arazi, ped, gerçek `roads` aşaması ve spline bake;
+  çıktı editörde açılıp kaydedilince değişmiyor (partition'lı ve partition'sız).
 - Krokideki tırmanış kullanılamadı, dönemeçleri yamaçtan dik çıkıyor ve iniyor.
   Yol koridor ipucudur; tırmanışı rota çözücü kurdu (eğim çoğunlukla 8–10°).
 - Bilinen açık: dönemeç uçlarında kısa bacaklar 20,4°'ye çıkıyor ve dönüş yarıçapı
   sınırın altında; rota çözücü dönemeç genişletmiyor.
-- Arazi, nehir yatağı ve boya henüz aşama değil, bu üreticide elle yazılı.
+- Arazi, nehir yatağı, boya, bitki kuralları ve ped henüz aşama değil; `world:brief`'in
+  geçici adımlarında, özetten beslenerek yazılı (3. adım).
 - Foliage çizimi kamera çevresindeki halkadan gelir; uzak yamaçlar için ayrı bir
   uzak görünüm yok.
 - Görsel ayar kapsam dışıdır: ışık ve renk kullanıcı tarafından editörde ayarlanır.
@@ -32,6 +55,7 @@ dosyalarıdır; hazır model gelince yalnız `meshAssetId` değişir.
 ## Dünya özeti
 
 Sayılar pilot için seçilmiş başlangıç değerleridir, kabul sırasında değişebilir.
+Makine okunur hâli `WbPilotValley.worldbrief.json`'dur; bir sayı değişince orada değişir.
 
 | Konu | Değer |
 |---|---|

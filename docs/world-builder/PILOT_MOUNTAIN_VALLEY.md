@@ -1,6 +1,6 @@
 # World Builder pilotu — dağ vadisi
 
-Durum: kapsam yazıldı, üretim başlamadı (7 Kasım 2026).
+Durum: kapsam ve iki referans görseli hazır, kroki onayı bekleniyor (7 Kasım 2026).
 
 Tasarım dokümanından dünya üretme hattının ilk uçtan uca denemesi. Amaç oyun değil,
 hattın nerede kırıldığını görmektir. Tekrar eden adımlar pilottan sonra otomatikleşir.
@@ -17,8 +17,8 @@ Sayılar pilot için seçilmiş başlangıç değerleridir, kabul sırasında de
 | Vadi | Kuzey-güney ekseninde, taban yaklaşık 120 m geniş, kuzeyde 100 m, güneyde 90 m kot |
 | Yamaçlar | Batı ve doğu, yaklaşık 20°, sırt kotu 240–260 m |
 | Nehir | Vadi tabanında kuzeyden güneye, hafif kıvrımlı, 8–12 m geniş |
-| Yol | 4 m stabilize; güney kenardan girer, nehrin batısında ona 25 m uzaklıkta kuzeye gider, `z ≈ −150` civarında ayrılıp batı yamaçtan kulübeye çıkar |
-| Kulübe | Yaklaşık `(−280, −240)`, kot 170 m, 30 × 30 m düzlenmiş alan |
+| Yol | 4 m stabilize; güney kenardan girer, nehrin batısında ona 25 m uzaklıkta kuzeye gider, `z ≈ −110` civarında ayrılıp batı yamaçtan kulübeye çıkar |
+| Kulübe | Yaklaşık `(−215, −227)`, kot 155 m, 30 × 30 m düzlenmiş alan |
 | Örtü | Yamaçlarda iğne yapraklı orman, tabanda çayır, sırta yakın kaya |
 | WES | Yaz, tek sabit gün saati, hava olayı yok |
 
@@ -82,6 +82,10 @@ Klasör: `art/world-pilot/references/`
 
 | Dosya | Ne | Durum |
 |---|---|---|
-| `pilot-plan-map.png` | [Karar 16 standardında](REFERENCE_PLAN_IMPORT.md#referans-görseli-standardı-karar-16) kroki | Sırada |
-| `pilot-cabin-concept.png` | Kulübe referansı | Sırada |
+| `pilot-plan-map.png` | [Karar 16 standardında](REFERENCE_PLAN_IMPORT.md#referans-görseli-standardı-karar-16) kroki, 1254 px | Üretildi |
+| `pilot-cabin-concept.png` | Kulübe referansı | Üretildi |
 | Arazi katmanı dokuları | Çayır, orman zemini, kaya, toprak yol | Greybox onayından sonra |
+
+Krokide yol, okunabilirlik için dünya özetindeki 4 m'den yaklaşık 8 m geniş çizilidir;
+genişlik için dünya özeti geçerlidir. İstemdeki konumla ölçülen konum farkı kulübede
+yaklaşık %1, yol ayrımında yaklaşık %6'dır.

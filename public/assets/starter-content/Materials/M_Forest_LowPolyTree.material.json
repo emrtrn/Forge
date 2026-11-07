@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_Forest_LowPolyTree",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "forest-tex-lowpolytree-d",
+  "normalTexture": "forest-tex-lowpolytree-n",
+  "maskTexture": null,
+  "roughnessTexture": "forest-tex-lowpolytree-r",
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": "forest-tex-lowpolytree-o",
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
+  "flipY": false,
+  "roughness": 1,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "mask",
+  "alphaTest": 0.5,
+  "side": "double",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

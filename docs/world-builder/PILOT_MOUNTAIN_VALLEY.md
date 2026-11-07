@@ -59,29 +59,31 @@ onay alınırsa geri kalanı tamamlanır.
 
 Liste pilot boyunca güncel tutulur. **Bekliyor** satırları sahnede placeholder ile durur.
 
-### Kullanıcının getireceği hazır modeller
+### Hazır modeller (kullanıcı)
 
-Klasör: `public/assets/world-pilot/foliage/`
+7 Kasım'da `starter-content/StaticMeshes/Environment/` altına gelen `Forest_*` paketi
+bağlandı. Foliage tipleri `public/assets/world-pilot/foliage/` altında; bir modeli
+değiştirmek için yalnız tipin `meshAssetId` alanı değişir.
 
-| Dosya | Ne | Hedef boy | Sahnede şimdilik | Durum |
-|---|---|---|---|---|
-| `wp-conifer-a.glb` | Olgun iğne yapraklı ağaç | 18–22 m | `Pine` foliage tipi | Bekliyor |
-| `wp-conifer-b.glb` | Genç iğne yapraklı ağaç | 8–12 m | `Pine` foliage tipi | Bekliyor |
-| `wp-bush-a.glb` | Dağ çalısı | 1–1,5 m | `Bush` foliage tipi | Bekliyor |
-| `wp-grass-a.glb` | Çimen veya ot öbeği | 0,3–0,6 m | `kenney-nature-kit/grass.glb` | Bekliyor |
+| Tip / kullanım | Model | Ölçek |
+|---|---|---|
+| `wp-conifer-a` olgun çam | `forest-tree-01` (25 m) | 0,8–1 |
+| `wp-conifer-b` orta çam | `forest-tree-02` (18 m) | 0,85–1,15 |
+| `wp-conifer-c` genç çam | `forest-tree-04` (10 m) | 0,8–1,2 |
+| `wp-bush-a`, `wp-bush-b` çalı | `forest-lowpolyprop-03`, `-05` | 0,45–0,7 |
+| `wp-grass-a` çayır otu | `forest-lowpolyprop-01` | 0,2–0,3 |
+| Kayalar (yerleşim) | `forest-rock-01` … `-09`; yüksek kaya, yamaç ve dere kenarı ayrı gruplar | 1–4 |
 
-Dosya kuralları:
+Kullanılmayanlar: `forest-tree-03` sonbahar renkli yaprak döken ağaç (sahne yaz);
+`forest-lowpolytree-*` düz kart ağaçlar, foliage'da uzak görünüme geçiş olmadığı
+için yakında yassı görünür; `forest-lowpolyprop-02`, `-04` sınıflandırılmadı.
+Blender kayaları (`wp-rock-a/b/c`) yerini paket kayalarına bıraktı.
 
-- Dosya başına tek bitki. Dokular `.glb` içinde gömülü ya da aynı klasörde olsun.
-- Forge `.glb` ve `.gltf` okur. FBX veya OBJ gelirse aynı adla bırakılır, Blender ile çevrilir.
-- Ölçek, pivot ve yön sorun değildir; bağlarken düzeltilir.
-- Foliage'a özel LOD kodu bulunmadığından bütçe önemlidir. Öneri: ağaç başına 15 bin üçgen
-  altı, çalı 3 bin, ot 500. Daha ağır modeller reddedilmez, ölçülüp raporlanır.
-- Kaynak ve lisansı bildirin. Lisans depoya girebilecek bir model olup olmadığını belirler.
+Yeni model kuralları:
 
-Model eklenince Claude'a dosya adını söylemek yeterlidir. Bağlama adımları:
-ölçü ve üçgen kontrolü → gerekirse normalizasyon → manifest kaydı → `*.foliagetype.json`
-→ sahnede placeholder ile değişim → ekran görüntüsüyle kontrol.
+- Forge `.glb` ve `.gltf` okur; FBX veya OBJ gelirse Blender ile çevrilir.
+- Ölçek, pivot ve yön bağlarken düzeltilir.
+- Foliage'a özel LOD kodu olmadığından üçgen bütçesi önemlidir.
 
 ### Claude'un Blender ile üreteceği modeller
 

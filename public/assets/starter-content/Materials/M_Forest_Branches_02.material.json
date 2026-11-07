@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_Forest_Branches_02",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "forest-tex-branches-02-d",
+  "normalTexture": "forest-tex-branches-n",
+  "maskTexture": null,
+  "roughnessTexture": "forest-tex-branches-r",
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": "forest-tex-branches-02-o",
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
+  "flipY": false,
+  "roughness": 1,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "mask",
+  "alphaTest": 0.5,
+  "side": "double",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

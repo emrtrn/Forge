@@ -273,7 +273,22 @@ interface PilotPlacement {
   position: [number, number, number];
   rotationYDeg: number;
   scale: number;
-  collision: boolean;
+  /** Written only when false: the editor's save drops the default `true`. */
+  collision?: false;
+}
+
+/** Rock models by where they lie, with their scale range; the pack's rocks are 0.4–2 m. */
+const ROCK_MODELS = {
+  high: { assets: ["forest-rock-02", "forest-rock-03", "forest-rock-06", "forest-rock-07"], scale: [1.5, 4] },
+  slope: { assets: ["forest-rock-03", "forest-rock-05", "forest-rock-08"], scale: [1, 2.5] },
+  river: { assets: ["forest-rock-01", "forest-rock-04", "forest-rock-05", "forest-rock-09"], scale: [1, 2] },
+} as const;
+/** Smaller rocks are walked over: no collider. */
+const ROCK_COLLISION_SCALE = 1.4;
+
+/** Millimetres, as the editor saves positions; a save then leaves the file unchanged. */
+function savedCoordinate(value: number): number {
+  return Number(value.toFixed(3));
 }
 
 /** A small deterministic generator, so a run rebuilds the same scatter. */
@@ -290,12 +305,12 @@ function pilotRandom(seed: number): () => number {
 /** Everything standing on the ground except plants. Roles keep them swappable for final models. */
 function pilotPlacements(sampleHeight: (x: number, z: number) => number | null): Map<string, PilotPlacement[]> {
   const groups = new Map<string, PilotPlacement[]>();
-  const place = (assetId: string, placement: Omit<PilotPlacement, "position"> & { at: WorldPoint }): void => {
-    const { at, ...rest } = placement;
+  const place = (assetId: string, placement: Omit<PilotPlacement, "position" | "collision"> & { at: WorldPoint; collision: boolean }): void => {
+    const { at, collision, ...rest } = placement;
     const height = sampleHeight(at[0], at[1]);
     if (height === null) throw new Error(`Pilot placement ${placement.id} is off the terrain`);
-    const position: [number, number, number] = [at[0], Number(height.toFixed(3)), at[1]];
-    groups.set(assetId, [...(groups.get(assetId) ?? []), { ...rest, position }]);
+    const position: [number, number, number] = [savedCoordinate(at[0]), savedCoordinate(height), savedCoordinate(at[1])];
+    groups.set(assetId, [...(groups.get(assetId) ?? []), { ...rest, position, ...(collision ? {} : { collision: false as const }) }]);
   };
   place("wp-cabin", { id: "cabin", role: "building.cabin", name: "Cabin", at: CABIN, rotationYDeg: 0, scale: 1, collision: true });
   place("wp-woodpile", {
@@ -318,10 +333,12 @@ function pilotPlacements(sampleHeight: (x: number, z: number) => number | null):
   }
 
   const random = pilotRandom(SEED);
-  const rock = (id: string, at: WorldPoint, scale: number): void => {
-    const variant = "abc"[Math.floor(random() * 3)]!;
-    place(`wp-rock-${variant}`, {
-      id, role: "prop.rock", name: id, at, scale: Number(scale.toFixed(2)), collision: scale > 1.2,
+  const rock = (id: string, at: WorldPoint, kind: keyof typeof ROCK_MODELS): void => {
+    const { assets, scale: [low, high] } = ROCK_MODELS[kind];
+    const assetId = assets[Math.floor(random() * assets.length)]!;
+    const scale = Number((low + random() * (high - low)).toFixed(2));
+    place(assetId, {
+      id, role: "prop.rock", name: id, at, scale, collision: scale >= ROCK_COLLISION_SCALE,
       rotationYDeg: Math.round(random() * 360),
     });
   };
@@ -332,17 +349,17 @@ function pilotPlacements(sampleHeight: (x: number, z: number) => number | null):
     && !(at[0] > -240 && at[0] < -30 && at[1] > -240 && at[1] < -90);
   for (let index = 0, tries = 0; index < ROCKS_ON_HIGH_GROUND && tries < 5000; tries += 1) {
     const at: WorldPoint = [span(495), span(495)];
-    if (rockEdge(at[0], at[1]) > 6) rock(`rock-high-${index++}`, at, 1 + random() * 3.2);
+    if (rockEdge(at[0], at[1]) > 6) rock(`rock-high-${index++}`, at, "high");
   }
   for (let index = 0, tries = 0; index < ROCKS_ON_SLOPES && tries < 5000; tries += 1) {
     const at: WorldPoint = [span(495), span(495)];
-    if (slopeDistance(at[0], at[1]) > 40 && rockEdge(at[0], at[1]) < 0 && offRoad(at)) rock(`rock-slope-${index++}`, at, 0.8 + random() * 1.6);
+    if (slopeDistance(at[0], at[1]) > 40 && rockEdge(at[0], at[1]) < 0 && offRoad(at)) rock(`rock-slope-${index++}`, at, "slope");
   }
   for (let index = 0, tries = 0; index < ROCKS_BY_RIVER && tries < 5000; tries += 1) {
     const z = span(490);
     const side = random() < 0.5 ? -1 : 1;
     const at: WorldPoint = [pilotRiverX(z) + side * (5 + random() * 4), z];
-    if (side > 0 || pilotRiverX(z) - at[0] < 8) rock(`rock-river-${index++}`, at, 0.5 + random() * 0.8);
+    if (side > 0 || pilotRiverX(z) - at[0] < 8) rock(`rock-river-${index++}`, at, "river");
   }
   return groups;
 }
@@ -356,11 +373,13 @@ function pilotFoliage(): Record<string, unknown> {
     type: "foliage",
     groups: [],
     landscapeRules: [
-      rule("forest-conifer-a", "forest", "wp-conifer-a-type", 0.0035, 0.6, 101),
-      rule("forest-conifer-b", "forest", "wp-conifer-b-type", 0.0025, 0.45, 102),
+      rule("forest-conifer-a", "forest", "wp-conifer-a-type", 0.0025, 0.6, 101),
+      rule("forest-conifer-b", "forest", "wp-conifer-b-type", 0.002, 0.45, 102),
+      rule("forest-conifer-c", "forest", "wp-conifer-c-type", 0.0015, 0.35, 106),
       rule("forest-bush", "forest", "wp-bush-a-type", 0.0015, 0.5, 103),
+      rule("forest-bush-b", "forest", "wp-bush-b-type", 0.001, 0.5, 107),
       rule("meadow-bush", "meadow", "wp-bush-a-type", 0.0006, 0.6, 104),
-      rule("meadow-grass", "meadow", "wp-grass-a-type", 0.05, 0.5, 105),
+      rule("meadow-grass", "meadow", "wp-grass-a-type", 0.02, 0.5, 105),
     ],
   };
 }
@@ -452,7 +471,7 @@ export function generateWbPilotValley(profile: RegionProfile): WbPilotValley {
     instances: [
       {
         assetId: "marker:playerStart",
-        placements: [{ position: [start[0], (sampleHeight(...start) ?? 0) + 2, start[1]], name: "Player Start", collision: false, rotationYDeg: 0, scale: 1 }],
+        placements: [{ position: [start[0], savedCoordinate((sampleHeight(...start) ?? 0) + 2), start[1]], name: "Player Start", collision: false, rotationYDeg: 0, scale: 1 }],
       },
       ...[...pilotPlacements(sampleHeight)].map(([assetId, placements]) => ({ assetId, placements })),
     ],

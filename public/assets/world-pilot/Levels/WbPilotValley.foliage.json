@@ -8,7 +8,7 @@
       "landscapeId": "valley",
       "layerId": "forest",
       "foliageTypeId": "wp-conifer-a-type",
-      "density": 0.0035,
+      "density": 0.0025,
       "minWeight": 0.6,
       "seed": 101
     },
@@ -17,9 +17,18 @@
       "landscapeId": "valley",
       "layerId": "forest",
       "foliageTypeId": "wp-conifer-b-type",
-      "density": 0.0025,
+      "density": 0.002,
       "minWeight": 0.45,
       "seed": 102
+    },
+    {
+      "id": "forest-conifer-c",
+      "landscapeId": "valley",
+      "layerId": "forest",
+      "foliageTypeId": "wp-conifer-c-type",
+      "density": 0.0015,
+      "minWeight": 0.35,
+      "seed": 106
     },
     {
       "id": "forest-bush",
@@ -29,6 +38,15 @@
       "density": 0.0015,
       "minWeight": 0.5,
       "seed": 103
+    },
+    {
+      "id": "forest-bush-b",
+      "landscapeId": "valley",
+      "layerId": "forest",
+      "foliageTypeId": "wp-bush-b-type",
+      "density": 0.001,
+      "minWeight": 0.5,
+      "seed": 107
     },
     {
       "id": "meadow-bush",
@@ -44,7 +62,7 @@
       "landscapeId": "valley",
       "layerId": "meadow",
       "foliageTypeId": "wp-grass-a-type",
-      "density": 0.05,
+      "density": 0.02,
       "minWeight": 0.5,
       "seed": 105
     }

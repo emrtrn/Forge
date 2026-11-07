@@ -10,22 +10,22 @@
   "collision": false,
   "cullStart": 0,
   "name": "WP Grass A",
-  "meshAssetId": "lt-meadow-tuft",
-  "radius": 0.4,
+  "meshAssetId": "forest-lowpolyprop-01",
+  "radius": 1.2,
   "scaleMin": [
     0.2,
     0.2,
     0.2
   ],
   "scaleMax": [
-    0.32,
-    0.32,
-    0.32
+    0.3,
+    0.3,
+    0.3
   ],
   "alignToNormal": true,
   "slopeMax": 35,
   "castShadow": false,
-  "cullEnd": 130,
+  "cullEnd": 150,
   "sway": {
     "amplitude": 0.12,
     "height": 1,

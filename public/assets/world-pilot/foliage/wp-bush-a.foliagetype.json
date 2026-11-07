@@ -10,24 +10,24 @@
   "collision": false,
   "cullStart": 0,
   "name": "WP Bush A",
-  "meshAssetId": "commonbush",
-  "radius": 1,
+  "meshAssetId": "forest-lowpolyprop-03",
+  "radius": 1.2,
   "scaleMin": [
+    0.45,
+    0.45,
+    0.45
+  ],
+  "scaleMax": [
     0.7,
     0.7,
     0.7
-  ],
-  "scaleMax": [
-    1,
-    1,
-    1
   ],
   "alignToNormal": true,
   "slopeMax": 45,
   "castShadow": false,
   "cullEnd": 350,
   "sway": {
-    "amplitude": 0.1,
+    "amplitude": 0.08,
     "height": 1,
     "frequency": 0.6
   }

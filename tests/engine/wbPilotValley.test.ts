@@ -58,7 +58,7 @@ export function registerWbPilotValleyTests(check: Check): void {
     const seen = new Set<string>();
     const instances = level.instances as Array<{ assetId: string; placements: Array<{ id?: string; position: number[] }> }>;
     for (const { assetId, placements } of instances) {
-      if (!assetId.startsWith("wp-")) continue;
+      if (assetId.startsWith("marker:")) continue;
       for (const { id, position } of placements) {
         assert.ok(id && !seen.has(id), `unique id ${id}`);
         seen.add(id);

@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "type": "material",
+  "materialType": "standard",
+  "name": "M_Forest_Trunk_02",
+  "baseColor": "#ffffff",
+  "baseColorTexture": "forest-tex-trunk-02-d",
+  "normalTexture": "forest-tex-trunk-02-n",
+  "maskTexture": null,
+  "roughnessTexture": "forest-tex-trunk-02-r",
+  "metalnessTexture": null,
+  "aoTexture": null,
+  "opacityTexture": null,
+  "emissiveTexture": null,
+  "ormTexture": null,
+  "uvTiling": {
+    "x": 1,
+    "y": 1
+  },
+  "flipY": false,
+  "roughness": 1,
+  "metalness": 0,
+  "aoIntensity": 1,
+  "opacity": 1,
+  "alphaMode": "opaque",
+  "alphaTest": 0.5,
+  "side": "front",
+  "emissive": "#000000",
+  "emissiveIntensity": 0,
+  "layerBlend": null
+}

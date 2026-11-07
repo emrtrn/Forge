@@ -22488,7 +22488,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 525
+        "bytes": 539
       },
       "license": "Project-local pilot data",
       "source": {
@@ -22518,7 +22518,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 518
+        "bytes": 541
       },
       "license": "Project-local pilot data",
       "source": {
@@ -22548,7 +22548,7 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 535
+        "bytes": 539
       },
       "license": "Project-local pilot data",
       "source": {
@@ -22821,7 +22821,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6864804
+        "bytes": 1576
       },
       "license": "Unknown",
       "source": {
@@ -22852,7 +22852,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6865916
+        "bytes": 2684
       },
       "license": "Unknown",
       "source": {
@@ -22883,7 +22883,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6868220
+        "bytes": 4988
       },
       "license": "Unknown",
       "source": {
@@ -22914,7 +22914,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6865400
+        "bytes": 2172
       },
       "license": "Unknown",
       "source": {
@@ -22945,7 +22945,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6867072
+        "bytes": 3844
       },
       "license": "Unknown",
       "source": {
@@ -22976,7 +22976,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6868772
+        "bytes": 5540
       },
       "license": "Unknown",
       "source": {
@@ -23007,7 +23007,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6868400
+        "bytes": 5172
       },
       "license": "Unknown",
       "source": {
@@ -23038,7 +23038,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6866148
+        "bytes": 2920
       },
       "license": "Unknown",
       "source": {
@@ -23069,7 +23069,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6868772
+        "bytes": 5540
       },
       "license": "Unknown",
       "source": {
@@ -23100,7 +23100,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6868768
+        "bytes": 5536
       },
       "license": "Unknown",
       "source": {
@@ -23131,7 +23131,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6868768
+        "bytes": 5536
       },
       "license": "Unknown",
       "source": {
@@ -23162,7 +23162,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6869136
+        "bytes": 5908
       },
       "license": "Unknown",
       "source": {
@@ -23193,7 +23193,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 6868768
+        "bytes": 5536
       },
       "license": "Unknown",
       "source": {
@@ -23224,7 +23224,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2589720
+        "bytes": 1812
       },
       "license": "Unknown",
       "source": {
@@ -23255,7 +23255,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2593220
+        "bytes": 5312
       },
       "license": "Unknown",
       "source": {
@@ -23286,7 +23286,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2590844
+        "bytes": 2936
       },
       "license": "Unknown",
       "source": {
@@ -23317,7 +23317,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2589948
+        "bytes": 2040
       },
       "license": "Unknown",
       "source": {
@@ -23348,7 +23348,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2590060
+        "bytes": 2152
       },
       "license": "Unknown",
       "source": {
@@ -23379,7 +23379,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2591944
+        "bytes": 4036
       },
       "license": "Unknown",
       "source": {
@@ -23410,7 +23410,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2592020
+        "bytes": 4112
       },
       "license": "Unknown",
       "source": {
@@ -23441,7 +23441,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2590548
+        "bytes": 2640
       },
       "license": "Unknown",
       "source": {
@@ -23472,7 +23472,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2590452
+        "bytes": 2548
       },
       "license": "Unknown",
       "source": {
@@ -23503,7 +23503,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 3506376
+        "bytes": 80576
       },
       "license": "Unknown",
       "source": {
@@ -23534,7 +23534,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 3511024
+        "bytes": 85220
       },
       "license": "Unknown",
       "source": {
@@ -23565,7 +23565,7 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 3000192
+        "bytes": 38916
       },
       "license": "Unknown",
       "source": {
@@ -23596,13 +23596,845 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 3498752
+        "bytes": 72952
       },
       "license": "Unknown",
       "source": {
         "origin": "Low Poly Forest Tree Pack",
         "path": "Tree_Pack.blend"
       }
+    },
+    {
+      "id": "forest-tex-branches-01-d",
+      "name": "T_Forest_Branches_01_D",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Branches_01_D.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 40772
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-branches-01-o",
+      "name": "T_Forest_Branches_01_O",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Branches_01_O.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 70020
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-branches-02-d",
+      "name": "T_Forest_Branches_02_D",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Branches_02_D.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 46604
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-branches-02-o",
+      "name": "T_Forest_Branches_02_O",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Branches_02_O.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 87602
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-branches-n",
+      "name": "T_Forest_Branches_N",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Branches_N.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1570762
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-branches-r",
+      "name": "T_Forest_Branches_R",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Branches_R.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 88
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-lowpolytree-d",
+      "name": "T_Forest_LowPolyTree_D",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_LowPolyTree_D.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 614702
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-lowpolytree-n",
+      "name": "T_Forest_LowPolyTree_N",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_LowPolyTree_N.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1496610
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-lowpolytree-o",
+      "name": "T_Forest_LowPolyTree_O",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_LowPolyTree_O.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 715592
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-lowpolytree-r",
+      "name": "T_Forest_LowPolyTree_R",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_LowPolyTree_R.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 58926
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-rocks-d",
+      "name": "T_Forest_Rocks_D",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Rocks_D.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 80474
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-rocks-n",
+      "name": "T_Forest_Rocks_N",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Rocks_N.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 1271592
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-rocks-r",
+      "name": "T_Forest_Rocks_R",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Rocks_R.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 102774
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-trunk-01-d",
+      "name": "T_Forest_Trunk_01_D",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Trunk_01_D.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 65304
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-trunk-01-n",
+      "name": "T_Forest_Trunk_01_N",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Trunk_01_N.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 216288
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-trunk-01-r",
+      "name": "T_Forest_Trunk_01_R",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Trunk_01_R.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 86910
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-trunk-02-d",
+      "name": "T_Forest_Trunk_02_D",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Trunk_02_D.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 25568
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-trunk-02-n",
+      "name": "T_Forest_Trunk_02_N",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Trunk_02_N.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 115190
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tex-trunk-02-r",
+      "name": "T_Forest_Trunk_02_R",
+      "assetType": "texture",
+      "category": "Forest",
+      "path": "assets/starter-content/Textures/Forest/T_Forest_Trunk_02_R.webp",
+      "tags": [
+        "forest",
+        "texture"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Forest",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 10268
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "m-forest-trunk-01",
+      "name": "M_Forest_Trunk_01",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Forest_Trunk_01.material.json",
+      "tags": [
+        "forest"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 683
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "m-forest-trunk-02",
+      "name": "M_Forest_Trunk_02",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Forest_Trunk_02.material.json",
+      "tags": [
+        "forest"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 683
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "m-forest-branches-01",
+      "name": "M_Forest_Branches_01",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Forest_Branches_01.material.json",
+      "tags": [
+        "forest"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 710
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "m-forest-branches-02",
+      "name": "M_Forest_Branches_02",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Forest_Branches_02.material.json",
+      "tags": [
+        "forest"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 710
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "m-forest-lowpolytree",
+      "name": "M_Forest_LowPolyTree",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Forest_LowPolyTree.material.json",
+      "tags": [
+        "forest"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 716
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "m-forest-rocks",
+      "name": "M_Forest_Rocks",
+      "assetType": "material",
+      "category": "Materials",
+      "path": "assets/starter-content/Materials/M_Forest_Rocks.material.json",
+      "tags": [
+        "forest"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Materials",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 671
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "wp-conifer-c-type",
+      "name": "WP Conifer C",
+      "assetType": "foliageType",
+      "category": "world-pilot",
+      "path": "assets/world-pilot/foliage/wp-conifer-c.foliagetype.json",
+      "tags": [
+        "world-pilot",
+        "foliage"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 534
+      },
+      "license": "Project-local pilot data",
+      "source": {
+        "origin": "forge",
+        "pack": "World Builder pilot"
+      }
+    },
+    {
+      "id": "wp-bush-b-type",
+      "name": "WP Bush B",
+      "assetType": "foliageType",
+      "category": "world-pilot",
+      "path": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "tags": [
+        "world-pilot",
+        "foliage"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 544
+      },
+      "license": "Project-local pilot data",
+      "source": {
+        "origin": "forge",
+        "pack": "World Builder pilot"
+      }
+    },
+    {
+      "id": "save-load-menu",
+      "name": "Save / Load Menu (Starter)",
+      "assetType": "ui",
+      "category": "UI",
+      "path": "assets/starter-content/UI/SaveLoadMenu.ui.json",
+      "tags": [
+        "starter",
+        "ui",
+        "menu",
+        "save-game"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "UI",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 9419
+      },
+      "license": "Project-local starter content"
     }
   ]
 }

@@ -10,24 +10,24 @@
   "collision": false,
   "cullStart": 0,
   "name": "WP Conifer A",
-  "meshAssetId": "lt-alpine-pine",
+  "meshAssetId": "forest-tree-01",
   "radius": 4,
   "scaleMin": [
-    18,
-    18,
-    18
+    0.8,
+    0.8,
+    0.8
   ],
   "scaleMax": [
-    23,
-    23,
-    23
+    1,
+    1,
+    1
   ],
   "alignToNormal": false,
   "slopeMax": 40,
   "castShadow": true,
   "cullEnd": 900,
   "sway": {
-    "amplitude": 0.05,
+    "amplitude": 0.04,
     "height": 1,
     "frequency": 0.4
   }

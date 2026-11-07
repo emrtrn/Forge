@@ -6,8 +6,10 @@
  * Order: brief → recipe plan → valley ground and water beds
  * (`engine/worldbuilder/briefTerrain.ts`) → temporary paint
  * (`worldBriefTemporarySteps.ts`) → level ground → World Builder stages via
- * `planStage` (today `roads`) → road splines baked into the terrain → placements
- * → save-canonical files. The level, its World Partition cells, the recipe and
+ * `planStage` (roads, then the settlement chain: sites, streets, parcels, land
+ * use, buildings) → road and street splines, then building pads, baked into the
+ * terrain → stages that follow the finished ground (street furniture, fences)
+ * → placements → save-canonical files. The level, its World Partition cells, the recipe and
  * the foliage sidecar go through the same validators as the dev save endpoints
  * (`tools/saveValidator.ts`), the terrain definition through
  * `normalizeWorldTerrain`.
@@ -22,7 +24,7 @@ import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFil
 import { buildTerrainGlobalAttributes, worldTerrainRenderSource } from "../../engine/terrain/terrainRenderSource";
 import { applyTerrainUndoPatches, createTerrainEditWorld, quantizeTerrainWeights } from "../../engine/terrain/terrainEdit";
 import { normalizeWorldTerrain } from "../../engine/terrain/terrainDefinition";
-import { createTerrainPadPatches, type TerrainPad } from "../../engine/terrain/terrainPads";
+import { createTerrainPadPatches, padWeight, type TerrainPad } from "../../engine/terrain/terrainPads";
 import { createTerrainSplinePatches } from "../../engine/terrain/terrainSplines";
 import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import {
@@ -47,8 +49,16 @@ import {
 import type { WorldPoint } from "../../engine/worldbuilder/normalize";
 import { worldRecipePath, type WorldRecipe } from "../../engine/worldbuilder/recipe";
 import type { RegionProfile } from "../../engine/worldbuilder/regionProfile";
-import { planStage, type StagePlan, type StageTerrain, type WorldStage } from "../../engine/worldbuilder/stage";
+import { PAD_FALLOFF } from "../../engine/worldbuilder/buildings";
+import { applyPlacementGroupChanges, planStage, type StagePlan, type StageTerrain, type WorldStage } from "../../engine/worldbuilder/stage";
+import { buildingsStage } from "../../engine/worldbuilder/stages/buildings";
+import { fencesStage } from "../../engine/worldbuilder/stages/fences";
+import { furnitureStage } from "../../engine/worldbuilder/stages/furniture";
+import { landUseStage } from "../../engine/worldbuilder/stages/landUse";
+import { parcelsStage } from "../../engine/worldbuilder/stages/parcels";
 import { roadsStage } from "../../engine/worldbuilder/stages/roads";
+import { settlementSitesStage } from "../../engine/worldbuilder/stages/settlementSites";
+import { streetsStage } from "../../engine/worldbuilder/stages/streets";
 import {
   briefElevationToWorld,
   briefToWorld,
@@ -74,8 +84,19 @@ import {
   type ScatterPlacement,
 } from "./worldBriefTemporarySteps";
 
-/** World Builder stages the runner applies, in order. Terrain and water are built before them (`briefTerrain.ts`). */
-export const WORLD_BRIEF_STAGES: readonly WorldStage[] = [roadsStage];
+/**
+ * World Builder stages the runner applies before the ground is finished, in
+ * order. Terrain and water are built before them (`briefTerrain.ts`); their
+ * road and street splines and building pads are baked after them.
+ */
+export const WORLD_BRIEF_STAGES: readonly WorldStage[] = [
+  roadsStage, settlementSitesStage, streetsStage, parcelsStage, landUseStage, buildingsStage,
+];
+/** Role of the parcels stage's ground plates (`stages/parcels.ts`). */
+const PARCEL_MARKER_ROLE = "marker.parcel";
+
+/** Stages that stand their objects on the finished ground, run after the bake. */
+export const WORLD_BRIEF_GROUND_STAGES: readonly WorldStage[] = [furnitureStage, fencesStage];
 
 /** Greybox look until the user sets the light and colour in the editor; never tuned here. */
 const GREYBOX_LOOK = {
@@ -174,6 +195,38 @@ function writeWeights(tile: TerrainTileData, index: number, weights: number[]): 
   });
 }
 
+/**
+ * Paints the settlement ground under every pad with `PILOT_TUNING.padPaint`
+ * (inside the pad, easing out beyond it), blended over the paint already there.
+ * Plants grow from the paint, so none stands in a building or its yard.
+ */
+function paintPads(def: WorldTerrainDef, tiles: ReadonlyMap<string, TerrainTileData>, pads: readonly TerrainPad[]): void {
+  const { layerId, fade } = PILOT_TUNING.padPaint;
+  const layer = def.layers.findIndex((entry) => entry.id === layerId);
+  if (layer < 0) return;
+  const quads = def.tileQuads;
+  for (const pad of pads) {
+    const shape: TerrainPad = { polygon: pad.polygon, height: pad.height, falloff: fade };
+    const xs = pad.polygon.map(([x]) => x);
+    const zs = pad.polygon.map(([, z]) => z);
+    const [minI, maxI] = [Math.floor((Math.min(...xs) - fade - def.origin[0]) / def.spacing), Math.ceil((Math.max(...xs) + fade - def.origin[0]) / def.spacing)];
+    const [minJ, maxJ] = [Math.floor((Math.min(...zs) - fade - def.origin[2]) / def.spacing), Math.ceil((Math.max(...zs) + fade - def.origin[2]) / def.spacing)];
+    for (const tile of tiles.values()) {
+      const [baseI, baseJ] = [tile.x * quads, tile.z * quads];
+      for (let j = Math.max(minJ, baseJ); j <= Math.min(maxJ, baseJ + quads); j += 1) {
+        for (let i = Math.max(minI, baseI); i <= Math.min(maxI, baseI + quads); i += 1) {
+          const weight = padWeight(shape, def.origin[0] + i * def.spacing, def.origin[2] + j * def.spacing);
+          if (weight <= 0) continue;
+          const index = (j - baseJ) * tile.size + (i - baseI);
+          const current = Array.from({ length: tile.layerCount }, (_, k) =>
+            tile.weights[Math.floor(k / 4) * tile.size * tile.size * 4 + index * 4 + k % 4]! / 255);
+          writeWeights(tile, index, current.map((value, k) => value * (1 - weight) + (k === layer ? weight : 0)));
+        }
+      }
+    }
+  }
+}
+
 /** The level as the editor saves it: partitioned when its settings say so, every element through the save validators. */
 export function saveLevelFiles(layout: RoomLayout, levelPath: string): {
   level: string;
@@ -256,32 +309,45 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   }
   if (pads.length) applyTerrainUndoPatches(world, createTerrainPadPatches(world, pads));
 
-  // Stages: each sees the recipe and splines the previous one left.
+  // Stages: each sees the recipe, the placements and the splines the previous one left.
   def.splines = ground.courses.map(waterSpline);
   let recipe = worldBriefRecipe(brief);
   const layoutForStages = { schema: 1, name: levelName(levelPath), loadGroups: [], instances: [], characters: [] } as unknown as RoomLayout;
   const stages: StagePlan[] = [];
-  for (const stage of WORLD_BRIEF_STAGES) {
-    const stageTerrain: StageTerrain = {
-      id: terrain.id,
-      min: [def.origin[0], def.origin[2]],
-      max: [def.origin[0] + tilesX * tileSpan, def.origin[2] + tilesZ * tileSpan],
-      layers: def.layers.map(({ id, name }) => ({ id, name })),
-      splines: def.splines,
-      locked: false,
-    };
-    const plan = planStage(stage, { recipe, layout: layoutForStages, profile, sampleHeight, terrains: [stageTerrain] });
-    if (plan.errors.length > 0) throw new Error(`stage ${stage.id}: ${plan.errors.join("; ")}`);
-    if (plan.groupChanges.length > 0) throw new Error(`stage ${stage.id}: placement output is not wired into world:brief yet`);
-    warnings.push(...plan.warnings.map((warning) => `${stage.id}: ${warning}`));
-    for (const change of plan.splineChanges) if (change.landscapeId === terrain.id) def.splines = structuredClone(change.after);
-    recipe = plan.recipeAfter;
-    stages.push(plan);
-  }
+  const runStages = (list: readonly WorldStage[]): void => {
+    for (const stage of list) {
+      const stageTerrain: StageTerrain = {
+        id: terrain.id,
+        min: [def.origin[0], def.origin[2]],
+        max: [def.origin[0] + tilesX * tileSpan, def.origin[2] + tilesZ * tileSpan],
+        layers: def.layers.map(({ id, name }) => ({ id, name })),
+        splines: def.splines ?? [],
+        locked: false,
+      };
+      const plan = planStage(stage, { recipe, layout: layoutForStages, profile, sampleHeight, terrains: [stageTerrain] });
+      if (plan.errors.length > 0) throw new Error(`stage ${stage.id}: ${plan.errors.join("; ")}`);
+      // The runner bakes the pads itself, before the stages that follow the ground.
+      warnings.push(...plan.warnings.filter((warning) => !warning.includes("run this stage after Apply Pads")).map((warning) => `${stage.id}: ${warning}`));
+      applyPlacementGroupChanges(layoutForStages, plan.groupChanges, "after");
+      for (const change of plan.splineChanges) if (change.landscapeId === terrain.id) def.splines = structuredClone(change.after);
+      recipe = plan.recipeAfter;
+      stages.push(plan);
+    }
+  };
+  runStages(WORLD_BRIEF_STAGES);
+  // Roads and streets, then the building pads over them (a road ends at its pad's edge).
   for (const spline of def.splines) {
     if (waterIds.has(spline.id) || spline.coordinateSpace !== "world") continue;
     applyTerrainUndoPatches(world, createTerrainSplinePatches(world, spline as WorldTerrainSpline));
   }
+  const buildingPads: TerrainPad[] = recipe.generated.pads.map((pad) => ({
+    polygon: pad.polygon, height: pad.height, falloff: pad.falloff ?? PAD_FALLOFF,
+  }));
+  if (buildingPads.length) {
+    applyTerrainUndoPatches(world, createTerrainPadPatches(world, buildingPads));
+    paintPads(def, world.tiles, buildingPads);
+  }
+  runStages(WORLD_BRIEF_GROUND_STAGES);
 
   const tileBytes = new Map<string, Uint8Array>();
   for (const summary of def.tiles) {
@@ -321,6 +387,12 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
       id: prop.id, role: prop.role, name: title(prop.id), at: briefToWorld(brief, prop.at),
       rotationYDeg: prop.rotationDeg, scale: prop.scale, collision: prop.collision,
     });
+  }
+  // Stage placements carry their own height (pads, walls and steps are not on the bare ground).
+  // Parcel plates are an editor aid drawn on the unlevelled ground; a built scene leaves them out.
+  for (const group of layoutForStages.instances) {
+    const kept = group.placements.filter((placement) => placement.role !== PARCEL_MARKER_ROLE);
+    if (kept.length) groups.set(group.assetId, [...(groups.get(group.assetId) ?? []), ...structuredClone(kept)]);
   }
   const scatter: ScatterPlacement[] = [...yardFences(brief), ...scatterRocks(brief, ground, bounds)];
   for (const entry of scatter) {
@@ -378,7 +450,6 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
 
   if (models.missing.length) warnings.push(`model rows not in the asset manifest yet: ${models.missing.join("; ")}`);
   if (brief.environment) deferred.push("environment: season/weather/hour are read, not written to the level yet (WES link, plan §12)");
-  if (brief.settlements.length) deferred.push("settlements: in the recipe plan; no settlement stage runs yet");
   if (brief.regions.length) deferred.push("regions: in the recipe plan only");
   deferred.push(...ground.deferred);
   for (const valley of brief.valleys) if (valley.ridgeElevation) deferred.push(`valleys.${valley.id}.ridgeElevation: not used by the terrain step yet`);

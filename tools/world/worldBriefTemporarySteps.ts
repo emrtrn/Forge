@@ -36,7 +36,11 @@ export const PILOT_TUNING = {
     { id: "rock", name: "Rock", color: "#8b8a84", material: "lt-rock", physicalMaterial: "default" },
     { id: "dirt", name: "Dirt", color: "#8a6441", material: "lt-earth", physicalMaterial: "default" },
     { id: "riverbed", name: "River Bed", color: "#6f6a5c", material: "m-gravel-material", physicalMaterial: "default" },
+    // Paint of the region profile's collector and arterial roads; no asphalt material yet, the tint stands in.
+    { id: "asphalt", name: "Asphalt", color: "#3d3d3f", physicalMaterial: "stone" },
   ] satisfies WorldTerrainLayerDef[],
+  /** Settlement ground painted under every building pad, so no plant grows there; metres of easing beyond the pad. */
+  padPaint: { layerId: "dirt", fade: 1.5 },
   /** Plants grow from the paint, so the road, the river and the clearing stay free of them. */
   plantRules: [
     { id: "forest-conifer-a", layerId: "forest", foliageTypeId: "wp-conifer-a-type", density: 0.0025, minWeight: 0.6, seed: 101 },
@@ -74,7 +78,7 @@ export function paintWeights(brief: WorldBrief, terrain: BriefTerrain): (x: numb
     const hit = terrain.water(x, z);
     const riverbed = hit ? 1 - smoothstep((hit.distance - (hit.course.width / 2 + WATER_BED_MARGIN)) / 3) : 0;
     const open = (1 - rock) * (1 - riverbed);
-    return [open * (1 - forest), open * forest, rock * (1 - riverbed), 0, riverbed];
+    return [open * (1 - forest), open * forest, rock * (1 - riverbed), 0, riverbed, 0];
   };
 }
 

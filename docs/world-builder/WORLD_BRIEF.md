@@ -68,8 +68,15 @@ npm.cmd run world:brief -- assets/world-pilot/Levels/WbPilotValley.worldbrief.js
 ## Sıra
 
 özet → recipe planı (`worldBriefRecipe`) → arazi ve su yatakları (`createBriefTerrain`) →
-boya → düzlenmiş zemin → aşamalar (`planStage`, bugün `roads`) → yol spline'larının araziye
-bake'i → yerleşimler → kayıt-kanonik dosyalar.
+boya → düzlenmiş zemin → aşamalar (`planStage`: yollar, sonra yerleşim zinciri — köy yeri,
+sokaklar, parseller, arazi kullanımı, yapılar) → yol ve sokak spline'larının, sonra yapı
+setlerinin araziye bake'i, setlerin altı toprak boyası → son zemini izleyen aşamalar (sokak
+donatısı, çitler) → yerleşimler → kayıt-kanonik dosyalar.
+
+**Yerleşimler** (RANDOM_WORLD_PLAN adım 1, `tests/engine/worldBriefSettlement.test.ts`):
+özetteki her yerleşim greybox köy olarak kurulur. Evler, setler, istinat duvarları,
+basamaklar, donatı ve çitler level'a yazılır; parsel plakaları (editör yardımcısı) yazılmaz.
+Bölge profili yoksa yerleşim boş kalır (ev sayısı profilden gelir).
 
 **Arazi ve su yatakları** (adım 3a, `engine/worldbuilder/briefTerrain.ts`, saf ve
 bağımlılıksız):
@@ -91,8 +98,8 @@ kaya saçılımı ve kulübe çiti. Her özeti okurlar ama sayıları (boya katm
 kuralları, kaya sayıları, çit) pilotun `PILOT_TUNING`'idir; 3c–3e'de bölge profiline taşınır.
 
 Henüz level'a yazılmayanlar, çalıştırıcının "not built yet" çıktısında listelenir:
-`environment` (WES bağı; ışık ve renk kullanıcıdadır), `settlements` ve `regions`
-(yalnız recipe planında), `ridgeElevation`, göller.
+`environment` (WES bağı; ışık ve renk kullanıcıdadır), `regions` (yalnız recipe planında),
+`ridgeElevation`, göller.
 
 ## Kayıt biçimi
 

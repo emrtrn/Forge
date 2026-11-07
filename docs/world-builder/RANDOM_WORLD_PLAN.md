@@ -52,7 +52,8 @@ Plan modu (Derekavak, sabit koordinatlı özet) aynı kurucunun üstüne sonra d
 
 ## Durum
 
-- [ ] 1. Ortak kurucu
+- [x] 1. Ortak kurucu (7 Kasım 2026): yerleşim zinciri kurucuda; sokak, yol ve setler araziye
+  işlenir, setlerin altı toprak, ana yol asfalt boyası (bitki çıkmaz), donatı ve çit son zeminde
 - [ ] 2. Rastgele üretici
 - [ ] 3. Su
 - [ ] 4. Örtü tipleri

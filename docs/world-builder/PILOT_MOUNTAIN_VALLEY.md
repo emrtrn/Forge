@@ -1,11 +1,31 @@
 # World Builder pilotu — dağ vadisi
 
-Durum: kapsam ve iki referans görseli hazır, kroki onayı bekleniyor (7 Kasım 2026).
+Durum: greybox sahne üretildi, hazır bitki modelleri bekleniyor (7 Kasım 2026).
 
 Tasarım dokümanından dünya üretme hattının ilk uçtan uca denemesi. Amaç oyun değil,
 hattın nerede kırıldığını görmektir. Tekrar eden adımlar pilottan sonra otomatikleşir.
 Kararlar: [plan §10](../planned/WES/FORGE_WORLD_BUILDER_TASARIM_VE_TEKNIK_PLAN_v0.4.md),
 karar 20–22.
+
+## Üretim
+
+`npm run world:pilot` sahneyi editörsüz üretir: `public/layouts/WbPilotValley.*`
+(gitignore'da; üretici `tools/world/wbPilotValley.ts`, yeniden çalıştırmak editörde
+yapılan değişiklikleri siler). Greybox modelleri `art/world-pilot/wp_greybox.py`
+üretir. Foliage tipleri `public/assets/world-pilot/foliage/*.foliagetype.json`
+dosyalarıdır; hazır model gelince yalnız `meshAssetId` değişir.
+
+## Pilotun gösterdikleri
+
+- Zincir editörsüz çalışıyor: arazi, ped, gerçek `roads` aşaması ve spline bake.
+- Krokideki tırmanış kullanılamadı, dönemeçleri yamaçtan dik çıkıyor ve iniyor.
+  Yol koridor ipucudur; tırmanışı rota çözücü kurdu (eğim çoğunlukla 8–10°).
+- Bilinen açık: dönemeç uçlarında kısa bacaklar 20,4°'ye çıkıyor ve dönüş yarıçapı
+  sınırın altında; rota çözücü dönemeç genişletmiyor.
+- Arazi, nehir yatağı ve boya henüz aşama değil, bu üreticide elle yazılı.
+- Foliage çizimi kamera çevresindeki halkadan gelir; uzak yamaçlar için ayrı bir
+  uzak görünüm yok.
+- Görsel ayar kapsam dışıdır: ışık ve renk kullanıcı tarafından editörde ayarlanır.
 
 ## Dünya özeti
 
@@ -68,11 +88,11 @@ Klasör: `public/assets/world-pilot/structures/` ve `.../props/`; kaynak script'
 
 | Dosya | Ne | Durum |
 |---|---|---|
-| `wp-cabin.glb` | Dağ kulübesi | Sırada |
-| `wp-woodpile.glb` | Odun yığını | Sırada |
-| `wp-fence-module.glb` | Çit modülü | Sırada |
-| `wp-signpost.glb` | Yol tabelası | Sırada |
-| `wp-rock-a.glb`, `wp-rock-b.glb`, `wp-rock-c.glb` | Kaya varyantları | Sırada |
+| `wp-cabin.glb` | Dağ kulübesi | Greybox hazır |
+| `wp-woodpile.glb` | Odun yığını | Greybox hazır |
+| `wp-fence-module.glb` | Çit modülü | Greybox hazır |
+| `wp-signpost.glb` | Yol tabelası | Greybox hazır |
+| `wp-rock-a.glb`, `wp-rock-b.glb`, `wp-rock-c.glb` | Kaya varyantları | Greybox hazır |
 
 Yol spline'dan, nehir su sisteminden üretilir; ikisi için model gerekmez.
 

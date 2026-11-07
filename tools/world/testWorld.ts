@@ -100,7 +100,7 @@ export function fbm(x: number, z: number, octaves: number, seed: number): number
 }
 
 /** Ridged multifractal, 0..~1: sharp crests where the noise crosses zero. */
-function ridged(x: number, z: number, octaves: number, seed: number): number {
+export function ridged(x: number, z: number, octaves: number, seed: number): number {
   let sum = 0;
   let amplitude = 0.5;
   let weight = 1;

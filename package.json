@@ -25,6 +25,7 @@
     "dialogue:report": "node tools/dialogue-report.mjs",
     "world:test": "node tools/world/generate-test-world.mjs",
     "world:valley": "node tools/world/generate-wb-test-valley.mjs",
+    "world:pilot": "node tools/world/generate-wb-pilot-valley.mjs",
     "world:offroad": "node tools/world/generate-offroad-test.mjs",
     "world:ridgebound": "node tools/world/import-ridgebound.mjs",
     "world:ridgebound:review": "node tools/world/review-ridgebound-fabric.mjs",

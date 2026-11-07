@@ -1,0 +1,34 @@
+{
+  "schema": 1,
+  "type": "foliageType",
+  "density": 1,
+  "randomYaw": true,
+  "zOffsetMin": 0,
+  "zOffsetMax": 0,
+  "slopeMin": 0,
+  "receiveShadow": true,
+  "collision": false,
+  "cullStart": 0,
+  "name": "WP Conifer A",
+  "meshAssetId": "lt-alpine-pine",
+  "radius": 4,
+  "scaleMin": [
+    18,
+    18,
+    18
+  ],
+  "scaleMax": [
+    23,
+    23,
+    23
+  ],
+  "alignToNormal": false,
+  "slopeMax": 40,
+  "castShadow": true,
+  "cullEnd": 900,
+  "sway": {
+    "amplitude": 0.05,
+    "height": 1,
+    "frequency": 0.4
+  }
+}

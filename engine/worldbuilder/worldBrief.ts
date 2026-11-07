@@ -96,7 +96,45 @@ export interface BriefTerrain {
   spacing: number;
   /** Lowest and highest elevation the terrain may hold. */
   heightRange: [number, number];
+  /** Hills and mountains over the valleys (`engine/worldbuilder/briefTerrain.ts`); absent: none. */
+  relief?: BriefRelief;
 }
+
+/** Distance band, metres: no mountain within `inner`, full height `falloff` further out. */
+export interface BriefReliefBand {
+  inner: number;
+  falloff: number;
+}
+
+/**
+ * Relief added to the ground of the whole area. Hills roll everywhere (softer
+ * where the mountains stay off); mountains are ridged and stay off the ground
+ * listed in `clear`, so settlements, roads, water and valley floors keep a
+ * gentle ground and the roads run through passes.
+ */
+export interface BriefRelief {
+  hills?: { height: number; wavelength: number };
+  mountains?: {
+    /** Height of the ridges above `lift`, metres. */
+    height: number;
+    /** Ground raised wherever the mountains stand at full height, metres. */
+    lift: number;
+    /** Size of the largest ridges, metres. */
+    wavelength: number;
+    /** 1 = round massifs; below 1 lengthens the crests along `directionDeg`. */
+    spurStretch: number;
+    /** Crest direction, degrees clockwise from north. */
+    directionDeg: number;
+  };
+  clear: { settlements: BriefReliefBand; roads: BriefReliefBand; water: BriefReliefBand; valleyFloors: BriefReliefBand };
+}
+
+export const DEFAULT_RELIEF_CLEAR: Readonly<BriefRelief["clear"]> = {
+  settlements: { inner: 40, falloff: 260 },
+  roads: { inner: 20, falloff: 160 },
+  water: { inner: 25, falloff: 200 },
+  valleyFloors: { inner: 10, falloff: 200 },
+};
 
 /** One cut across a valley: the floor's and the rock line's east coordinates at `north`. */
 export interface BriefValleySection {
@@ -351,8 +389,60 @@ function normalizeTerrain(ctx: Ctx, value: unknown): BriefTerrain | null {
   const spacing = positive(ctx, "terrain.spacing", value.spacing, 64);
   const heightRange = eastPair(ctx, "terrain.heightRange", value.heightRange);
   if (heightRange && heightRange[0] === heightRange[1]) issue(ctx, "terrain.heightRange", "must span some height");
-  if (id === null || name === null || tileQuads === null || spacing === null || heightRange === null) return null;
-  return { id, name, tileQuads, spacing, heightRange };
+  for (const key of Object.keys(value)) {
+    if (!["id", "name", "tileQuads", "spacing", "heightRange", "relief"].includes(key)) issue(ctx, `terrain.${key}`, "is not a terrain field");
+  }
+  const relief = value.relief === undefined ? undefined : normalizeRelief(ctx, value.relief);
+  if (id === null || name === null || tileQuads === null || spacing === null || heightRange === null || relief === null) return null;
+  return { id, name, tileQuads, spacing, heightRange, ...(relief ? { relief } : {}) };
+}
+
+function normalizeRelief(ctx: Ctx, value: unknown): BriefRelief | null {
+  const path = "terrain.relief";
+  if (!isRecord(value)) return reject(ctx, path, "must be an object");
+  const known = (entry: Record<string, unknown>, at: string, keys: readonly string[]): void => {
+    for (const key of Object.keys(entry)) if (!keys.includes(key)) issue(ctx, `${at}.${key}`, "is not a relief field");
+  };
+  known(value, path, ["hills", "mountains", "clear"]);
+  let failed = false;
+  const number = (at: string, raw: unknown, min: number, max: number): number => {
+    const result = requireNumber(ctx, at, raw, min, max);
+    if (result === null) failed = true;
+    return result ?? 0;
+  };
+  const relief: BriefRelief = { clear: structuredClone(DEFAULT_RELIEF_CLEAR) as BriefRelief["clear"] };
+  if (value.hills !== undefined) {
+    if (!isRecord(value.hills)) return reject(ctx, `${path}.hills`, "must be an object");
+    known(value.hills, `${path}.hills`, ["height", "wavelength"]);
+    relief.hills = { height: number(`${path}.hills.height`, value.hills.height, 0, 1000), wavelength: number(`${path}.hills.wavelength`, value.hills.wavelength, 20, 20000) };
+  }
+  if (value.mountains !== undefined) {
+    const raw = value.mountains;
+    if (!isRecord(raw)) return reject(ctx, `${path}.mountains`, "must be an object");
+    known(raw, `${path}.mountains`, ["height", "lift", "wavelength", "spurStretch", "directionDeg"]);
+    relief.mountains = {
+      height: number(`${path}.mountains.height`, raw.height, 0, 5000),
+      lift: raw.lift === undefined ? 0 : number(`${path}.mountains.lift`, raw.lift, 0, 2000),
+      wavelength: number(`${path}.mountains.wavelength`, raw.wavelength, 20, 20000),
+      spurStretch: raw.spurStretch === undefined ? 1 : number(`${path}.mountains.spurStretch`, raw.spurStretch, 0.05, 1),
+      directionDeg: raw.directionDeg === undefined ? 0 : number(`${path}.mountains.directionDeg`, raw.directionDeg, -360, 360),
+    };
+  }
+  if (value.clear !== undefined) {
+    if (!isRecord(value.clear)) return reject(ctx, `${path}.clear`, "must be an object");
+    known(value.clear, `${path}.clear`, Object.keys(DEFAULT_RELIEF_CLEAR));
+    for (const kind of Object.keys(DEFAULT_RELIEF_CLEAR) as Array<keyof BriefRelief["clear"]>) {
+      const raw = value.clear[kind];
+      if (raw === undefined) continue;
+      if (!isRecord(raw)) { issue(ctx, `${path}.clear.${kind}`, "must be an object"); failed = true; continue; }
+      known(raw, `${path}.clear.${kind}`, ["inner", "falloff"]);
+      relief.clear[kind] = {
+        inner: raw.inner === undefined ? DEFAULT_RELIEF_CLEAR[kind].inner : number(`${path}.clear.${kind}.inner`, raw.inner, 0, 5000),
+        falloff: raw.falloff === undefined ? DEFAULT_RELIEF_CLEAR[kind].falloff : number(`${path}.clear.${kind}.falloff`, raw.falloff, 1, 10000),
+      };
+    }
+  }
+  return failed ? null : relief;
 }
 
 function normalizeValley(ctx: Ctx, path: string, entry: Record<string, unknown>): BriefValley | null {

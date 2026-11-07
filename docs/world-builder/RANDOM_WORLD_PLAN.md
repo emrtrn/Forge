@@ -54,7 +54,15 @@ Plan modu (Derekavak, sabit koordinatlı özet) aynı kurucunun üstüne sonra d
 
 - [x] 1. Ortak kurucu (7 Kasım 2026): yerleşim zinciri kurucuda; sokak, yol ve setler araziye
   işlenir, setlerin altı toprak, ana yol asfalt boyası (bitki çıkmaz), donatı ve çit son zeminde
-- [ ] 2. Rastgele üretici
+- [x] 2. Rastgele üretici (8 Kasım 2026): `engine/worldbuilder/randomWorld.ts` seçimleri bir dünya
+  özetine çevirir, kurucu sahneyi kurar. Komut:
+  `npm run world:random -- --out assets/Worlds/Ad.level.json --size small|medium|large
+  --landform plain|hills|mountains|valley --mountains low|medium|high --settlements village,hamlet,town
+  --roads between|exits --seed N`. Özet level'ın yanında kalır. Arazi: tepeler + sırtlı dağlar
+  (özette `terrain.relief`), dağlar yerleşimlere, yollara, suya ve vadi tabanına uğramaz; yollar
+  yerleşimleri en kısa ağla bağlar, `exits` iki yolu harita kenarına çıkarır. Boya eğimden kaya,
+  yerleşimden uzakta orman. Orta boy ~10 s, büyük (4 km, World Partition açık) ~36 s.
+  Test: `tests/engine/randomWorld.test.ts`.
 - [ ] 3. Su
 - [ ] 4. Örtü tipleri
 - [ ] 5. Editör penceresi

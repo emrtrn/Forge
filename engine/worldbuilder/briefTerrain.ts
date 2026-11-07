@@ -8,6 +8,13 @@
  * section a valley closes: the ground rises as it does up the side slopes.
  * Without a valley the ground is flat at the frame's datum.
  *
+ * Relief (`terrain.relief`): rolling hills over the whole area and ridged
+ * mountains (`macroRelief.ts`) added to the valley ground. The mountains stay
+ * off the ground the brief keeps clear — settlements, road lines, water and
+ * valley floors — within each band's `inner` distance and reach full height
+ * `falloff` further out, so a road between two villages runs through a pass.
+ * Hills keep `HILLS_KEPT_CLEAR` of their height on that clear ground.
+ *
  * Water lines (`water[].line`, listed downstream) carve a bed along a smoothed
  * centreline. The water level follows the ground under the centreline but never
  * rises downstream; the bed sits `bedDepth` and the surface `surfaceDepth`
@@ -19,10 +26,13 @@
  * the editor's stages do not write terrain (plan decision 19).
  */
 import type { WorldPoint } from "./normalize";
+import type { DistanceSource } from "./field";
+import { createMacroRelief, type ReliefProtection } from "./macroRelief";
 import { fbm, ridged } from "./noise";
 import {
   briefElevationToWorld,
   briefToWorld,
+  briefWorldBounds,
   DEFAULT_VALLEY_RELIEF,
   type BriefValley,
   type BriefValleyRelief,
@@ -34,6 +44,12 @@ import {
 export const WATER_BED_MARGIN = 1;
 /** Distance over which the bed eases into its banks, metres. */
 export const WATER_BANK = 7;
+/** Share of the hills' height kept on the ground the mountains stay off. */
+export const HILLS_KEPT_CLEAR = 0.35;
+/** Four-octave fbm rarely leaves ±0.4: this brings the hills to about ±`height`. */
+const HILLS_GAIN = 2.5;
+/** Reach of a settlement without a radius, metres. */
+const SETTLEMENT_REACH = 150;
 /** Centreline sample spacing, metres. */
 const WATER_SAMPLE = 2;
 /** Spatial grid cell and the furthest a water query looks, metres. */
@@ -174,7 +190,7 @@ function valleyPosition(shape: ValleyShape, x: number, z: number): ValleyPositio
   return { valleyId: shape.id, slopeDistance, rockEdge, plain, floor };
 }
 
-function valleyGround(shape: ValleyShape, seed: number, x: number, z: number): number {
+function valleyShapeGround(shape: ValleyShape, seed: number, x: number, z: number): number {
   const { slopeDistance: out, rockEdge, plain } = valleyPosition(shape, x, z);
   const { relief } = shape;
   const spurs = relief.spurs * smoothstep(out / 240) * fbm(x / 420, z / 150, 3, seed + 3);
@@ -204,18 +220,73 @@ function centreline(line: WorldPoint[]): { points: WorldPoint[]; anchors: number
   return { points, anchors };
 }
 
+/** The brief's hills and mountains as a height offset, or null without relief. */
+function reliefOffset(brief: WorldBrief, shapes: readonly ValleyShape[]): ((x: number, z: number) => number) | null {
+  const relief = brief.terrain.relief;
+  if (!relief || (!relief.hills && !relief.mountains)) return null;
+  const world = (point: [number, number]) => briefToWorld(brief, point);
+  const nodes = new Map(brief.roads.nodes.map((node) => [node.id, world(node.at)]));
+  const protections: ReliefProtection[] = [];
+  const protect = (id: keyof typeof relief.clear, sources: DistanceSource[]): void => {
+    if (sources.length) protections.push({ id, sources, ...relief.clear[id] });
+  };
+  protect("settlements", [
+    ...brief.settlements.map((settlement): DistanceSource => ({ kind: "point", position: world(settlement.center), radius: settlement.radius ?? SETTLEMENT_REACH })),
+    ...brief.landmarks.filter((landmark) => landmark.pad).map((landmark): DistanceSource => ({
+      kind: "point", position: world(landmark.at), radius: Math.hypot(...landmark.pad!.size) / 2,
+    })),
+  ]);
+  protect("roads", brief.roads.edges.flatMap((edge): DistanceSource[] => {
+    const [from, to] = [nodes.get(edge.from), nodes.get(edge.to)];
+    return from && to ? [{ kind: "polyline", points: [from, ...(edge.corridor ?? []).map(world), to] }] : [];
+  }));
+  protect("water", brief.water.map((water): DistanceSource => (water.line
+    ? { kind: "polyline", points: water.line.map(world) }
+    : { kind: "polygon", polygon: water.polygon!.map(world) })));
+  protect("valleyFloors", shapes.map((shape): DistanceSource => ({
+    kind: "polygon",
+    polygon: [...shape.rows.map((row): WorldPoint => [row.floorW, row.z]), ...[...shape.rows].reverse().map((row): WorldPoint => [row.floorE, row.z])],
+  })));
+  const bounds = briefWorldBounds(brief);
+  const mountains = relief.mountains;
+  // The bounds reach past the terrain so the mountains stand at full height on its edges.
+  const macro = createMacroRelief({
+    seed: brief.seed,
+    amplitude: mountains?.height ?? 0,
+    lift: mountains?.lift ?? 0,
+    wavelength: mountains?.wavelength ?? 500,
+    spurStretch: mountains?.spurStretch ?? 1,
+    // Brief: clockwise from north (-Z); macro relief: from +X towards +Z.
+    directionDegrees: (mountains?.directionDeg ?? 0) - 90,
+    bounds: { min: [bounds.min[0] - 64, bounds.min[1] - 64], max: [bounds.max[0] + 64, bounds.max[1] + 64] },
+    edgeFade: 1,
+    protections,
+  });
+  const hills = relief.hills;
+  return (x, z) => {
+    let offset = mountains ? macro.displacementAt(x, z) : 0;
+    if (hills && hills.height > 0) {
+      const keep = HILLS_KEPT_CLEAR + (1 - HILLS_KEPT_CLEAR) * macro.weightAt(x, z);
+      offset += hills.height * HILLS_GAIN * fbm(x / hills.wavelength, z / hills.wavelength, 4, brief.seed + 7) * keep;
+    }
+    return offset;
+  };
+}
+
 export function createBriefTerrain(brief: WorldBrief): BriefTerrain {
   const seed = brief.seed;
   const shapes = brief.valleys.map((valley) => valleyShape(brief, valley));
   const datum = briefElevationToWorld(brief, 0);
   const deferred: string[] = [];
+  const relief = reliefOffset(brief, shapes);
 
-  const ground = (x: number, z: number): number => {
+  const valleyGround = (x: number, z: number): number => {
     if (shapes.length === 0) return datum;
     let lowest = Infinity;
-    for (const shape of shapes) lowest = Math.min(lowest, valleyGround(shape, seed, x, z));
+    for (const shape of shapes) lowest = Math.min(lowest, valleyShapeGround(shape, seed, x, z));
     return lowest;
   };
+  const ground = relief ? (x: number, z: number): number => valleyGround(x, z) + relief(x, z) : valleyGround;
   const valleyAt = (x: number, z: number): ValleyPosition | null => {
     let best: (ValleyPosition & { plain: number }) | null = null;
     for (const shape of shapes) {

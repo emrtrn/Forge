@@ -18,6 +18,10 @@ export const PILOT_TUNING = {
   waterFalloff: 2,
   meadowFade: [6, 30] as const,
   rockFade: 30,
+  /** Relief worlds (`terrain.relief`): rock from this slope to full at the second, degrees. */
+  rockSlope: [34, 46] as const,
+  /** Relief worlds: forest from this distance beyond a settlement's reach to full at the second, metres. */
+  forestFromSettlement: [50, 170] as const,
   /** Open ground around a landmark with level ground. */
   clearingRadius: 38,
   rocksOnHighGround: 90,
@@ -63,10 +67,31 @@ export function briefClearings(brief: WorldBrief): WorldPoint[] {
   return brief.landmarks.filter((landmark) => landmark.pad).map((landmark) => briefToWorld(brief, landmark.at));
 }
 
-/** Paint weights in `PILOT_TUNING.layers` order. */
-export function paintWeights(brief: WorldBrief, terrain: BriefTerrain): (x: number, z: number) => number[] {
+/**
+ * Paint weights in `PILOT_TUNING.layers` order, at world XZ with the ground's
+ * slope there (degrees). Valley worlds paint from the valley shape; a world
+ * with relief paints rock on steep ground and forest away from settlements.
+ */
+export function paintWeights(brief: WorldBrief, terrain: BriefTerrain): (x: number, z: number, slopeDeg: number) => number[] {
   const tuning = PILOT_TUNING;
   const clearings = briefClearings(brief);
+  if (brief.terrain.relief) {
+    const reach = [
+      ...brief.settlements.map((settlement) => [...briefToWorld(brief, settlement.center), settlement.radius ?? 150] as const),
+      ...clearings.map(([x, z]) => [x, z, tuning.clearingRadius] as const),
+    ];
+    const [rock0, rock1] = tuning.rockSlope;
+    const [forest0, forest1] = tuning.forestFromSettlement;
+    return (x, z, slopeDeg) => {
+      const rock = smoothstep((slopeDeg - rock0) / (rock1 - rock0));
+      const wild = reach.reduce((nearest, [cx, cz, radius]) => Math.min(nearest, Math.hypot(x - cx, z - cz) - radius), Infinity);
+      const forest = smoothstep((wild + 40 * fbm(x / 90, z / 90, 3, brief.seed + 29) - forest0) / (forest1 - forest0));
+      const hit = terrain.water(x, z);
+      const riverbed = hit ? 1 - smoothstep((hit.distance - (hit.course.width / 2 + WATER_BED_MARGIN)) / 3) : 0;
+      const open = (1 - rock) * (1 - riverbed);
+      return [open * (1 - forest), open * forest, rock * (1 - riverbed), 0, riverbed, 0];
+    };
+  }
   return (x, z) => {
     const wobble = 10 * fbm(x / 35, z / 35, 3, brief.seed + 13);
     const position = terrain.valleyAt(x, z);

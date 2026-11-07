@@ -31,7 +31,7 @@ Genişlik, derinlik ve ölçüler düz metredir; dönüşüm görmez.
 |---|---|
 | `id`, `name`, `seed` | Recipe kimliği (`recipeId`), görünen ad, tohum |
 | `frame`, `area` | Koordinat çerçevesi; dünya sınırı `west/east/south/north` |
-| `terrain` | Landscape id ve adı, `tileQuads` (64/128/256), `spacing`, `heightRange`; tile sayısı alandan hesaplanır, arazi alanın ortasına oturur |
+| `terrain` | Landscape id ve adı, `tileQuads` (64/128/256), `spacing`, `heightRange`; tile sayısı alandan hesaplanır, arazi alanın ortasına oturur. İsteğe bağlı `relief`: tüm alana `hills` (`height`, `wavelength`) ve sırtlı `mountains` (`height`, `lift`, `wavelength`, `spurStretch`, `directionDeg` kuzeyden saat yönü); dağlar `clear` bantlarında (`settlements`, `roads`, `water`, `valleyFloors`: `inner` içinde hiç, `falloff` sonra tam) yerleşime, yol çizgisine, suya ve vadi tabanına uğramaz, tepeler orada %35'e iner |
 | `regionProfile`, `reference` | `*.regionprofile.json` yolu; alanı kaplayan referans görseli |
 | `playerStart` | Oyuncu başlangıcı |
 | `valleys` | Kesitlerle vadi: her kesitte `north`, taban `floor` ve kaya çizgisi `rock` (doğu değerleri; kesit aralıkları eşit olmak zorunda değil), kuzeyden güneye `floorProfile` kotları, `sideSlopeDeg`, isteğe bağlı `relief` (`slopeFoot`, `spurs`, `ridges`, `noise` metre; eksik anahtar varsayılanı alır: 18 / 26 / 16 / 10), `ridgeElevation`, iki yamacın örtüsü `slopeCover`. Bilinmeyen vadi ve rölyef alanı reddedilir |

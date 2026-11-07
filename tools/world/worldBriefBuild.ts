@@ -284,11 +284,29 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
         const worldX = def.origin[0] + (tile.x * terrain.tileQuads + i) * terrain.spacing;
         const worldZ = def.origin[2] + (tile.z * terrain.tileQuads + j) * terrain.spacing;
         tile.heights[j * size + i] = ground.height(worldX, worldZ);
-        writeWeights(tile, j * size + i, weights(worldX, worldZ));
       }
     }
     return tile;
   });
+  // Paint once every height is known: the slope reads the neighbours, across tile edges too.
+  const byKey = new Map(tiles.map((tile) => [`${tile.x}_${tile.z}`, tile]));
+  const [lastI, lastJ] = [tilesX * terrain.tileQuads, tilesZ * terrain.tileQuads];
+  const gridHeight = (gi: number, gj: number): number => {
+    const [ci, cj] = [Math.min(lastI, Math.max(0, gi)), Math.min(lastJ, Math.max(0, gj))];
+    const [tx, tz] = [Math.min(tilesX - 1, Math.floor(ci / terrain.tileQuads)), Math.min(tilesZ - 1, Math.floor(cj / terrain.tileQuads))];
+    const tile = byKey.get(`${tx}_${tz}`)!;
+    return tile.heights[(cj - tz * terrain.tileQuads) * size + (ci - tx * terrain.tileQuads)]!;
+  };
+  for (const tile of tiles) {
+    for (let j = 0; j < size; j += 1) {
+      for (let i = 0; i < size; i += 1) {
+        const [gi, gj] = [tile.x * terrain.tileQuads + i, tile.z * terrain.tileQuads + j];
+        const slope = Math.atan(Math.hypot(gridHeight(gi + 1, gj) - gridHeight(gi - 1, gj), gridHeight(gi, gj + 1) - gridHeight(gi, gj - 1))
+          / (2 * terrain.spacing)) * 180 / Math.PI;
+        writeWeights(tile, j * size + i, weights(def.origin[0] + gi * terrain.spacing, def.origin[2] + gj * terrain.spacing, slope));
+      }
+    }
+  }
   const world = createTerrainEditWorld(def, tiles);
   const sampleHeight = (x: number, z: number): number | null => terrainHeightAt(def, world, x, z);
 

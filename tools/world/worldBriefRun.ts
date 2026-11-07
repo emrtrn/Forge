@@ -22,6 +22,8 @@ export interface WorldBriefRunOptions {
   out?: string;
   /** Replace an existing level. */
   force?: boolean;
+  /** `worldSettings.partition` of a new level; a replaced level keeps its own. */
+  partition?: unknown;
 }
 
 export interface WorldBriefRunResult {
@@ -96,7 +98,7 @@ export async function runWorldBrief(options: WorldBriefRunOptions): Promise<Worl
   if (!brief) throw new Error(`invalid world brief ${briefPath}:\n  ${issues.join("\n  ")}`);
 
   const levelAbs = within(root, level);
-  let partition: unknown;
+  let partition: unknown = options.partition;
   if (await exists(levelAbs)) {
     if (!options.force) throw new Error(`${level} exists; it may hold editor changes. Rerun with --force to rebuild it from the brief.`);
     const current = await readJson(root, level, "existing level") as { worldSettings?: { partition?: unknown } };

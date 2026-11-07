@@ -27,6 +27,7 @@
     "world:valley": "node tools/world/generate-wb-test-valley.mjs",
     "world:pilot": "node tools/world/build-world-brief.mjs assets/world-pilot/Levels/WbPilotValley.worldbrief.json",
     "world:brief": "node tools/world/build-world-brief.mjs",
+    "world:random": "node tools/world/build-random-world.mjs",
     "world:offroad": "node tools/world/generate-offroad-test.mjs",
     "world:build": "node tools/world/build-hlod.mjs",
     "terrain:repair": "node tools/world/repair-terrain.mjs",

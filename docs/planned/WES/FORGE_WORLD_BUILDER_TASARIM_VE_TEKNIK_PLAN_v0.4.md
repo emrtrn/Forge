@@ -11,7 +11,16 @@
 - Uygulama durumu 2 Kasım 2026: **F1 çekirdeği kapandı**; F1b referans altlığı ve elle plan düzeltme (15b/15c) mevcut. T35 dış analiz JSON önizleme/birleştirme ilk dilimi mevcut; gerçek görsel analizi ve üç görselle kabul açık (§9).
 - Bu sürümde üzerine kurulacağı editör araçlarının gerçek durumu kodla işaretlendi.
 
-> **Tek aktif hat (7 Kasım 2026, akşam güncellemesi; kullanıcı onayı).** World Builder'da
+> **Tek aktif hat (7 Kasım 2026 gece; kullanıcı kararı) — bu kutunun altındaki sırayı
+> geçersiz kılar.** World Builder iki yoldan sahne kurar ve ikisi aynı kurucuyu kullanır:
+> plan modu (tasarım dokümanından dünya özeti) ve **rastgele mod** (pencerede seçilen
+> değerlerden baştan sona hazır sahne). Önce rastgele mod yapılır; sıra ve durum
+> [RANDOM_WORLD_PLAN.md](../../world-builder/RANDOM_WORLD_PLAN.md)'de. Eski World
+> Builder penceresi (araziye dokunmayan aşamalar, karar 19) kullanılamaz bulundu; yeni
+> pencere gelince kaldırılır. Aşağıdaki Derekavak sırası (adım 3–5) rastgele moddan sonra
+> aynı kurucunun üstüne devam eder.
+>
+> **Önceki hat (7 Kasım 2026, akşam güncellemesi; kullanıcı onayı).** World Builder'da
 > yürüyen tek iş, oyun tasarımından level üretme hattıdır (karar 20–22;
 > [pilot](../../world-builder/PILOT_MOUNTAIN_VALLEY.md),
 > [dünya özeti sözleşmesi](../../world-builder/WORLD_BRIEF.md)). İlk gerçek sahne

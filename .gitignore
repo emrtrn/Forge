@@ -45,6 +45,3 @@ public/layouts/WbTestValley.landscapes/
 # Baked vehicle atlases: the GLB carries them, their scripts remake them
 art/vehicles/*/textures/
 art/vehicles/*/__pycache__/
-# World Builder pilot valley (npm run world:pilot)
-public/layouts/WbPilotValley.*
-public/layouts/WbPilotValley.landscapes/

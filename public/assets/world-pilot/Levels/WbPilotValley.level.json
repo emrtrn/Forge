@@ -1,0 +1,2066 @@
+{
+  "schema": 1,
+  "name": "WbPilotValley",
+  "loadGroups": [],
+  "instances": [
+    {
+      "assetId": "marker:playerStart",
+      "placements": [
+        {
+          "position": [
+            -36,
+            94.01840209960938,
+            300
+          ],
+          "name": "Player Start",
+          "collision": false,
+          "rotationYDeg": 0,
+          "scale": 1
+        }
+      ]
+    },
+    {
+      "assetId": "wp-cabin",
+      "placements": [
+        {
+          "id": "cabin",
+          "role": "building.cabin",
+          "name": "Cabin",
+          "rotationYDeg": 0,
+          "scale": 1,
+          "collision": true,
+          "position": [
+            -215,
+            148.69,
+            -227
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wp-woodpile",
+      "placements": [
+        {
+          "id": "woodpile",
+          "role": "prop.woodpile",
+          "name": "Woodpile",
+          "rotationYDeg": 0,
+          "scale": 1,
+          "collision": true,
+          "position": [
+            -209.5,
+            148.69,
+            -226
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wp-signpost",
+      "placements": [
+        {
+          "id": "signpost",
+          "role": "prop.signpost",
+          "name": "Signpost",
+          "rotationYDeg": 0,
+          "scale": 1,
+          "collision": false,
+          "position": [
+            -59,
+            96.02,
+            -101
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wp-fence-module",
+      "placements": [
+        {
+          "id": "fence-north-0",
+          "role": "prop.fence",
+          "name": "Fence North 0",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 0,
+          "position": [
+            -225.5,
+            148.69,
+            -240
+          ]
+        },
+        {
+          "id": "fence-north-1",
+          "role": "prop.fence",
+          "name": "Fence North 1",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 0,
+          "position": [
+            -222.5,
+            148.69,
+            -240
+          ]
+        },
+        {
+          "id": "fence-north-2",
+          "role": "prop.fence",
+          "name": "Fence North 2",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 0,
+          "position": [
+            -219.5,
+            148.69,
+            -240
+          ]
+        },
+        {
+          "id": "fence-north-3",
+          "role": "prop.fence",
+          "name": "Fence North 3",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 0,
+          "position": [
+            -216.5,
+            148.69,
+            -240
+          ]
+        },
+        {
+          "id": "fence-north-4",
+          "role": "prop.fence",
+          "name": "Fence North 4",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 0,
+          "position": [
+            -213.5,
+            148.69,
+            -240
+          ]
+        },
+        {
+          "id": "fence-north-5",
+          "role": "prop.fence",
+          "name": "Fence North 5",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 0,
+          "position": [
+            -210.5,
+            148.69,
+            -240
+          ]
+        },
+        {
+          "id": "fence-north-6",
+          "role": "prop.fence",
+          "name": "Fence North 6",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 0,
+          "position": [
+            -207.5,
+            148.69,
+            -240
+          ]
+        },
+        {
+          "id": "fence-north-7",
+          "role": "prop.fence",
+          "name": "Fence North 7",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 0,
+          "position": [
+            -204.5,
+            148.69,
+            -240
+          ]
+        },
+        {
+          "id": "fence-west-0",
+          "role": "prop.fence",
+          "name": "Fence West 0",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 90,
+          "position": [
+            -227,
+            148.69,
+            -238.5
+          ]
+        },
+        {
+          "id": "fence-west-1",
+          "role": "prop.fence",
+          "name": "Fence West 1",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 90,
+          "position": [
+            -227,
+            148.69,
+            -235.5
+          ]
+        },
+        {
+          "id": "fence-west-2",
+          "role": "prop.fence",
+          "name": "Fence West 2",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 90,
+          "position": [
+            -227,
+            148.69,
+            -232.5
+          ]
+        },
+        {
+          "id": "fence-west-3",
+          "role": "prop.fence",
+          "name": "Fence West 3",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 90,
+          "position": [
+            -227,
+            148.69,
+            -229.5
+          ]
+        },
+        {
+          "id": "fence-west-4",
+          "role": "prop.fence",
+          "name": "Fence West 4",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 90,
+          "position": [
+            -227,
+            148.69,
+            -226.5
+          ]
+        },
+        {
+          "id": "fence-west-5",
+          "role": "prop.fence",
+          "name": "Fence West 5",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 90,
+          "position": [
+            -227,
+            148.69,
+            -223.5
+          ]
+        },
+        {
+          "id": "fence-west-6",
+          "role": "prop.fence",
+          "name": "Fence West 6",
+          "collision": false,
+          "scale": 1,
+          "rotationYDeg": 90,
+          "position": [
+            -227,
+            148.69,
+            -220.5
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wp-rock-b",
+      "placements": [
+        {
+          "id": "rock-high-0",
+          "role": "prop.rock",
+          "name": "rock-high-0",
+          "scale": 1.71,
+          "collision": true,
+          "rotationYDeg": 322,
+          "position": [
+            469.68100622529164,
+            248.74,
+            349.9121485487558
+          ]
+        },
+        {
+          "id": "rock-high-3",
+          "role": "prop.rock",
+          "name": "rock-high-3",
+          "scale": 2.1,
+          "collision": true,
+          "rotationYDeg": 71,
+          "position": [
+            446.17805945919827,
+            240.407,
+            -247.99257681006566
+          ]
+        },
+        {
+          "id": "rock-high-4",
+          "role": "prop.rock",
+          "name": "rock-high-4",
+          "scale": 2.94,
+          "collision": true,
+          "rotationYDeg": 96,
+          "position": [
+            -477.62056541629136,
+            245.136,
+            -480.87011268362403
+          ]
+        },
+        {
+          "id": "rock-high-7",
+          "role": "prop.rock",
+          "name": "rock-high-7",
+          "scale": 1.91,
+          "collision": true,
+          "rotationYDeg": 251,
+          "position": [
+            475.984118913766,
+            263.437,
+            -98.49091078620404
+          ]
+        },
+        {
+          "id": "rock-high-8",
+          "role": "prop.rock",
+          "name": "rock-high-8",
+          "scale": 2.23,
+          "collision": true,
+          "rotationYDeg": 270,
+          "position": [
+            417.14009003480896,
+            226.904,
+            -461.00932989036664
+          ]
+        },
+        {
+          "id": "rock-high-11",
+          "role": "prop.rock",
+          "name": "rock-high-11",
+          "scale": 2.43,
+          "collision": true,
+          "rotationYDeg": 52,
+          "position": [
+            410.2209202037193,
+            219.807,
+            296.02790023433045
+          ]
+        },
+        {
+          "id": "rock-high-12",
+          "role": "prop.rock",
+          "name": "rock-high-12",
+          "scale": 2.62,
+          "collision": true,
+          "rotationYDeg": 284,
+          "position": [
+            -476.01686084875837,
+            250.277,
+            -14.654520086478442
+          ]
+        },
+        {
+          "id": "rock-high-14",
+          "role": "prop.rock",
+          "name": "rock-high-14",
+          "scale": 1.41,
+          "collision": true,
+          "rotationYDeg": 44,
+          "position": [
+            448.709000016097,
+            235.714,
+            392.52341244835407
+          ]
+        },
+        {
+          "id": "rock-high-18",
+          "role": "prop.rock",
+          "name": "rock-high-18",
+          "scale": 1.17,
+          "collision": false,
+          "rotationYDeg": 67,
+          "position": [
+            487.8351151384413,
+            249.9,
+            182.55649433936924
+          ]
+        },
+        {
+          "id": "rock-high-23",
+          "role": "prop.rock",
+          "name": "rock-high-23",
+          "scale": 1.37,
+          "collision": true,
+          "rotationYDeg": 152,
+          "position": [
+            492.42805192479864,
+            254.737,
+            1.8444852344691753
+          ]
+        },
+        {
+          "id": "rock-high-27",
+          "role": "prop.rock",
+          "name": "rock-high-27",
+          "scale": 2.28,
+          "collision": true,
+          "rotationYDeg": 283,
+          "position": [
+            362.8993823030032,
+            202.491,
+            35.72171868989244
+          ]
+        },
+        {
+          "id": "rock-high-29",
+          "role": "prop.rock",
+          "name": "rock-high-29",
+          "scale": 1.56,
+          "collision": true,
+          "rotationYDeg": 185,
+          "position": [
+            441.9155510002747,
+            233.981,
+            -212.43174321949482
+          ]
+        },
+        {
+          "id": "rock-high-31",
+          "role": "prop.rock",
+          "name": "rock-high-31",
+          "scale": 3.84,
+          "collision": true,
+          "rotationYDeg": 244,
+          "position": [
+            -464.2043389216997,
+            239.601,
+            263.0806116317399
+          ]
+        },
+        {
+          "id": "rock-high-35",
+          "role": "prop.rock",
+          "name": "rock-high-35",
+          "scale": 3.03,
+          "collision": true,
+          "rotationYDeg": 223,
+          "position": [
+            475.65436088712886,
+            256.193,
+            -451.73591752303764
+          ]
+        },
+        {
+          "id": "rock-high-36",
+          "role": "prop.rock",
+          "name": "rock-high-36",
+          "scale": 2.06,
+          "collision": true,
+          "rotationYDeg": 39,
+          "position": [
+            -472.0221615303308,
+            245.365,
+            -320.35976244835183
+          ]
+        },
+        {
+          "id": "rock-high-37",
+          "role": "prop.rock",
+          "name": "rock-high-37",
+          "scale": 1.49,
+          "collision": true,
+          "rotationYDeg": 271,
+          "position": [
+            -488.8276001159102,
+            248.627,
+            -313.34573929198086
+          ]
+        },
+        {
+          "id": "rock-high-43",
+          "role": "prop.rock",
+          "name": "rock-high-43",
+          "scale": 2,
+          "collision": true,
+          "rotationYDeg": 352,
+          "position": [
+            458.49117875564843,
+            239.006,
+            139.28763723699376
+          ]
+        },
+        {
+          "id": "rock-high-52",
+          "role": "prop.rock",
+          "name": "rock-high-52",
+          "scale": 1.8,
+          "collision": true,
+          "rotationYDeg": 348,
+          "position": [
+            -457.0792240113951,
+            235.475,
+            321.2274675210938
+          ]
+        },
+        {
+          "id": "rock-high-57",
+          "role": "prop.rock",
+          "name": "rock-high-57",
+          "scale": 4.1,
+          "collision": true,
+          "rotationYDeg": 232,
+          "position": [
+            -479.1535850591026,
+            247.087,
+            267.8367832582444
+          ]
+        },
+        {
+          "id": "rock-high-61",
+          "role": "prop.rock",
+          "name": "rock-high-61",
+          "scale": 3.4,
+          "collision": true,
+          "rotationYDeg": 131,
+          "position": [
+            418.85500552598387,
+            228.882,
+            -434.8793599731289
+          ]
+        },
+        {
+          "id": "rock-high-63",
+          "role": "prop.rock",
+          "name": "rock-high-63",
+          "scale": 3.93,
+          "collision": true,
+          "rotationYDeg": 49,
+          "position": [
+            -407.4602047749795,
+            217.032,
+            20.162334479391575
+          ]
+        },
+        {
+          "id": "rock-high-65",
+          "role": "prop.rock",
+          "name": "rock-high-65",
+          "scale": 1.89,
+          "collision": true,
+          "rotationYDeg": 282,
+          "position": [
+            368.25019786600024,
+            212.803,
+            -366.42211955739185
+          ]
+        },
+        {
+          "id": "rock-high-69",
+          "role": "prop.rock",
+          "name": "rock-high-69",
+          "scale": 3.43,
+          "collision": true,
+          "rotationYDeg": 232,
+          "position": [
+            -466.5462428983301,
+            242.012,
+            -171.7524358117953
+          ]
+        },
+        {
+          "id": "rock-high-71",
+          "role": "prop.rock",
+          "name": "rock-high-71",
+          "scale": 2.81,
+          "collision": true,
+          "rotationYDeg": 157,
+          "position": [
+            -457.2869255184196,
+            250.697,
+            -433.1291365949437
+          ]
+        },
+        {
+          "id": "rock-high-75",
+          "role": "prop.rock",
+          "name": "rock-high-75",
+          "scale": 4.07,
+          "collision": true,
+          "rotationYDeg": 328,
+          "position": [
+            -454.6536790346727,
+            241.305,
+            -361.18762261932716
+          ]
+        },
+        {
+          "id": "rock-high-81",
+          "role": "prop.rock",
+          "name": "rock-high-81",
+          "scale": 2.79,
+          "collision": true,
+          "rotationYDeg": 208,
+          "position": [
+            -451.75657998304814,
+            231.701,
+            338.96747230086476
+          ]
+        },
+        {
+          "id": "rock-high-82",
+          "role": "prop.rock",
+          "name": "rock-high-82",
+          "scale": 1.18,
+          "collision": false,
+          "rotationYDeg": 135,
+          "position": [
+            -467.8453077399172,
+            255.191,
+            -411.4261784311384
+          ]
+        },
+        {
+          "id": "rock-high-86",
+          "role": "prop.rock",
+          "name": "rock-high-86",
+          "scale": 3.41,
+          "collision": true,
+          "rotationYDeg": 96,
+          "position": [
+            -375.2803455828689,
+            200.441,
+            475.30552602605894
+          ]
+        },
+        {
+          "id": "rock-slope-0",
+          "role": "prop.rock",
+          "name": "rock-slope-0",
+          "scale": 0.95,
+          "collision": false,
+          "rotationYDeg": 100,
+          "position": [
+            -336.1797717330046,
+            185.574,
+            156.60497426055372
+          ]
+        },
+        {
+          "id": "rock-slope-6",
+          "role": "prop.rock",
+          "name": "rock-slope-6",
+          "scale": 2.04,
+          "collision": true,
+          "rotationYDeg": 69,
+          "position": [
+            -193.92644002335146,
+            136.356,
+            230.49849935341626
+          ]
+        },
+        {
+          "id": "rock-slope-7",
+          "role": "prop.rock",
+          "name": "rock-slope-7",
+          "scale": 0.83,
+          "collision": false,
+          "rotationYDeg": 269,
+          "position": [
+            128.53422191692516,
+            117.408,
+            119.29799971869215
+          ]
+        },
+        {
+          "id": "rock-slope-8",
+          "role": "prop.rock",
+          "name": "rock-slope-8",
+          "scale": 1.56,
+          "collision": true,
+          "rotationYDeg": 54,
+          "position": [
+            235.34841259242967,
+            151.165,
+            2.5461670802906156
+          ]
+        },
+        {
+          "id": "rock-slope-14",
+          "role": "prop.rock",
+          "name": "rock-slope-14",
+          "scale": 2.33,
+          "collision": true,
+          "rotationYDeg": 159,
+          "position": [
+            254.85831781290472,
+            165.914,
+            -376.1664892290719
+          ]
+        },
+        {
+          "id": "rock-slope-18",
+          "role": "prop.rock",
+          "name": "rock-slope-18",
+          "scale": 1.13,
+          "collision": false,
+          "rotationYDeg": 230,
+          "position": [
+            -143.4708761726506,
+            114.276,
+            332.6426635798998
+          ]
+        },
+        {
+          "id": "rock-river-1",
+          "role": "prop.rock",
+          "name": "rock-river-1",
+          "scale": 0.85,
+          "collision": false,
+          "rotationYDeg": 174,
+          "position": [
+            15.770245285653312,
+            98.199,
+            -451.03558326140046
+          ]
+        },
+        {
+          "id": "rock-river-3",
+          "role": "prop.rock",
+          "name": "rock-river-3",
+          "scale": 0.98,
+          "collision": false,
+          "rotationYDeg": 183,
+          "position": [
+            -11.368897763394951,
+            96.008,
+            -280.8476400235668
+          ]
+        },
+        {
+          "id": "rock-river-11",
+          "role": "prop.rock",
+          "name": "rock-river-11",
+          "scale": 0.52,
+          "collision": false,
+          "rotationYDeg": 133,
+          "position": [
+            13.881155230416958,
+            97.897,
+            -456.8768715346232
+          ]
+        },
+        {
+          "id": "rock-river-14",
+          "role": "prop.rock",
+          "name": "rock-river-14",
+          "scale": 0.96,
+          "collision": false,
+          "rotationYDeg": 264,
+          "position": [
+            2.2361134207756317,
+            95.135,
+            -150.51491657737643
+          ]
+        },
+        {
+          "id": "rock-river-15",
+          "role": "prop.rock",
+          "name": "rock-river-15",
+          "scale": 0.63,
+          "collision": false,
+          "rotationYDeg": 146,
+          "position": [
+            -8.248800619864886,
+            93.149,
+            41.672960449941456
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wp-rock-a",
+      "placements": [
+        {
+          "id": "rock-high-1",
+          "role": "prop.rock",
+          "name": "rock-high-1",
+          "scale": 2.3,
+          "collision": true,
+          "rotationYDeg": 289,
+          "position": [
+            454.9572796560824,
+            244.904,
+            125.24394235108048
+          ]
+        },
+        {
+          "id": "rock-high-2",
+          "role": "prop.rock",
+          "name": "rock-high-2",
+          "scale": 3.15,
+          "collision": true,
+          "rotationYDeg": 128,
+          "position": [
+            406.03843132266775,
+            218.434,
+            340.41409021709114
+          ]
+        },
+        {
+          "id": "rock-high-6",
+          "role": "prop.rock",
+          "name": "rock-high-6",
+          "scale": 3.8,
+          "collision": true,
+          "rotationYDeg": 213,
+          "position": [
+            469.4300048542209,
+            254.037,
+            -300.03046083496884
+          ]
+        },
+        {
+          "id": "rock-high-13",
+          "role": "prop.rock",
+          "name": "rock-high-13",
+          "scale": 3.97,
+          "collision": true,
+          "rotationYDeg": 152,
+          "position": [
+            -478.33178060827777,
+            255.994,
+            -455.922570428811
+          ]
+        },
+        {
+          "id": "rock-high-15",
+          "role": "prop.rock",
+          "name": "rock-high-15",
+          "scale": 1.46,
+          "collision": true,
+          "rotationYDeg": 202,
+          "position": [
+            -460.07396592758596,
+            242.312,
+            428.2467598677613
+          ]
+        },
+        {
+          "id": "rock-high-17",
+          "role": "prop.rock",
+          "name": "rock-high-17",
+          "scale": 2.29,
+          "collision": true,
+          "rotationYDeg": 163,
+          "position": [
+            483.911924790591,
+            256.73,
+            -25.856769557576627
+          ]
+        },
+        {
+          "id": "rock-high-20",
+          "role": "prop.rock",
+          "name": "rock-high-20",
+          "scale": 2.37,
+          "collision": true,
+          "rotationYDeg": 22,
+          "position": [
+            435.8492628671229,
+            230.478,
+            402.16659320751205
+          ]
+        },
+        {
+          "id": "rock-high-21",
+          "role": "prop.rock",
+          "name": "rock-high-21",
+          "scale": 2.17,
+          "collision": true,
+          "rotationYDeg": 228,
+          "position": [
+            492.212249643635,
+            261.382,
+            -394.8791753780097
+          ]
+        },
+        {
+          "id": "rock-high-22",
+          "role": "prop.rock",
+          "name": "rock-high-22",
+          "scale": 3.2,
+          "collision": true,
+          "rotationYDeg": 72,
+          "position": [
+            402.54987756488845,
+            222.903,
+            22.262792559340596
+          ]
+        },
+        {
+          "id": "rock-high-25",
+          "role": "prop.rock",
+          "name": "rock-high-25",
+          "scale": 1.21,
+          "collision": true,
+          "rotationYDeg": 74,
+          "position": [
+            -491.9781708321534,
+            249.539,
+            151.35219433810562
+          ]
+        },
+        {
+          "id": "rock-high-28",
+          "role": "prop.rock",
+          "name": "rock-high-28",
+          "scale": 2.37,
+          "collision": true,
+          "rotationYDeg": 7,
+          "position": [
+            407.9461673204787,
+            221.892,
+            -423.35963456192985
+          ]
+        },
+        {
+          "id": "rock-high-30",
+          "role": "prop.rock",
+          "name": "rock-high-30",
+          "scale": 2.39,
+          "collision": true,
+          "rotationYDeg": 8,
+          "position": [
+            374.91945452755317,
+            219.07,
+            97.42456617532298
+          ]
+        },
+        {
+          "id": "rock-high-33",
+          "role": "prop.rock",
+          "name": "rock-high-33",
+          "scale": 3.43,
+          "collision": true,
+          "rotationYDeg": 263,
+          "position": [
+            410.77395892934874,
+            225.272,
+            -440.73961313115433
+          ]
+        },
+        {
+          "id": "rock-high-41",
+          "role": "prop.rock",
+          "name": "rock-high-41",
+          "scale": 2.4,
+          "collision": true,
+          "rotationYDeg": 192,
+          "position": [
+            -413.5721630277112,
+            219.204,
+            401.9222162431106
+          ]
+        },
+        {
+          "id": "rock-high-44",
+          "role": "prop.rock",
+          "name": "rock-high-44",
+          "scale": 2.5,
+          "collision": true,
+          "rotationYDeg": 85,
+          "position": [
+            388.2950418465771,
+            214.477,
+            -407.0595186436549
+          ]
+        },
+        {
+          "id": "rock-high-45",
+          "role": "prop.rock",
+          "name": "rock-high-45",
+          "scale": 1.77,
+          "collision": true,
+          "rotationYDeg": 230,
+          "position": [
+            449.1448084800504,
+            240.428,
+            -236.98718301951885
+          ]
+        },
+        {
+          "id": "rock-high-48",
+          "role": "prop.rock",
+          "name": "rock-high-48",
+          "scale": 2.14,
+          "collision": true,
+          "rotationYDeg": 9,
+          "position": [
+            -485.5980085884221,
+            252.16,
+            5.286699263378978
+          ]
+        },
+        {
+          "id": "rock-high-49",
+          "role": "prop.rock",
+          "name": "rock-high-49",
+          "scale": 1.35,
+          "collision": true,
+          "rotationYDeg": 326,
+          "position": [
+            446.6540520871058,
+            240.144,
+            231.51742364047095
+          ]
+        },
+        {
+          "id": "rock-high-51",
+          "role": "prop.rock",
+          "name": "rock-high-51",
+          "scale": 1.45,
+          "collision": true,
+          "rotationYDeg": 139,
+          "position": [
+            -466.3428271212615,
+            240.658,
+            -141.21443670010194
+          ]
+        },
+        {
+          "id": "rock-high-56",
+          "role": "prop.rock",
+          "name": "rock-high-56",
+          "scale": 1.66,
+          "collision": true,
+          "rotationYDeg": 333,
+          "position": [
+            -388.4294131840579,
+            210.7,
+            437.22629996482283
+          ]
+        },
+        {
+          "id": "rock-high-59",
+          "role": "prop.rock",
+          "name": "rock-high-59",
+          "scale": 1.48,
+          "collision": true,
+          "rotationYDeg": 222,
+          "position": [
+            394.7291165124625,
+            216.573,
+            9.829499025363475
+          ]
+        },
+        {
+          "id": "rock-high-60",
+          "role": "prop.rock",
+          "name": "rock-high-60",
+          "scale": 1.99,
+          "collision": true,
+          "rotationYDeg": 236,
+          "position": [
+            -429.7663474478759,
+            221.224,
+            -494.44078150670975
+          ]
+        },
+        {
+          "id": "rock-high-64",
+          "role": "prop.rock",
+          "name": "rock-high-64",
+          "scale": 2.66,
+          "collision": true,
+          "rotationYDeg": 357,
+          "position": [
+            476.1351862270385,
+            255.073,
+            -297.3053930536844
+          ]
+        },
+        {
+          "id": "rock-high-66",
+          "role": "prop.rock",
+          "name": "rock-high-66",
+          "scale": 3.68,
+          "collision": true,
+          "rotationYDeg": 77,
+          "position": [
+            439.706210300792,
+            245.092,
+            -93.52756596403196
+          ]
+        },
+        {
+          "id": "rock-high-68",
+          "role": "prop.rock",
+          "name": "rock-high-68",
+          "scale": 4.18,
+          "collision": true,
+          "rotationYDeg": 332,
+          "position": [
+            -451.1990374722518,
+            232.85,
+            328.0388869601302
+          ]
+        },
+        {
+          "id": "rock-high-74",
+          "role": "prop.rock",
+          "name": "rock-high-74",
+          "scale": 1.08,
+          "collision": false,
+          "rotationYDeg": 218,
+          "position": [
+            -483.85184412589297,
+            262.069,
+            -417.4184043193236
+          ]
+        },
+        {
+          "id": "rock-high-76",
+          "role": "prop.rock",
+          "name": "rock-high-76",
+          "scale": 1.11,
+          "collision": false,
+          "rotationYDeg": 304,
+          "position": [
+            485.62551327981055,
+            259.649,
+            -155.77209855196998
+          ]
+        },
+        {
+          "id": "rock-high-79",
+          "role": "prop.rock",
+          "name": "rock-high-79",
+          "scale": 4.11,
+          "collision": true,
+          "rotationYDeg": 121,
+          "position": [
+            -481.5968996915035,
+            233.565,
+            485.21819605724886
+          ]
+        },
+        {
+          "id": "rock-high-88",
+          "role": "prop.rock",
+          "name": "rock-high-88",
+          "scale": 3.38,
+          "collision": true,
+          "rotationYDeg": 77,
+          "position": [
+            -432.77026082156226,
+            242.123,
+            -415.48056148923934
+          ]
+        },
+        {
+          "id": "rock-slope-2",
+          "role": "prop.rock",
+          "name": "rock-slope-2",
+          "scale": 1.15,
+          "collision": false,
+          "rotationYDeg": 308,
+          "position": [
+            384.20375467278063,
+            208.391,
+            484.9191121291369
+          ]
+        },
+        {
+          "id": "rock-slope-4",
+          "role": "prop.rock",
+          "name": "rock-slope-4",
+          "scale": 1.11,
+          "collision": false,
+          "rotationYDeg": 269,
+          "position": [
+            -335.6760243186727,
+            186.703,
+            -128.0856747413054
+          ]
+        },
+        {
+          "id": "rock-slope-9",
+          "role": "prop.rock",
+          "name": "rock-slope-9",
+          "scale": 1.09,
+          "collision": false,
+          "rotationYDeg": 200,
+          "position": [
+            207.91881494689733,
+            144.903,
+            -85.41029362007976
+          ]
+        },
+        {
+          "id": "rock-slope-13",
+          "role": "prop.rock",
+          "name": "rock-slope-13",
+          "scale": 1.95,
+          "collision": true,
+          "rotationYDeg": 302,
+          "position": [
+            -245.34287891350687,
+            157.175,
+            -11.059641824103892
+          ]
+        },
+        {
+          "id": "rock-slope-17",
+          "role": "prop.rock",
+          "name": "rock-slope-17",
+          "scale": 0.82,
+          "collision": false,
+          "rotationYDeg": 45,
+          "position": [
+            -183.96431248867884,
+            134.401,
+            -348.8531237700954
+          ]
+        },
+        {
+          "id": "rock-slope-22",
+          "role": "prop.rock",
+          "name": "rock-slope-22",
+          "scale": 1.65,
+          "collision": true,
+          "rotationYDeg": 56,
+          "position": [
+            135.88875119341537,
+            119.997,
+            -169.33723946800455
+          ]
+        },
+        {
+          "id": "rock-slope-23",
+          "role": "prop.rock",
+          "name": "rock-slope-23",
+          "scale": 1.98,
+          "collision": true,
+          "rotationYDeg": 278,
+          "position": [
+            244.37470432603732,
+            146.749,
+            270.4937163926661
+          ]
+        },
+        {
+          "id": "rock-river-0",
+          "role": "prop.rock",
+          "name": "rock-river-0",
+          "scale": 0.61,
+          "collision": false,
+          "rotationYDeg": 330,
+          "position": [
+            8.589110246506262,
+            88.724,
+            455.33283406868577
+          ]
+        },
+        {
+          "id": "rock-river-2",
+          "role": "prop.rock",
+          "name": "rock-river-2",
+          "scale": 0.52,
+          "collision": false,
+          "rotationYDeg": 112,
+          "position": [
+            5.165444543395772,
+            91.235,
+            226.90939241554588
+          ]
+        },
+        {
+          "id": "rock-river-4",
+          "role": "prop.rock",
+          "name": "rock-river-4",
+          "scale": 0.96,
+          "collision": false,
+          "rotationYDeg": 134,
+          "position": [
+            -12.622022376883457,
+            92.115,
+            143.31324629019946
+          ]
+        },
+        {
+          "id": "rock-river-5",
+          "role": "prop.rock",
+          "name": "rock-river-5",
+          "scale": 1.01,
+          "collision": false,
+          "rotationYDeg": 57,
+          "position": [
+            -9.159849708859063,
+            96.852,
+            -331.82747578714043
+          ]
+        },
+        {
+          "id": "rock-river-8",
+          "role": "prop.rock",
+          "name": "rock-river-8",
+          "scale": 0.57,
+          "collision": false,
+          "rotationYDeg": 73,
+          "position": [
+            8.769221057414612,
+            91.149,
+            244.32884342968464
+          ]
+        },
+        {
+          "id": "rock-river-9",
+          "role": "prop.rock",
+          "name": "rock-river-9",
+          "scale": 0.9,
+          "collision": false,
+          "rotationYDeg": 203,
+          "position": [
+            -17.362497669830443,
+            96.906,
+            -357.28763612452894
+          ]
+        },
+        {
+          "id": "rock-river-10",
+          "role": "prop.rock",
+          "name": "rock-river-10",
+          "scale": 1.27,
+          "collision": true,
+          "rotationYDeg": 355,
+          "position": [
+            1.1416756121963703,
+            94.767,
+            -154.09424038603902
+          ]
+        },
+        {
+          "id": "rock-river-13",
+          "role": "prop.rock",
+          "name": "rock-river-13",
+          "scale": 1.09,
+          "collision": false,
+          "rotationYDeg": 275,
+          "position": [
+            -12.648852411498595,
+            96.359,
+            -304.1189471911639
+          ]
+        }
+      ]
+    },
+    {
+      "assetId": "wp-rock-c",
+      "placements": [
+        {
+          "id": "rock-high-5",
+          "role": "prop.rock",
+          "name": "rock-high-5",
+          "scale": 2.05,
+          "collision": true,
+          "rotationYDeg": 109,
+          "position": [
+            -487.63190750498325,
+            245.338,
+            345.3225985332392
+          ]
+        },
+        {
+          "id": "rock-high-9",
+          "role": "prop.rock",
+          "name": "rock-high-9",
+          "scale": 1.4,
+          "collision": true,
+          "rotationYDeg": 92,
+          "position": [
+            -484.5624586287886,
+            247.248,
+            95.48463015351444
+          ]
+        },
+        {
+          "id": "rock-high-10",
+          "role": "prop.rock",
+          "name": "rock-high-10",
+          "scale": 3.77,
+          "collision": true,
+          "rotationYDeg": 154,
+          "position": [
+            -482.5099471095018,
+            246.349,
+            -89.99268607702106
+          ]
+        },
+        {
+          "id": "rock-high-16",
+          "role": "prop.rock",
+          "name": "rock-high-16",
+          "scale": 2.67,
+          "collision": true,
+          "rotationYDeg": 174,
+          "position": [
+            476.5370292495936,
+            261.888,
+            -387.0174632803537
+          ]
+        },
+        {
+          "id": "rock-high-19",
+          "role": "prop.rock",
+          "name": "rock-high-19",
+          "scale": 2.24,
+          "collision": true,
+          "rotationYDeg": 182,
+          "position": [
+            -461.39891871716827,
+            237.757,
+            453.4007609914988
+          ]
+        },
+        {
+          "id": "rock-high-24",
+          "role": "prop.rock",
+          "name": "rock-high-24",
+          "scale": 2.27,
+          "collision": true,
+          "rotationYDeg": 286,
+          "position": [
+            420.5445014499128,
+            224.574,
+            183.74501878861338
+          ]
+        },
+        {
+          "id": "rock-high-26",
+          "role": "prop.rock",
+          "name": "rock-high-26",
+          "scale": 3.52,
+          "collision": true,
+          "rotationYDeg": 228,
+          "position": [
+            -442.3483949736692,
+            233.926,
+            22.326916696038097
+          ]
+        },
+        {
+          "id": "rock-high-32",
+          "role": "prop.rock",
+          "name": "rock-high-32",
+          "scale": 3.04,
+          "collision": true,
+          "rotationYDeg": 170,
+          "position": [
+            -443.1930588022806,
+            234.079,
+            20.897867437452078
+          ]
+        },
+        {
+          "id": "rock-high-34",
+          "role": "prop.rock",
+          "name": "rock-high-34",
+          "scale": 1.13,
+          "collision": false,
+          "rotationYDeg": 102,
+          "position": [
+            446.80529366014525,
+            238.614,
+            -439.30192187894136
+          ]
+        },
+        {
+          "id": "rock-high-38",
+          "role": "prop.rock",
+          "name": "rock-high-38",
+          "scale": 3.88,
+          "collision": true,
+          "rotationYDeg": 322,
+          "position": [
+            -434.2179865320213,
+            234.199,
+            -359.27732113050297
+          ]
+        },
+        {
+          "id": "rock-high-39",
+          "role": "prop.rock",
+          "name": "rock-high-39",
+          "scale": 2.49,
+          "collision": true,
+          "rotationYDeg": 117,
+          "position": [
+            -488.1278789229691,
+            252.329,
+            71.08550874050707
+          ]
+        },
+        {
+          "id": "rock-high-40",
+          "role": "prop.rock",
+          "name": "rock-high-40",
+          "scale": 1.27,
+          "collision": true,
+          "rotationYDeg": 210,
+          "position": [
+            417.02520398190245,
+            221.148,
+            397.8249191818759
+          ]
+        },
+        {
+          "id": "rock-high-42",
+          "role": "prop.rock",
+          "name": "rock-high-42",
+          "scale": 1.4,
+          "collision": true,
+          "rotationYDeg": 201,
+          "position": [
+            -475.5568482563831,
+            258.729,
+            -433.98754527792335
+          ]
+        },
+        {
+          "id": "rock-high-46",
+          "role": "prop.rock",
+          "name": "rock-high-46",
+          "scale": 2.95,
+          "collision": true,
+          "rotationYDeg": 241,
+          "position": [
+            -416.5749448654242,
+            224.93,
+            -106.49212105432525
+          ]
+        },
+        {
+          "id": "rock-high-47",
+          "role": "prop.rock",
+          "name": "rock-high-47",
+          "scale": 2.8,
+          "collision": true,
+          "rotationYDeg": 298,
+          "position": [
+            -473.3301995974034,
+            242.384,
+            102.21118439454585
+          ]
+        },
+        {
+          "id": "rock-high-50",
+          "role": "prop.rock",
+          "name": "rock-high-50",
+          "scale": 1.35,
+          "collision": true,
+          "rotationYDeg": 217,
+          "position": [
+            388.61291793873534,
+            224.462,
+            -369.18770988006145
+          ]
+        },
+        {
+          "id": "rock-high-53",
+          "role": "prop.rock",
+          "name": "rock-high-53",
+          "scale": 2.32,
+          "collision": true,
+          "rotationYDeg": 81,
+          "position": [
+            -491.7550927447155,
+            258.199,
+            -369.1810057195835
+          ]
+        },
+        {
+          "id": "rock-high-54",
+          "role": "prop.rock",
+          "name": "rock-high-54",
+          "scale": 1.27,
+          "collision": true,
+          "rotationYDeg": 241,
+          "position": [
+            -494.1419160948135,
+            244.184,
+            471.4409219962545
+          ]
+        },
+        {
+          "id": "rock-high-55",
+          "role": "prop.rock",
+          "name": "rock-high-55",
+          "scale": 4.01,
+          "collision": true,
+          "rotationYDeg": 43,
+          "position": [
+            431.21001839172095,
+            243.512,
+            -348.40481447288767
+          ]
+        },
+        {
+          "id": "rock-high-58",
+          "role": "prop.rock",
+          "name": "rock-high-58",
+          "scale": 2.01,
+          "collision": true,
+          "rotationYDeg": 32,
+          "position": [
+            386.1768851056695,
+            207.908,
+            385.6349923205562
+          ]
+        },
+        {
+          "id": "rock-high-62",
+          "role": "prop.rock",
+          "name": "rock-high-62",
+          "scale": 2.26,
+          "collision": true,
+          "rotationYDeg": 265,
+          "position": [
+            -477.1096053533256,
+            252.372,
+            -338.9603488566354
+          ]
+        },
+        {
+          "id": "rock-high-67",
+          "role": "prop.rock",
+          "name": "rock-high-67",
+          "scale": 2.73,
+          "collision": true,
+          "rotationYDeg": 43,
+          "position": [
+            408.6217844230123,
+            219.603,
+            311.37270336505026
+          ]
+        },
+        {
+          "id": "rock-high-70",
+          "role": "prop.rock",
+          "name": "rock-high-70",
+          "scale": 1.75,
+          "collision": true,
+          "rotationYDeg": 269,
+          "position": [
+            490.15501075191423,
+            255.76,
+            288.0166163225658
+          ]
+        },
+        {
+          "id": "rock-high-72",
+          "role": "prop.rock",
+          "name": "rock-high-72",
+          "scale": 2.95,
+          "collision": true,
+          "rotationYDeg": 309,
+          "position": [
+            -468.54078768985346,
+            241.643,
+            -141.5372390882112
+          ]
+        },
+        {
+          "id": "rock-high-73",
+          "role": "prop.rock",
+          "name": "rock-high-73",
+          "scale": 2.4,
+          "collision": true,
+          "rotationYDeg": 293,
+          "position": [
+            483.2391032204032,
+            251.168,
+            304.4330273545347
+          ]
+        },
+        {
+          "id": "rock-high-77",
+          "role": "prop.rock",
+          "name": "rock-high-77",
+          "scale": 1.7,
+          "collision": true,
+          "rotationYDeg": 189,
+          "position": [
+            458.67572538089007,
+            246.977,
+            -142.732626744546
+          ]
+        },
+        {
+          "id": "rock-high-78",
+          "role": "prop.rock",
+          "name": "rock-high-78",
+          "scale": 3.8,
+          "collision": true,
+          "rotationYDeg": 99,
+          "position": [
+            -493.143716272898,
+            257.861,
+            -214.811475626193
+          ]
+        },
+        {
+          "id": "rock-high-80",
+          "role": "prop.rock",
+          "name": "rock-high-80",
+          "scale": 1.9,
+          "collision": true,
+          "rotationYDeg": 24,
+          "position": [
+            -408.3221947727725,
+            211.445,
+            269.245058032684
+          ]
+        },
+        {
+          "id": "rock-high-83",
+          "role": "prop.rock",
+          "name": "rock-high-83",
+          "scale": 3.58,
+          "collision": true,
+          "rotationYDeg": 159,
+          "position": [
+            -438.1035858672112,
+            231.409,
+            213.2875211792998
+          ]
+        },
+        {
+          "id": "rock-high-84",
+          "role": "prop.rock",
+          "name": "rock-high-84",
+          "scale": 3.37,
+          "collision": true,
+          "rotationYDeg": 49,
+          "position": [
+            -468.0150192347355,
+            248.155,
+            -353.6447284463793
+          ]
+        },
+        {
+          "id": "rock-high-85",
+          "role": "prop.rock",
+          "name": "rock-high-85",
+          "scale": 1.48,
+          "collision": true,
+          "rotationYDeg": 79,
+          "position": [
+            458.34473554976285,
+            254.695,
+            -106.57556197838858
+          ]
+        },
+        {
+          "id": "rock-high-87",
+          "role": "prop.rock",
+          "name": "rock-high-87",
+          "scale": 2.49,
+          "collision": true,
+          "rotationYDeg": 76,
+          "position": [
+            461.2655392312445,
+            256.557,
+            -97.55984269548208
+          ]
+        },
+        {
+          "id": "rock-high-89",
+          "role": "prop.rock",
+          "name": "rock-high-89",
+          "scale": 2.33,
+          "collision": true,
+          "rotationYDeg": 38,
+          "position": [
+            397.96314728446305,
+            232.198,
+            -349.8730348376557
+          ]
+        },
+        {
+          "id": "rock-slope-1",
+          "role": "prop.rock",
+          "name": "rock-slope-1",
+          "scale": 1.57,
+          "collision": true,
+          "rotationYDeg": 66,
+          "position": [
+            276.8250434892252,
+            166.915,
+            -130.09275240590796
+          ]
+        },
+        {
+          "id": "rock-slope-3",
+          "role": "prop.rock",
+          "name": "rock-slope-3",
+          "scale": 1.02,
+          "collision": false,
+          "rotationYDeg": 120,
+          "position": [
+            248.44637252390385,
+            155.594,
+            133.25152808334678
+          ]
+        },
+        {
+          "id": "rock-slope-5",
+          "role": "prop.rock",
+          "name": "rock-slope-5",
+          "scale": 1.88,
+          "collision": true,
+          "rotationYDeg": 301,
+          "position": [
+            -418.5723723191768,
+            224.122,
+            -165.9076237748377
+          ]
+        },
+        {
+          "id": "rock-slope-10",
+          "role": "prop.rock",
+          "name": "rock-slope-10",
+          "scale": 0.92,
+          "collision": false,
+          "rotationYDeg": 128,
+          "position": [
+            257.8166364412755,
+            159.362,
+            107.01941151637584
+          ]
+        },
+        {
+          "id": "rock-slope-11",
+          "role": "prop.rock",
+          "name": "rock-slope-11",
+          "scale": 1.82,
+          "collision": true,
+          "rotationYDeg": 80,
+          "position": [
+            -211.19985159952193,
+            144.432,
+            247.29994356399402
+          ]
+        },
+        {
+          "id": "rock-slope-12",
+          "role": "prop.rock",
+          "name": "rock-slope-12",
+          "scale": 0.91,
+          "collision": false,
+          "rotationYDeg": 252,
+          "position": [
+            400.5705477716401,
+            216.769,
+            489.41028697416186
+          ]
+        },
+        {
+          "id": "rock-slope-15",
+          "role": "prop.rock",
+          "name": "rock-slope-15",
+          "scale": 1.4,
+          "collision": true,
+          "rotationYDeg": 197,
+          "position": [
+            -154.40249100560322,
+            119.868,
+            449.4997832318768
+          ]
+        },
+        {
+          "id": "rock-slope-16",
+          "role": "prop.rock",
+          "name": "rock-slope-16",
+          "scale": 2.08,
+          "collision": true,
+          "rotationYDeg": 68,
+          "position": [
+            271.50767450686544,
+            157.497,
+            391.5473392372951
+          ]
+        },
+        {
+          "id": "rock-slope-19",
+          "role": "prop.rock",
+          "name": "rock-slope-19",
+          "scale": 1.8,
+          "collision": true,
+          "rotationYDeg": 189,
+          "position": [
+            -191.34785532485694,
+            136.247,
+            267.9980313987471
+          ]
+        },
+        {
+          "id": "rock-slope-20",
+          "role": "prop.rock",
+          "name": "rock-slope-20",
+          "scale": 1.55,
+          "collision": true,
+          "rotationYDeg": 61,
+          "position": [
+            -134.1346048959531,
+            118.122,
+            35.87835540063679
+          ]
+        },
+        {
+          "id": "rock-slope-21",
+          "role": "prop.rock",
+          "name": "rock-slope-21",
+          "scale": 1.62,
+          "collision": true,
+          "rotationYDeg": 31,
+          "position": [
+            -456.2568518333137,
+            240.778,
+            -206.63501834962517
+          ]
+        },
+        {
+          "id": "rock-river-6",
+          "role": "prop.rock",
+          "name": "rock-river-6",
+          "scale": 0.87,
+          "collision": false,
+          "rotationYDeg": 77,
+          "position": [
+            -0.17107217550815257,
+            97.29,
+            -364.884034935385
+          ]
+        },
+        {
+          "id": "rock-river-7",
+          "role": "prop.rock",
+          "name": "rock-river-7",
+          "scale": 1.18,
+          "collision": false,
+          "rotationYDeg": 225,
+          "position": [
+            -13.358881152679057,
+            91.862,
+            148.314291681163
+          ]
+        },
+        {
+          "id": "rock-river-12",
+          "role": "prop.rock",
+          "name": "rock-river-12",
+          "scale": 1.18,
+          "collision": false,
+          "rotationYDeg": 65,
+          "position": [
+            -4.614746684030889,
+            95.011,
+            -181.06802966445684
+          ]
+        },
+        {
+          "id": "rock-river-16",
+          "role": "prop.rock",
+          "name": "rock-river-16",
+          "scale": 0.72,
+          "collision": false,
+          "rotationYDeg": 236,
+          "position": [
+            2.984024641330379,
+            91.115,
+            220.8250602381304
+          ]
+        },
+        {
+          "id": "rock-river-17",
+          "role": "prop.rock",
+          "name": "rock-river-17",
+          "scale": 0.61,
+          "collision": false,
+          "rotationYDeg": 54,
+          "position": [
+            -5.366252965359285,
+            92.901,
+            30.481556113809347
+          ]
+        }
+      ]
+    }
+  ],
+  "characters": [],
+  "worldSettings": {
+    "backgroundColor": "#a9c9df",
+    "ambientColor": "#ece6da",
+    "ambientIntensity": 1.1
+  },
+  "skyAtmosphere": {
+    "rayleigh": 1.4,
+    "turbidity": 3,
+    "mie": 0.003,
+    "mieDirectionalG": 0.8,
+    "skyLightCapture": {
+      "intensity": 0.5
+    }
+  },
+  "lights": [
+    {
+      "id": "sun",
+      "type": "directional",
+      "position": [
+        3,
+        9,
+        4
+      ],
+      "name": "Sun",
+      "rotation": [
+        -48,
+        35,
+        0
+      ],
+      "color": "#fff4e6",
+      "intensity": 4.2,
+      "castShadow": true
+    }
+  ],
+  "landscapes": [
+    {
+      "id": "valley",
+      "name": "WB Pilot Valley",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "assets/world-pilot/Levels/WbPilotValley.landscapes/valley.terrain.json"
+    }
+  ],
+  "riverWaters": [
+    {
+      "id": "river-water-1",
+      "name": "River",
+      "landscapeRef": "valley",
+      "splineRef": "river",
+      "coordinateSpace": "world",
+      "surfaceLevel": 99.1,
+      "reflectionQuality": "medium"
+    }
+  ]
+}

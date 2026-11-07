@@ -1,10 +1,11 @@
 import { build } from "esbuild";
-import { copyFile, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { access, copyFile, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 
-// Writes the World Builder pilot valley (tools/world/wbPilotValley.ts) into
-// public/. Generated output is gitignored: regenerate it, never commit it.
-// Rerunning overwrites it, dropping edits made in the editor.
+// Writes the World Builder pilot valley (tools/world/wbPilotValley.ts) under
+// public/assets/world-pilot/Levels/, where the Content Browser lists it. The
+// level is then edited in the editor and committed, so an existing level is
+// kept unless `--force` is given: regenerating drops every edit made since.
 const root = await realpath("public");
 const withinPublic = (path) => {
   const absolute = resolve(root, path);
@@ -27,6 +28,10 @@ const {
   terrainTilePath, terrainGlobalMapPath, worldRecipePath,
 } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 
+if (!process.argv.includes("--force") && await access(withinPublic(WB_PILOT_LEVEL)).then(() => true, () => false)) {
+  console.error(`[world:pilot] ${WB_PILOT_LEVEL} exists; it may hold editor changes. Rerun with --force to rebuild it from scratch.`);
+  process.exit(1);
+}
 const neutral = JSON.parse(await readFile("tests/engine/fixtures/neutral.regionprofile.json", "utf8"));
 const profile = pilotRegionProfile(neutral);
 const valley = generateWbPilotValley(profile);
@@ -57,4 +62,4 @@ for (const spline of valley.def.splines ?? []) {
   });
   console.log(`[world:pilot] spline ${spline.id}: ${points.length} points, ${Math.round(length)} m, steepest ${steepest.toFixed(1)}°`);
 }
-console.log(`[world:pilot] ${WB_PILOT_LEVEL}: roads added ${added.join(", ")}, cabin ground ${valley.cabinHeight} m.`);
+console.log(`[world:pilot] ${WB_PILOT_LEVEL}: roads added ${added.join(", ")}, cabin ground ${valley.cabinHeight} m. Open it from the Content Browser.`);

@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "type": "foliage",
+  "groups": [],
+  "landscapeRules": [
+    {
+      "id": "forest-conifer-a",
+      "landscapeId": "valley",
+      "layerId": "forest",
+      "foliageTypeId": "wp-conifer-a-type",
+      "density": 0.0035,
+      "minWeight": 0.6,
+      "seed": 101
+    },
+    {
+      "id": "forest-conifer-b",
+      "landscapeId": "valley",
+      "layerId": "forest",
+      "foliageTypeId": "wp-conifer-b-type",
+      "density": 0.0025,
+      "minWeight": 0.45,
+      "seed": 102
+    },
+    {
+      "id": "forest-bush",
+      "landscapeId": "valley",
+      "layerId": "forest",
+      "foliageTypeId": "wp-bush-a-type",
+      "density": 0.0015,
+      "minWeight": 0.5,
+      "seed": 103
+    },
+    {
+      "id": "meadow-bush",
+      "landscapeId": "valley",
+      "layerId": "meadow",
+      "foliageTypeId": "wp-bush-a-type",
+      "density": 0.0006,
+      "minWeight": 0.6,
+      "seed": 104
+    },
+    {
+      "id": "meadow-grass",
+      "landscapeId": "valley",
+      "layerId": "meadow",
+      "foliageTypeId": "wp-grass-a-type",
+      "density": 0.05,
+      "minWeight": 0.5,
+      "seed": 105
+    }
+  ]
+}

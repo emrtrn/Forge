@@ -9,9 +9,11 @@ karar 20–22.
 
 ## Üretim
 
-`npm run world:pilot` sahneyi editörsüz üretir: `public/layouts/WbPilotValley.*`
-(gitignore'da; üretici `tools/world/wbPilotValley.ts`, yeniden çalıştırmak editörde
-yapılan değişiklikleri siler). Greybox modelleri `art/world-pilot/wp_greybox.py`
+`npm run world:pilot` sahneyi editörsüz üretir:
+`public/assets/world-pilot/Levels/WbPilotValley.level.json` (Content Browser'da
+görünür, editörde düzenlenip commit'lenir; üretici `tools/world/wbPilotValley.ts`).
+Var olan level'ın üstüne yazmaz; `npm run world:pilot -- --force` sıfırdan kurar ve
+editörde yapılan değişiklikleri siler. Greybox modelleri `art/world-pilot/wp_greybox.py`
 üretir. Foliage tipleri `public/assets/world-pilot/foliage/*.foliagetype.json`
 dosyalarıdır; hazır model gelince yalnız `meshAssetId` değişir.
 

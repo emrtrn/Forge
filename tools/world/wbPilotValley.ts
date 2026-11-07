@@ -13,7 +13,8 @@
  * real `roads` stage, spline bake and pad bake, the same code the editor runs.
  *
  * Pure and deterministic. `npm run world:pilot` writes the result under
- * `public/layouts/`. Generated, never committed.
+ * `public/assets/world-pilot/Levels/`, where it is edited and committed like any
+ * level; it never overwrites an existing one without `--force`.
  */
 import { terrainHeightAt } from "../../engine/terrain/terrainHeightQuery";
 import { encodeTerrainGlobalMap } from "../../engine/terrain/terrainGlobalMapFile";
@@ -39,11 +40,13 @@ import { planStage, type StagePlan, type StageTerrain } from "../../engine/world
 import { roadsStage } from "../../engine/worldbuilder/stages/roads";
 import { fbm, ridged } from "./testWorld";
 
-export const WB_PILOT_LEVEL = "layouts/WbPilotValley.level.json";
-export const WB_PILOT_TERRAIN = "layouts/WbPilotValley.landscapes/valley.terrain.json";
-export const WB_PILOT_PROFILE = "layouts/WbPilotValley.regionprofile.json";
-export const WB_PILOT_REFERENCE = "layouts/WbPilotValley.reference.png";
-export const WB_PILOT_FOLIAGE = "layouts/WbPilotValley.foliage.json";
+/** Under assets/, so the Content Browser lists the level and the editor saves it in place. */
+const WB_PILOT_DIR = "assets/world-pilot/Levels";
+export const WB_PILOT_LEVEL = `${WB_PILOT_DIR}/WbPilotValley.level.json`;
+export const WB_PILOT_TERRAIN = `${WB_PILOT_DIR}/WbPilotValley.landscapes/valley.terrain.json`;
+export const WB_PILOT_PROFILE = `${WB_PILOT_DIR}/WbPilotValley.regionprofile.json`;
+export const WB_PILOT_REFERENCE = `${WB_PILOT_DIR}/WbPilotValley.reference.png`;
+export const WB_PILOT_FOLIAGE = `${WB_PILOT_DIR}/WbPilotValley.foliage.json`;
 export const WB_PILOT_TERRAIN_ID = "valley";
 
 const TILES = 8;

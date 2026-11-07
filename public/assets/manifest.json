@@ -22437,29 +22437,6 @@
       "license": "Unknown"
     },
     {
-      "id": "mtest-material",
-      "name": "Mtest.Material",
-      "assetType": "material",
-      "category": "Environment",
-      "path": "assets/starter-content/StaticMeshes/Environment/mtest.material.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Environment",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 679
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "wp-conifer-a-type",
       "name": "WP Conifer A",
       "assetType": "foliageType",
@@ -22794,6 +22771,837 @@
         "origin": "forge",
         "pack": "World Builder pilot",
         "path": "art/world-pilot/wp_greybox.py"
+      }
+    },
+    {
+      "id": "wbpilotvalley-level",
+      "name": "WB Pilot Valley.Level",
+      "assetType": "level",
+      "category": "Levels",
+      "path": "assets/world-pilot/Levels/WbPilotValley.level.json",
+      "tags": [
+        "world-pilot"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "Levels",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 49858
+      },
+      "license": "Project-local pilot data"
+    },
+    {
+      "id": "forest-lowpolyprop-01",
+      "name": "Forest Low Poly Prop 01",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyProp_01.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "prop"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6864804
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolyprop-02",
+      "name": "Forest Low Poly Prop 02",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyProp_02.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "prop"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6865916
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolyprop-03",
+      "name": "Forest Low Poly Prop 03",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyProp_03.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "prop"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6868220
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolyprop-04",
+      "name": "Forest Low Poly Prop 04",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyProp_04.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "prop"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6865400
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolyprop-05",
+      "name": "Forest Low Poly Prop 05",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyProp_05.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "prop"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6867072
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolytree-01",
+      "name": "Forest Low Poly Tree 01",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyTree_01.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6868772
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolytree-02",
+      "name": "Forest Low Poly Tree 02",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyTree_02.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6868400
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolytree-03",
+      "name": "Forest Low Poly Tree 03",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyTree_03.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6866148
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolytree-04",
+      "name": "Forest Low Poly Tree 04",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyTree_04.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6868772
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolytree-05",
+      "name": "Forest Low Poly Tree 05",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyTree_05.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6868768
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolytree-06",
+      "name": "Forest Low Poly Tree 06",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyTree_06.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6868768
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolytree-07",
+      "name": "Forest Low Poly Tree 07",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyTree_07.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6869136
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-lowpolytree-08",
+      "name": "Forest Low Poly Tree 08",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_LowPolyTree_08.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 6868768
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-01",
+      "name": "Forest Rock 01",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_01.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2589720
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-02",
+      "name": "Forest Rock 02",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_02.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2593220
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-03",
+      "name": "Forest Rock 03",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_03.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2590844
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-04",
+      "name": "Forest Rock 04",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_04.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2589948
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-05",
+      "name": "Forest Rock 05",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_05.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2590060
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-06",
+      "name": "Forest Rock 06",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_06.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2591944
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-07",
+      "name": "Forest Rock 07",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_07.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2592020
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-08",
+      "name": "Forest Rock 08",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_08.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2590548
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-rock-09",
+      "name": "Forest Rock 09",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Rock_09.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "rock"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 2590452
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tree-01",
+      "name": "Forest Tree 01",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Tree_01.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3506376
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tree-02",
+      "name": "Forest Tree 02",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Tree_02.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3511024
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tree-03",
+      "name": "Forest Tree 03",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Tree_03.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3000192
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
+      }
+    },
+    {
+      "id": "forest-tree-04",
+      "name": "Forest Tree 04",
+      "assetType": "staticMesh",
+      "category": "Environment",
+      "path": "assets/starter-content/StaticMeshes/Environment/Forest_Tree_04.glb",
+      "tags": [
+        "forest",
+        "environment",
+        "tree"
+      ],
+      "placeable": true,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": true,
+        "allowScale": true
+      },
+      "runtime": {
+        "loadGroup": "Environment",
+        "castShadow": true,
+        "receiveShadow": true,
+        "collision": true,
+        "bytes": 3498752
+      },
+      "license": "Unknown",
+      "source": {
+        "origin": "Low Poly Forest Tree Pack",
+        "path": "Tree_Pack.blend"
       }
     }
   ]

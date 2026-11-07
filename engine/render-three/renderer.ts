@@ -1,4 +1,4 @@
-import { PCFSoftShadowMap, WebGLRenderer } from "three";
+import { PCFShadowMap, WebGLRenderer } from "three";
 
 export interface RenderStats {
   drawCalls: number;
@@ -30,7 +30,11 @@ export function createSceneRenderer(
   });
   renderer.setPixelRatio(Math.min(devicePixelRatio, maxPixelRatio));
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = PCFSoftShadowMap;
+  // PCF from the start: three r187 removed PCFSoftShadowMap and switches it to PCF
+  // only on the first shadow render. Shaders compiled before that (boot shader
+  // warm-up) declare a plain `sampler2D` shadow map; bound to the compare depth
+  // texture far view mode uses, their draw fails and the terrain disappears.
+  renderer.shadowMap.type = PCFShadowMap;
   // Draw statistics are per frame, not per `render()` call: the frame owner
   // resets them with `beginRenderStatsFrame`. three's automatic reset runs at
   // the start of every `render()` and after its shadow pass, so a composer

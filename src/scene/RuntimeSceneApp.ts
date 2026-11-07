@@ -5064,11 +5064,31 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
 
   /** Shared by actor preparation and terrain's boot preparation. */
   private streamingSpawnPosition(spawnTag?: string): readonly [number, number, number] {
+    // A vehicle pawn is the level's first Vehicle actor, wherever it was placed:
+    // load the ground and cells under it, not around the Player Start or the camera.
+    if (this.activeGameMode?.defaultPawn.kind === "vehicle") {
+      const vehicle = this.firstVehicleActorPosition();
+      if (vehicle) return vehicle;
+    }
     const hasPawn = this.activeGameMode?.defaultPawn.kind === "character";
     const spawn = hasPawn && this.layout ? computePlayerStartSpawn(this.layout, spawnTag) : null;
     const actor = hasPawn ? [...this.placedActorModelEntities, ...this.actorEntities]
       .find((entity) => readCharacterMovementComponent(entity) && !readAIControllerComponent(entity)) : undefined;
     return spawn?.position ?? (actor ? readTransformComponent(actor)?.position : undefined) ?? this.camera.position.toArray();
+  }
+
+  /** Where the level's first `Vehicle` actor is placed, in level order (cell actors included). */
+  private firstVehicleActorPosition(): [number, number, number] | null {
+    const actors = this.layout?.actors ?? [];
+    for (let index = 0; index < actors.length; index += 1) {
+      const def = this.placedActorClasses[index];
+      if (!def) continue;
+      const entity = actorInstanceToEntity(def, actors[index]!, index);
+      if (entity.components[VEHICLE_COMPONENT] === undefined) continue;
+      const position = readTransformComponent(entity)?.position;
+      if (position) return [position[0], position[1], position[2]];
+    }
+    return null;
   }
 
   private activatePartitionActor(index: number): void {
@@ -6300,6 +6320,31 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   }
 
   /**
+   * Loads the default material slots (`*.materials.json`) and their materials for
+   * assets that are not in `layout.instances`, which `loadSceneMaterials` covers.
+   * Spline meshes and foliage types use models directly; one whose look comes from
+   * a slot assignment (an asphalt road, a tree whose GLB carries plain-white
+   * materials) would otherwise render untextured.
+   */
+  private async loadDefaultMaterialSlots(assetIds: Iterable<string>): Promise<void> {
+    const manifest = this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
+    if (!manifest) return;
+    await Promise.all(
+      [...assetIds].map(async (assetId) => {
+        if (this.assetMaterialSlots.has(assetId)) return;
+        const asset = manifest.assets.find((entry) => entry.id === assetId);
+        if (!asset) return;
+        const slots = await loadAssetMaterialSlots(assetPath(asset));
+        if (!hasAssignedMaterialSlots(slots)) return;
+        this.assetMaterialSlots.set(assetId, slots);
+        await Promise.all(
+          assignedMaterialSlotIds(slots).map((id) => this.ensureMaterialLoaded(id).catch(() => undefined)),
+        );
+      }),
+    );
+  }
+
+  /**
    * Loads the level foliage sidecar + its referenced Foliage Types, ensures their
    * static-mesh assets are resident, and builds the InstancedMesh batches for Play.
    * Foliage is decorative-only in Faz 1 (no collision emitted), so this runs purely
@@ -6327,6 +6372,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (missingModels.length > 0 && this.assetLoader) {
       this.storeModels(await this.assetLoader.loadModels(missingModels));
     }
+    await this.loadDefaultMaterialSlots(meshIds);
     const binding = new FoliageRenderBinding({ windSwayUniforms: this.windSwayUniforms });
     this.scene.add(tagSceneSource(binding.root, "foliage"));
     const ringRules: ProceduralFoliageRuleSource[] = [];
@@ -6407,26 +6453,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     if (missingModels.length > 0 && this.assetLoader) {
       this.storeModels(await this.assetLoader.loadModels(missingModels));
     }
-    // Spline assets aren't in `layout.instances`, so `loadSceneMaterials` never
-    // loaded their default material slots. An asset whose look comes from a slot
-    // assignment (e.g. an asphalt road with a plain-white GLTF material) would
-    // otherwise render untextured. Load slots + their materials before building.
+    await this.loadDefaultMaterialSlots(splineAssetIds);
     const manifest = this.assetManifest ?? (this.assetLoader ? await this.assetLoader.loadManifest() : null);
-    if (manifest) {
-      await Promise.all(
-        [...splineAssetIds].map(async (assetId) => {
-          if (this.assetMaterialSlots.has(assetId)) return;
-          const asset = manifest.assets.find((entry) => entry.id === assetId);
-          if (!asset) return;
-          const slots = await loadAssetMaterialSlots(assetPath(asset));
-          if (!hasAssignedMaterialSlots(slots)) return;
-          this.assetMaterialSlots.set(assetId, slots);
-          await Promise.all(
-            assignedMaterialSlotIds(slots).map((id) => this.ensureMaterialLoaded(id).catch(() => undefined)),
-          );
-        }),
-      );
-    }
     for (const { actor, data, object } of sources) {
       if (!object || !data) continue;
       const built = buildLandscapeSplineMeshGroup({

@@ -105,6 +105,24 @@ export interface BriefValleySection {
   rock: [number, number];
 }
 
+/** Valley relief, metres (`engine/worldbuilder/briefTerrain.ts` reads it). */
+export interface BriefValleyRelief {
+  /** Horizontal distance over which the floor eases into the side slope. */
+  slopeFoot: number;
+  /** Spurs and gullies running down the slopes. */
+  spurs: number;
+  /** Broken ground above the rock line. */
+  ridges: number;
+  /** General roughness of the slopes. */
+  noise: number;
+}
+
+export const DEFAULT_VALLEY_RELIEF: Readonly<BriefValleyRelief> = { slopeFoot: 18, spurs: 26, ridges: 16, noise: 10 };
+const VALLEY_RELIEF_KEYS = ["slopeFoot", "spurs", "ridges", "noise"] as const;
+const VALLEY_FIELDS = new Set([
+  "id", "axis", "sections", "floorProfile", "sideSlopeDeg", "relief", "ridgeElevation", "slopeCover", "source", "confidence",
+]);
+
 export interface BriefValley extends BriefProvenance {
   id: string;
   axis: ValleyAxis;
@@ -113,6 +131,8 @@ export interface BriefValley extends BriefProvenance {
   /** Floor elevation along the valley, north to south; linear between points. */
   floorProfile: Array<{ north: number; elevation: number }>;
   sideSlopeDeg: number;
+  /** Relief added over the plain valley shape, metres; omitted keys use `DEFAULT_VALLEY_RELIEF`. */
+  relief?: Partial<BriefValleyRelief>;
   ridgeElevation?: [number, number];
   /** Land cover on both sides between the floor and the rock line, such as `forest.conifer`. */
   slopeCover?: string;
@@ -336,6 +356,7 @@ function normalizeTerrain(ctx: Ctx, value: unknown): BriefTerrain | null {
 }
 
 function normalizeValley(ctx: Ctx, path: string, entry: Record<string, unknown>): BriefValley | null {
+  for (const key of Object.keys(entry)) if (!VALLEY_FIELDS.has(key)) issue(ctx, `${path}.${key}`, "is not a valley field");
   const id = requireId(ctx, path, entry.id);
   const axis = isOneOf(VALLEY_AXES, entry.axis) ? entry.axis : reject(ctx, `${path}.axis`, `must be one of ${VALLEY_AXES.join(", ")}`);
   const sections = arrayOf(ctx, `${path}.sections`, entry.sections, (c, p, raw): BriefValleySection | null => {
@@ -363,11 +384,26 @@ function normalizeValley(ctx: Ctx, path: string, entry: Record<string, unknown>)
     if (index > 0 && at.north === floorProfile[index - 1]!.north) issue(ctx, `${path}.floorProfile`, `repeats north ${at.north}`);
   });
   const sideSlopeDeg = requireNumber(ctx, `${path}.sideSlopeDeg`, entry.sideSlopeDeg, 0, 80);
+  const relief = optional(entry.relief, (): Partial<BriefValleyRelief> | null => {
+    const raw = entry.relief;
+    if (!isRecord(raw)) return reject(ctx, `${path}.relief`, "must be an object");
+    const result: Partial<BriefValleyRelief> = {};
+    for (const key of Object.keys(raw)) {
+      if (!(VALLEY_RELIEF_KEYS as readonly string[]).includes(key)) issue(ctx, `${path}.relief.${key}`, "is not a relief field");
+    }
+    for (const key of VALLEY_RELIEF_KEYS) {
+      if (raw[key] === undefined) continue;
+      const value = requireNumber(ctx, `${path}.relief.${key}`, raw[key], 0, 1_000);
+      if (value !== null) result[key] = value;
+    }
+    return result;
+  });
   const ridgeElevation = optional(entry.ridgeElevation, () => eastPair(ctx, `${path}.ridgeElevation`, entry.ridgeElevation));
   const slopeCover = optional(entry.slopeCover, () => requireToken(ctx, `${path}.slopeCover`, entry.slopeCover));
   if (id === null || axis === null || sideSlopeDeg === null) return null;
   return {
     id, axis, sections, floorProfile, sideSlopeDeg,
+    ...(relief && Object.keys(relief).length ? { relief } : {}),
     ...(ridgeElevation ? { ridgeElevation } : {}),
     ...(slopeCover ? { slopeCover } : {}),
     ...provenance(ctx, path, entry),

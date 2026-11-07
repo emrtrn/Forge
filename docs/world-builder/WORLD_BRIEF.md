@@ -34,9 +34,9 @@ Genişlik, derinlik ve ölçüler düz metredir; dönüşüm görmez.
 | `terrain` | Landscape id ve adı, `tileQuads` (64/128/256), `spacing`, `heightRange`; tile sayısı alandan hesaplanır, arazi alanın ortasına oturur |
 | `regionProfile`, `reference` | `*.regionprofile.json` yolu; alanı kaplayan referans görseli |
 | `playerStart` | Oyuncu başlangıcı |
-| `valleys` | Kesitlerle vadi: her kesitte `north`, taban `floor` ve kaya çizgisi `rock` (doğu değerleri), kuzeyden güneye `floorProfile` kotları, `sideSlopeDeg`, `ridgeElevation`, iki yamacın örtüsü `slopeCover` |
+| `valleys` | Kesitlerle vadi: her kesitte `north`, taban `floor` ve kaya çizgisi `rock` (doğu değerleri; kesit aralıkları eşit olmak zorunda değil), kuzeyden güneye `floorProfile` kotları, `sideSlopeDeg`, isteğe bağlı `relief` (`slopeFoot`, `spurs`, `ridges`, `noise` metre; eksik anahtar varsayılanı alır: 18 / 26 / 16 / 10), `ridgeElevation`, iki yamacın örtüsü `slopeCover`. Bilinmeyen vadi ve rölyef alanı reddedilir |
 | `regions` | Ek bölgeler (rol + çokgen) |
-| `water` | Su çizgisi (`line`, akış yönünde) veya göl (`polygon`); `width`, `bedDepth` (yatak, kıyı zemininin altında), `surfaceDepth` (su yüzeyi, kıyının altında) |
+| `water` | Su çizgisi (`line`, akış yönünde; vadi kesitlerine bağlı değil) veya göl (`polygon`); `width`, `bedDepth` (yatak, kıyı zemininin altında), `surfaceDepth` (su yüzeyi, kıyının altında). Bir çizginin yatağı oyulması için üçü de gerekir |
 | `roads` | `nodes` (uç, kavşak, kapı) ve `edges` (`roadClass`, isteğe bağlı `corridor` ipucu) |
 | `landmarks` | Rol + konum; isteğe bağlı düzlenmiş zemin `pad: { size, falloff }` |
 | `settlements` | Yerleşimler (tür, merkez, yarıçap, nüfus) |
@@ -67,18 +67,32 @@ npm.cmd run world:brief -- assets/world-pilot/Levels/WbPilotValley.worldbrief.js
 
 ## Sıra
 
-özet → recipe planı (`worldBriefRecipe`) → geçici arazi adımları → aşamalar (`planStage`,
-bugün `roads`) → yol spline'larının araziye bake'i → yerleşimler → kayıt-kanonik dosyalar.
+özet → recipe planı (`worldBriefRecipe`) → arazi ve su yatakları (`createBriefTerrain`) →
+boya → düzlenmiş zemin → aşamalar (`planStage`, bugün `roads`) → yol spline'larının araziye
+bake'i → yerleşimler → kayıt-kanonik dosyalar.
 
-**Geçici adımlar** (`tools/world/worldBriefTemporarySteps.ts`): vadi arazisi, nehir yatağı,
-düzlenmiş zemin, boya, bitki kuralları, kaya saçılımı ve kulübe çiti. Özetten beslenirler;
-özette henüz karşılığı olmayan sayılar (rölyef genlikleri, boya katmanları, bitki kuralları,
-kaya sayıları, çit) `PILOT_TUNING`'dedir. Tek vadi + kesitlerle hizalı tek su çizgisi
-dışındaki özetleri açık bir mesajla reddederler. 3. adımda her biri aşamaya dönüşür.
+**Arazi ve su yatakları** (adım 3a, `engine/worldbuilder/briefTerrain.ts`, saf ve
+bağımlılıksız):
+
+- Her vadi kesitlerinden, taban profilinden, yamaç eğiminden ve rölyefinden bir zemin
+  verir; arazi bunların **en alçağıdır**, iki vadi sırtta buluşur. İlk ve son kesitin
+  ötesinde vadi kapanır, zemin yamaç gibi yükselir. Vadisiz özet datumda düzdür.
+- Her su çizgisi, noktalarından geçen yumuşatılmış bir orta hat boyunca yatak oyar
+  (yatak suyun her yanında 1 m geniş, 7 m'de kıyıya geçer). Su seviyesi orta hattın
+  altındaki zemini izler ama **akış yönünde hiç yükselmez**; yatak `bedDepth`, yüzey
+  `surfaceDepth` kadar aşağıdadır. Oyma zemini yalnız alçaltır. Her çizgi bir terrain
+  spline'ı ve bir nehir aktörü olur.
+- Göller oyulmaz, `ridgeElevation` kullanılmaz: ikisi de "not built yet" listesindedir.
+- Editör aşamaları araziye yazmaz (karar 19); bu adımları bugün yalnız `world:brief`
+  çalıştırır, editörde arazi aşaması sonraki dilimdir.
+
+**Geçici adımlar** (`tools/world/worldBriefTemporarySteps.ts`): boya, bitki kuralları,
+kaya saçılımı ve kulübe çiti. Her özeti okurlar ama sayıları (boya katmanları, bitki
+kuralları, kaya sayıları, çit) pilotun `PILOT_TUNING`'idir; 3c–3e'de bölge profiline taşınır.
 
 Henüz level'a yazılmayanlar, çalıştırıcının "not built yet" çıktısında listelenir:
 `environment` (WES bağı; ışık ve renk kullanıcıdadır), `settlements` ve `regions`
-(yalnız recipe planında), `ridgeElevation`.
+(yalnız recipe planında), `ridgeElevation`, göller.
 
 ## Kayıt biçimi
 
@@ -92,7 +106,10 @@ hiçbir dosyayı değiştirmez:
   açıksa foliage dizini `foliageCells: []` taşır. Arazi tanımı `normalizeWorldTerrain` ile.
 - Konumlar milimetreye yuvarlanır; varsayılan `collision: true` yazılmaz.
 
-Doğrulama: `tests/engine/wbPilotValley.test.ts` (iki derleme bayt bayt aynı, partition'lı
+Doğrulama: `tests/engine/briefTerrain.test.ts` (iki vadi sırtta buluşur, eşit olmayan
+kesitler, kapanan vadi ucu, rölyefsiz yamaç tam formül, kesitlere hizasız dere yatağını
+oyar ve yokuş yukarı akmaz, göl raporlanır, belirlenimcilik, bilinmeyen alan reddi),
+`tests/engine/wbPilotValley.test.ts` (iki derleme bayt bayt aynı, partition'lı
 level geri okunup yeniden kaydedilince aynı dosyalar, dosya katmanı, `--force`) ve
 `tests/smoke/world-brief.spec.ts` (gerçek editörde aç + Save: partition'lı ve partition'sız
 level'da hiçbir dosya değişmiyor).
@@ -114,8 +131,9 @@ Kullanıcının pilot level'daki düzenlemeleri (World Partition, `forge.vehicle
 
 ## Sonraki adımlar
 
-3. Geçici adımlar aşamaya dönüşür: makro arazi, nehir yatağı + su, boya, bitki kuralları,
-   ped. `PILOT_TUNING` özete veya bölge profiline taşınır.
+3. Geçici adımlar genelleşir. ~~3a makro arazi + su yatakları~~ (`briefTerrain.ts`, 7 Kasım).
+   Sırada: 3b göl yatağı ve `ridgeElevation`; 3c boya, 3d bitki kuralları, 3e kaya/prop
+   saçılımı bölge profiline (`PILOT_TUNING` kalkar); 3f editörde arazi aşaması + tek undo.
 4. T41 model listesi ve rol → model bağlama (`models` satırları, §13.7).
 
 Ölçüt: ikinci bir dünya yalnız yeni bir özet dosyasıyla, kod yazmadan üretilebilir.

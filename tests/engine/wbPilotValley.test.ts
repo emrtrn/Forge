@@ -91,11 +91,18 @@ export async function registerWbPilotValleyTests(check: Check, checkSlowAsync: C
   });
 
   check("wb pilot valley: the water stays below both banks and the cabin stands on level ground", () => {
-    const { sampleHeight, land, padHeights } = pilot();
-    for (const { z } of land.rows.slice(1, -1)) {
-      const surface = land.riverSurface(z);
-      assert.ok(sampleHeight(land.riverX(z), z)! < surface, `bed under the water at z ${z}`);
-      assert.ok(sampleHeight(land.riverX(z) + 14, z)! > surface, `east bank above the water at z ${z}`);
+    const { sampleHeight, ground, padHeights, layout } = pilot();
+    assert.deepEqual(ground.courses.map((course) => course.id), ["river"]);
+    assert.deepEqual((layout as unknown as { riverWaters: Array<{ splineRef: string }> }).riverWaters.map((water) => water.splineRef), ["river"]);
+    for (const course of ground.courses) {
+      for (const anchor of course.anchors.slice(1, -1)) {
+        const [x, z] = course.points[anchor]!;
+        const surface = course.surface[anchor]!;
+        assert.ok(sampleHeight(x, z)! < surface, `bed under the water at ${x}, ${z}`);
+        assert.ok(sampleHeight(x - 14, z)! > surface, `west bank above the water at ${x}, ${z}`);
+        assert.ok(sampleHeight(x + 14, z)! > surface, `east bank above the water at ${x}, ${z}`);
+      }
+      course.surface.slice(1).forEach((level, index) => assert.ok(level <= course.surface[index]!, `${course.id} never flows uphill`));
     }
     const cabin = briefToWorld(brief(), brief().landmarks.find((landmark) => landmark.id === "cabin")!.at);
     for (const [dx, dz] of [[0, 0], [10, 10], [-10, 10], [10, -10], [-10, -10]] as const) {

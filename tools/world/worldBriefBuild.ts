@@ -3,8 +3,9 @@
  * a `*.worldbrief.json` without the editor, and writes it the way the editor's
  * Save Layout does, so opening and saving it in the editor changes no file.
  *
- * Order: brief → recipe plan → temporary terrain steps (heights, paint, level
- * ground, river line; `worldBriefTemporarySteps.ts`) → World Builder stages via
+ * Order: brief → recipe plan → valley ground and water beds
+ * (`engine/worldbuilder/briefTerrain.ts`) → temporary paint
+ * (`worldBriefTemporarySteps.ts`) → level ground → World Builder stages via
  * `planStage` (today `roads`) → road splines baked into the terrain → placements
  * → save-canonical files. The level, its World Partition cells, the recipe and
  * the foliage sidecar go through the same validators as the dev save endpoints
@@ -62,18 +63,18 @@ import {
   validateSaveWorldCellsPayload,
   validateSaveWorldRecipePayload,
 } from "../saveValidator";
+import { createBriefTerrain, type BriefTerrain } from "../../engine/worldbuilder/briefTerrain";
 import {
-  briefLandscape,
+  paintWeights,
   plantRules,
   PILOT_TUNING,
-  riverSpline,
   scatterRocks,
+  waterSpline,
   yardFences,
-  type BriefLandscape,
   type ScatterPlacement,
 } from "./worldBriefTemporarySteps";
 
-/** World Builder stages the runner applies, in order. Step 3 adds terrain, water, paint, plants and pads. */
+/** World Builder stages the runner applies, in order. Terrain and water are built before them (`briefTerrain.ts`). */
 export const WORLD_BRIEF_STAGES: readonly WorldStage[] = [roadsStage];
 
 /** Greybox look until the user sets the light and colour in the editor; never tuned here. */
@@ -111,7 +112,8 @@ export interface WorldBriefBuild {
   recipe: WorldRecipe;
   foliage: Record<string, unknown>;
   stages: StagePlan[];
-  land: BriefLandscape;
+  /** Valley ground and water courses (`engine/worldbuilder/briefTerrain.ts`). */
+  ground: BriefTerrain;
   /** Height of each landmark's level ground, by id. */
   padHeights: Record<string, number>;
   sampleHeight: (x: number, z: number) => number | null;
@@ -200,7 +202,9 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   const deferred: string[] = [];
   const models = modelResolver(brief.models, input.assetIdForFile);
   const bounds = briefWorldBounds(brief);
-  const land = briefLandscape(brief);
+  const ground = createBriefTerrain(brief);
+  const weights = paintWeights(brief, ground);
+  const waterIds = new Set(ground.courses.map((course) => course.id));
 
   // Terrain: tiles cover the area, centred on it.
   const { terrain } = brief;
@@ -226,8 +230,8 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
       for (let i = 0; i < size; i += 1) {
         const worldX = def.origin[0] + (tile.x * terrain.tileQuads + i) * terrain.spacing;
         const worldZ = def.origin[2] + (tile.z * terrain.tileQuads + j) * terrain.spacing;
-        tile.heights[j * size + i] = land.baseHeight(worldX, worldZ);
-        writeWeights(tile, j * size + i, land.weights(worldX, worldZ));
+        tile.heights[j * size + i] = ground.height(worldX, worldZ);
+        writeWeights(tile, j * size + i, weights(worldX, worldZ));
       }
     }
     return tile;
@@ -241,7 +245,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   for (const landmark of brief.landmarks) {
     if (!landmark.pad) continue;
     const [cx, cz] = briefToWorld(brief, landmark.at);
-    const height = Number(land.baseHeight(cx, cz).toFixed(2));
+    const height = Number(ground.height(cx, cz).toFixed(2));
     const [halfX, halfZ] = [landmark.pad.size[0] / 2, landmark.pad.size[1] / 2];
     padHeights[landmark.id] = height;
     pads.push({
@@ -253,7 +257,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   if (pads.length) applyTerrainUndoPatches(world, createTerrainPadPatches(world, pads));
 
   // Stages: each sees the recipe and splines the previous one left.
-  def.splines = [riverSpline(land)];
+  def.splines = ground.courses.map(waterSpline);
   let recipe = worldBriefRecipe(brief);
   const layoutForStages = { schema: 1, name: levelName(levelPath), loadGroups: [], instances: [], characters: [] } as unknown as RoomLayout;
   const stages: StagePlan[] = [];
@@ -275,7 +279,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     stages.push(plan);
   }
   for (const spline of def.splines) {
-    if (spline.id === land.river.id || spline.coordinateSpace !== "world") continue;
+    if (waterIds.has(spline.id) || spline.coordinateSpace !== "world") continue;
     applyTerrainUndoPatches(world, createTerrainSplinePatches(world, spline as WorldTerrainSpline));
   }
 
@@ -318,7 +322,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
       rotationYDeg: prop.rotationDeg, scale: prop.scale, collision: prop.collision,
     });
   }
-  const scatter: ScatterPlacement[] = [...yardFences(brief), ...scatterRocks(brief, land, bounds)];
+  const scatter: ScatterPlacement[] = [...yardFences(brief), ...scatterRocks(brief, ground, bounds)];
   for (const entry of scatter) {
     const assetId = models.assetId(entry.role, entry.variant, entry.pick);
     if (!assetId) throw new Error(`temporary scatter: no model row for ${entry.role}${entry.variant ? ` (${entry.variant})` : ""}`);
@@ -331,7 +335,6 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   const terrainPath = `${levelTerrainDir(levelPath)}/${terrain.id}.terrain.json`;
   const worldSettings: Record<string, unknown> = { ...GREYBOX_LOOK.worldSettings };
   if (input.partition !== undefined) worldSettings.partition = structuredClone(input.partition);
-  const firstRow = land.rows[0]!;
   const layout = {
     schema: 1,
     name: levelName(levelPath),
@@ -348,10 +351,10 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     skyAtmosphere: structuredClone(GREYBOX_LOOK.skyAtmosphere),
     lights: structuredClone(GREYBOX_LOOK.lights),
     landscapes: [{ id: terrain.id, name: terrain.name, position: worldTerrainActorPosition(def), dataRef: terrainPath }],
-    riverWaters: [{
-      id: `${land.river.id}-water-1`, name: title(land.river.id), landscapeRef: terrain.id, splineRef: land.river.id, coordinateSpace: "world",
-      surfaceLevel: Number(land.riverSurface(firstRow.z).toFixed(3)), reflectionQuality: "medium",
-    }],
+    riverWaters: ground.courses.map((course) => ({
+      id: `${course.id}-water-1`, name: title(course.id), landscapeRef: terrain.id, splineRef: course.id, coordinateSpace: "world",
+      surfaceLevel: Number(course.surface[0]!.toFixed(3)), reflectionQuality: "medium",
+    })),
   } as unknown as RoomLayout;
 
   // Save-canonical files.
@@ -377,7 +380,8 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   if (brief.environment) deferred.push("environment: season/weather/hour are read, not written to the level yet (WES link, plan §12)");
   if (brief.settlements.length) deferred.push("settlements: in the recipe plan; no settlement stage runs yet");
   if (brief.regions.length) deferred.push("regions: in the recipe plan only");
-  for (const valley of brief.valleys) if (valley.ridgeElevation) deferred.push(`valleys.${valley.id}.ridgeElevation: not used by the temporary terrain step`);
+  deferred.push(...ground.deferred);
+  for (const valley of brief.valleys) if (valley.ridgeElevation) deferred.push(`valleys.${valley.id}.ridgeElevation: not used by the terrain step yet`);
 
   return {
     files,
@@ -390,7 +394,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     recipe: canonicalRecipe,
     foliage,
     stages,
-    land,
+    ground,
     padHeights,
     sampleHeight,
     warnings,

@@ -1,35 +1,28 @@
 /**
  * Temporary steps of `world:brief` (docs/world-builder/WORLD_BRIEF.md): the
- * pilot's hand-written terrain, river bed, level ground, paint, plant rules and
- * scatter, moved out of the old one-off generator and fed from the brief. Step 3
- * of the pilot plan turns each of them into a World Builder stage; until then
- * they cover what the pilot needs and refuse other briefs with a clear message.
- *
- * What the brief does not say yet (relief amplitudes, paint layers, plant
- * rules, rock counts, the yard fence) is `PILOT_TUNING`. Pure and deterministic.
+ * pilot's paint, plant rules, rock scatter and yard fence. Pilot step 3 turns
+ * each into a World Builder step; the terrain and the water beds already moved
+ * to `engine/worldbuilder/briefTerrain.ts` (step 3a). They read any brief, but
+ * their numbers (`PILOT_TUNING`: paint layers, plant rules, rock counts, the
+ * fence) are the pilot's until they move to the region profile (steps 3c–3e).
+ * Pure and deterministic.
  */
 import type { WorldTerrainLayerDef, WorldTerrainSpline } from "../../engine/terrain/terrainTypes";
+import { WATER_BED_MARGIN, type BriefTerrain, type WaterCourse } from "../../engine/worldbuilder/briefTerrain";
+import { fbm } from "../../engine/worldbuilder/noise";
 import type { WorldPoint } from "../../engine/worldbuilder/normalize";
-import { briefElevationToWorld, briefToWorld, type BriefWater, type WorldBrief } from "../../engine/worldbuilder/worldBrief";
-import { fbm, ridged } from "./testWorld";
+import { briefToWorld, type WorldBrief } from "../../engine/worldbuilder/worldBrief";
 
 export const PILOT_TUNING = {
-  /** Horizontal distance over which the valley floor eases into the slope, metres. */
-  slopeFoot: 18,
-  /** Spurs and gullies running down the slopes, and the broken ground of the high rock, metres. */
-  spurRelief: 26,
-  ridgeRelief: 16,
-  relief: 10,
-  riverBedHalfWidth: 5.5,
-  riverBank: 7,
-  riverFalloff: 2,
+  /** Terrain spline falloff of a water line, metres. */
+  waterFalloff: 2,
   meadowFade: [6, 30] as const,
   rockFade: 30,
   /** Open ground around a landmark with level ground. */
   clearingRadius: 38,
   rocksOnHighGround: 90,
   rocksOnSlopes: 24,
-  rocksByRiver: 18,
+  rocksByWater: 18,
   /** Smaller rocks are walked over: no collider. */
   rockCollisionScale: 1.4,
   rockScale: { high: [1.5, 4], slope: [1, 2.5], river: [1, 2] } as const,
@@ -56,151 +49,46 @@ export const PILOT_TUNING = {
   ],
 };
 
-/** The valley at one `z`, world metres, every row the same distance apart. */
-interface ValleyRow {
-  z: number;
-  river: number;
-  floorW: number;
-  floorE: number;
-  rockW: number;
-  rockE: number;
-}
-
-export interface BriefLandscape {
-  rows: readonly ValleyRow[];
-  river: BriefWater;
-  /** World `[z, y]` points of the floor profile, by `z`. */
-  floor: ReadonlyArray<[number, number]>;
-  slope: number;
-  /** Landmarks with level ground, world XZ. */
-  clearings: readonly WorldPoint[];
-  baseHeight(x: number, z: number): number;
-  weights(x: number, z: number): number[];
-  riverX(z: number): number;
-  riverSurface(z: number): number;
-  slopeDistance(x: number, z: number): number;
-  rockEdge(x: number, z: number): number;
-}
-
 function smoothstep(value: number): number {
   const t = Math.min(1, Math.max(0, value));
   return t * t * (3 - 2 * t);
 }
 
-/** Refuses a brief these steps cannot build yet; step 3 replaces them with stages. */
-export function briefLandscape(brief: WorldBrief): BriefLandscape {
-  if (brief.valleys.length !== 1) throw new Error(`temporary terrain step: needs exactly one valley, the brief has ${brief.valleys.length}`);
-  const valley = brief.valleys[0]!;
-  const rivers = brief.water.filter((water) => water.line);
-  if (rivers.length !== 1) throw new Error(`temporary terrain step: needs exactly one water line, the brief has ${rivers.length}`);
-  const river = rivers[0]!;
-  if (river.bedDepth === undefined || river.surfaceDepth === undefined || river.width === undefined) {
-    throw new Error(`temporary terrain step: water ${river.id} needs width, bedDepth and surfaceDepth`);
-  }
-  const line = river.line!;
-  if (line.length !== valley.sections.length) {
-    throw new Error(`temporary terrain step: water ${river.id} must have one point on each valley section`);
-  }
-  const rows: ValleyRow[] = valley.sections.map((section, index) => {
-    if (line[index]![1] !== section.north) {
-      throw new Error(`temporary terrain step: water ${river.id} point ${index} is not on the section at north ${section.north}`);
-    }
-    const [floorW, z] = briefToWorld(brief, [section.floor[0], section.north]);
-    return {
-      z,
-      river: briefToWorld(brief, line[index]!)[0],
-      floorW,
-      floorE: briefToWorld(brief, [section.floor[1], section.north])[0],
-      rockW: briefToWorld(brief, [section.rock[0], section.north])[0],
-      rockE: briefToWorld(brief, [section.rock[1], section.north])[0],
-    };
-  });
-  const step = rows[1]!.z - rows[0]!.z;
-  rows.forEach((row, index) => {
-    if (index > 0 && Math.abs(row.z - rows[index - 1]!.z - step) > 1e-6) {
-      throw new Error("temporary terrain step: valley sections must be the same distance apart");
-    }
-  });
-  const floor = valley.floorProfile
-    .map(({ north, elevation }): [number, number] => [briefToWorld(brief, [0, north])[1], briefElevationToWorld(brief, elevation)])
-    .sort((a, b) => a[0] - b[0]);
-  const slope = Math.tan(valley.sideSlopeDeg * Math.PI / 180);
-  const clearings = brief.landmarks.filter((landmark) => landmark.pad).map((landmark) => briefToWorld(brief, landmark.at));
-  const seed = brief.seed;
+/** Landmarks with level ground, world XZ. */
+export function briefClearings(brief: WorldBrief): WorldPoint[] {
+  return brief.landmarks.filter((landmark) => landmark.pad).map((landmark) => briefToWorld(brief, landmark.at));
+}
+
+/** Paint weights in `PILOT_TUNING.layers` order. */
+export function paintWeights(brief: WorldBrief, terrain: BriefTerrain): (x: number, z: number) => number[] {
   const tuning = PILOT_TUNING;
-  const bedDepth = river.bedDepth;
-  const surfaceDepth = river.surfaceDepth;
-
-  /** Catmull-Rom through the rows, so the section spacing leaves no kinks. */
-  const rowValue = (z: number, read: (row: ValleyRow) => number): number => {
-    const last = rows.length - 1;
-    const position = Math.min(last, Math.max(0, (z - rows[0]!.z) / step));
-    const index = Math.min(last - 1, Math.floor(position));
-    const t = position - index;
-    const value = (at: number): number => read(rows[Math.min(last, Math.max(0, at))]!);
-    const [a, b, c, d] = [value(index - 1), value(index), value(index + 1), value(index + 2)];
-    return 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
-  };
-  /** Linear along the profile, extended past its ends. */
-  const floorLevel = (z: number): number => {
-    if (floor.length === 1) return floor[0]![1];
-    let index = 0;
-    while (index < floor.length - 2 && z > floor[index + 1]![0]) index += 1;
-    const [z0, y0] = floor[index]!;
-    const [z1, y1] = floor[index + 1]!;
-    return y0 + (y1 - y0) * (z - z0) / (z1 - z0);
-  };
-  const riverX = (z: number): number => rowValue(z, (row) => row.river);
-  const riverSurface = (z: number): number => floorLevel(z) - surfaceDepth;
-  const slopeDistance = (x: number, z: number): number => {
-    const west = rowValue(z, (row) => row.floorW);
-    const east = rowValue(z, (row) => row.floorE);
-    return x < west ? west - x : x > east ? x - east : 0;
-  };
-  /** Distance past the rock line on this point's side of the valley; negative below it. */
-  const rockEdge = (x: number, z: number): number =>
-    x < riverX(z) ? rowValue(z, (row) => row.rockW) - x : x - rowValue(z, (row) => row.rockE);
-
-  const baseHeight = (x: number, z: number): number => {
-    const out = slopeDistance(x, z);
-    const rise = slope * (Math.hypot(out, tuning.slopeFoot) - tuning.slopeFoot);
-    const spurs = tuning.spurRelief * smoothstep(out / 240) * fbm(x / 420, z / 150, 3, seed + 3);
-    const rocky = tuning.ridgeRelief * smoothstep((rockEdge(x, z) + 60) / 120) * ridged(x / 150, z / 110, 4, seed + 5);
-    const relief = tuning.relief * smoothstep(out / 160) * fbm(x / 130, z / 130, 4, seed) + spurs + rocky;
-    const floorRoll = 0.6 * (1 - smoothstep(out / 30)) * fbm(x / 45, z / 45, 2, seed + 7);
-    const ground = floorLevel(z) + rise + relief + floorRoll;
-    const toRiver = Math.abs(x - riverX(z));
-    const bed = 1 - smoothstep((toRiver - tuning.riverBedHalfWidth) / tuning.riverBank);
-    return ground + (floorLevel(z) - bedDepth - ground) * bed;
-  };
-
-  /** Paint weights in `PILOT_TUNING.layers` order. */
-  const weights = (x: number, z: number): number[] => {
-    const wobble = 10 * fbm(x / 35, z / 35, 3, seed + 13);
-    const out = slopeDistance(x, z) + wobble;
-    const rock = smoothstep((rockEdge(x, z) + wobble) / tuning.rockFade);
+  const clearings = briefClearings(brief);
+  return (x, z) => {
+    const wobble = 10 * fbm(x / 35, z / 35, 3, brief.seed + 13);
+    const position = terrain.valleyAt(x, z);
+    const out = (position?.slopeDistance ?? 0) + wobble;
+    const rock = position ? smoothstep((position.rockEdge + wobble) / tuning.rockFade) : 0;
     const clearing = clearings.reduce((most, [cx, cz]) =>
       Math.max(most, 1 - smoothstep((Math.hypot(x - cx, z - cz) + wobble - tuning.clearingRadius) / 12)), 0);
     const forest = smoothstep((out - tuning.meadowFade[0]) / (tuning.meadowFade[1] - tuning.meadowFade[0])) * (1 - clearing);
-    const riverbed = 1 - smoothstep((Math.abs(x - riverX(z)) - tuning.riverBedHalfWidth) / 3);
+    const hit = terrain.water(x, z);
+    const riverbed = hit ? 1 - smoothstep((hit.distance - (hit.course.width / 2 + WATER_BED_MARGIN)) / 3) : 0;
     const open = (1 - rock) * (1 - riverbed);
     return [open * (1 - forest), open * forest, rock * (1 - riverbed), 0, riverbed];
   };
-
-  return { rows, river, floor, slope, clearings, baseHeight, weights, riverX, riverSurface, slopeDistance, rockEdge };
 }
 
-/** The water line as a terrain spline at the water surface; the river actor reads it. */
-export function riverSpline(land: BriefLandscape): WorldTerrainSpline {
-  const points = land.rows.map((row, index) => ({
+/** A water line as a terrain spline at the water surface; its river actor reads it. */
+export function waterSpline(course: WaterCourse): WorldTerrainSpline {
+  const points = course.anchors.map((anchor, index) => ({
     id: `p${index}`,
-    position: [row.river, Number(land.riverSurface(row.z).toFixed(3)), row.z] as [number, number, number],
-    width: land.river.width!,
-    falloff: PILOT_TUNING.riverFalloff,
+    position: [course.points[anchor]![0], Number(course.surface[anchor]!.toFixed(3)), course.points[anchor]![1]] as [number, number, number],
+    width: course.width,
+    falloff: PILOT_TUNING.waterFalloff,
   }));
   return {
-    id: land.river.id,
-    name: land.river.id.charAt(0).toUpperCase() + land.river.id.slice(1),
+    id: course.id,
+    name: course.id.charAt(0).toUpperCase() + course.id.slice(1),
     smooth: true,
     coordinateSpace: "world",
     points,
@@ -256,14 +144,15 @@ export function yardFences(brief: WorldBrief): ScatterPlacement[] {
   return fences;
 }
 
-/** Rocks on the high ground, the slopes and the river banks. `pick` chooses among the variant's models. */
+/** Rocks on the high ground, the slopes and the water banks. `pick` chooses among the variant's models. */
 export function scatterRocks(
   brief: WorldBrief,
-  land: BriefLandscape,
+  terrain: BriefTerrain,
   bounds: { min: WorldPoint; max: WorldPoint },
 ): ScatterPlacement[] {
   const tuning = PILOT_TUNING;
   const random = seededRandom(brief.seed);
+  const clearings = briefClearings(brief);
   const rocks: ScatterPlacement[] = [];
   const rock = (id: string, at: WorldPoint, variant: keyof typeof tuning.rockScale): void => {
     const pick = random();
@@ -278,22 +167,30 @@ export function scatterRocks(
   const half: WorldPoint = [(bounds.max[0] - bounds.min[0]) / 2, (bounds.max[1] - bounds.min[1]) / 2];
   /** Within `margin` metres of the area's edge at most. */
   const span = (axis: 0 | 1, margin: number): number => center[axis] + (random() * 2 - 1) * (half[axis] - margin);
+  const inside = ([x, z]: WorldPoint, margin: number): boolean =>
+    x >= bounds.min[0] + margin && x <= bounds.max[0] - margin && z >= bounds.min[1] + margin && z <= bounds.max[1] - margin;
   const offRoad = (at: WorldPoint): boolean =>
-    land.clearings.every(([cx, cz]) => Math.hypot(at[0] - cx, at[1] - cz) >= tuning.clearingRadius + 6)
+    clearings.every(([cx, cz]) => Math.hypot(at[0] - cx, at[1] - cz) >= tuning.clearingRadius + 6)
     && !tuning.rockFreeBoxes.some(({ min, max }) => at[0] > min[0] && at[0] < max[0] && at[1] > min[1] && at[1] < max[1]);
   for (let index = 0, tries = 0; index < tuning.rocksOnHighGround && tries < 5000; tries += 1) {
     const at: WorldPoint = [span(0, 5), span(1, 5)];
-    if (land.rockEdge(at[0], at[1]) > 6) rock(`rock-high-${index++}`, at, "high");
+    const position = terrain.valleyAt(at[0], at[1]);
+    if (position && position.rockEdge > 6) rock(`rock-high-${index++}`, at, "high");
   }
   for (let index = 0, tries = 0; index < tuning.rocksOnSlopes && tries < 5000; tries += 1) {
     const at: WorldPoint = [span(0, 5), span(1, 5)];
-    if (land.slopeDistance(at[0], at[1]) > 40 && land.rockEdge(at[0], at[1]) < 0 && offRoad(at)) rock(`rock-slope-${index++}`, at, "slope");
+    const position = terrain.valleyAt(at[0], at[1]);
+    if (position && position.slopeDistance > 40 && position.rockEdge < 0 && offRoad(at)) rock(`rock-slope-${index++}`, at, "slope");
   }
-  for (let index = 0, tries = 0; index < tuning.rocksByRiver && tries < 5000; tries += 1) {
-    const z = span(1, 10);
-    const side = random() < 0.5 ? -1 : 1;
-    const at: WorldPoint = [land.riverX(z) + side * (5 + random() * 4), z];
-    if (side > 0 || land.riverX(z) - at[0] < 8) rock(`rock-river-${index++}`, at, "river");
+  const { courses } = terrain;
+  for (let index = 0, tries = 0; courses.length && index < tuning.rocksByWater && tries < 5000; tries += 1) {
+    const course = courses[Math.floor(random() * courses.length)]!;
+    const at = Math.min(course.points.length - 2, Math.floor(random() * (course.points.length - 1)));
+    const [a, b] = [course.points[at]!, course.points[at + 1]!];
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const offset = (random() < 0.5 ? -1 : 1) * (course.width / 2 + 0.5 + random() * 4);
+    const spot: WorldPoint = [a[0] - (b[1] - a[1]) / length * offset, a[1] + (b[0] - a[0]) / length * offset];
+    if (inside(spot, 10)) rock(`rock-river-${index++}`, spot, "river");
   }
   return rocks;
 }

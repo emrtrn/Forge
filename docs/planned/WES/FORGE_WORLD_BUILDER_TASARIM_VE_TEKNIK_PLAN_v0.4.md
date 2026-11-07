@@ -16,9 +16,12 @@
 > [dünya özeti sözleşmesi](../../world-builder/WORLD_BRIEF.md)). Sıra:
 >
 > 1. ~~Dünya özeti şeması + editörsüz `npm run world:brief`~~ (pilot adım 1–2, TAMAM).
-> 2. **Pilot adım 3:** çalıştırıcının geçici adımları (makro arazi, nehir yatağı + su,
->    boya, bitki kuralları, ped) World Builder aşamasına dönüşür. Makro arazi
->    çekirdeği `engine/worldbuilder/macroRelief.ts` hazır (T11).
+> 2. **Pilot adım 3:** çalıştırıcının geçici adımları genelleşir; kullanıcı kararı
+>    (7 Kasım): önce özetten (`world:brief`), editörde arazi aşaması sonra, karar 19 aynen.
+>    ~~3a makro arazi + su yatakları~~ (`engine/worldbuilder/briefTerrain.ts`: N vadi, en
+>    alçak zemin, kesitlerden bağımsız su çizgileri). Sırada: 3b göl + `ridgeElevation`
+>    (`macroRelief.ts` çekirdeği hazır, T11), 3c–3e boya / bitki / kaya kuralları bölge
+>    profiline, 3f editörde arazi aşaması + tek undo.
 > 3. **Pilot adım 4:** T41 model listesi + rol → model bağlama (F3c).
 > 4. **Greybox onayı → aile başına detay onayı → detay ve bake** (karar 22).
 > 5. **F1b kabulü:** üç görselli WB-13, pilottan sonra.

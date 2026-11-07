@@ -89,6 +89,42 @@ kapalı kalır. Referans değişirse eski önizleme geçersizleşir.
 > alanlarını yazma. Üçgen veya daha fazla noktalı poligon ve en az iki noktalı
 > su çizgisi kullan; yol bağlantılarında yalnızca mevcut düğüm ID'lerini kullan.
 
-Üç gerçek görsel üstünde 2–3 kontrol noktası ve elle düzeltme/yeniden analiz
-karşılaştırması henüz yapılmadı. Bu WB-13 kabulü ve kalan ölçek/görünüm kararı
-F1b'nin sonraki kontrol noktasıdır.
+## Referans görseli standardı (karar 16)
+
+Karar 2026-11-07'de kapandı. Plan yalnız tepeden görselden okunur. Perspektif görsel
+isteğe bağlı stil notudur: bugün onu okuyan kod yoktur, kabulde kullanılmaz.
+
+- **Görünüm:** tam tepeden, perspektifsiz. Kuzey yukarıda; görselin sağı dünya +X,
+  aşağısı +Z. Recipe'de `reference.view` `topDown` olur.
+- **Tarz:** sade harita. Yazı, sembol, lejant, pusula, ölçek çubuğu, çerçeve, gölge
+  ve kabartma gölgelemesi yoktur.
+- **Biçim:** kare PNG, en az 1024 × 1024 px.
+- **Ölçek:** varsayılan kapsam 1 km × 1 km (`reference.size` `[1000,1000]`), 1024 px'te
+  yaklaşık 1 m/px. Ölçek görsel başına girilir; görselden çıkarılmaz.
+- **Renkler:** su düz mavi, orman koyu yeşil, tarım açık yeşil, açık arazi soluk bej,
+  kayalık gri, yol krem, yerleşim küçük binaların dolu lekesi. Her görselde aynı palet
+  kullanılır ki öğeler birbirine karışmasın.
+- **Yükseklik:** görsel yükseklik vermez; kabartma plan katmanına yazılmaz.
+- **Kültür:** ilk bölge profili (karar 18) açık olduğundan görsel belirli bir bölgeyi
+  taklit etmez.
+
+### WB-13 test görselleri
+
+Üç sahne farklı plan öğelerini sınar. Tarz ortak yönergesi:
+
+> Top-down orthographic map of a fictional 1 km by 1 km rural area, north up, flat
+> solid colours, clean shapes. Flat blue water, dark green forest, light green
+> farmland, pale beige open land, grey rock, cream roads, settlements as solid clusters
+> of small building footprints. No text, labels, symbols, legend, compass, scale bar,
+> border, shadows, hillshading, contour lines or perspective.
+
+| # | Dosya adı | Sahneye özel ek | Sınanan öğeler |
+|---|---|---|---|
+| 1 | `wb13-valley.reference.png` | `A river crosses the map from north-east to south-west. A village sits on the river's west bank, one main road runs along the valley and a side road leaves it for the village. Conifer forest covers the west edge.` | Akarsu, ana yol ve yan yol, kavşak, orman bölgesi |
+| 2 | `wb13-highland.reference.png` | `A small hamlet in the north is linked by one winding road to a larger village in the south. A narrow stream runs beside the road. Bare rock covers the north-east corner and forest fills the rest of the high ground.` | Mezra ve köy, kıvrımlı yol, dere, kayalık bölge |
+| 3 | `wb13-lakeside.reference.png` | `A lake fills the centre-east. Two small settlements stand on its west and south shores, joined by a road that follows the shore. A third road leaves the map to the west. Farmland surrounds both settlements.` | Göl çokgeni, iki yerleşim, kenardan çıkan yol, tarım bölgesi |
+
+Her görsel için kabul, 2–3 kontrol noktasıyla planın altlık üstünde doğru yere
+düştüğüne bakılarak; ardından elle düzeltme ve yeniden analizle düzeltmenin
+korunduğu görülerek yapılır. Bu üç görselle WB-13 kabulü henüz yapılmadı; F1b'nin
+sonraki kontrol noktası budur.

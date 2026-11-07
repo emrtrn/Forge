@@ -581,6 +581,7 @@ Doğrulama sonucu | Manuel override korundu mu (sayı)
 | **F0 — Envanter** | Mevcut araçların gerçek kapasitesi | §0.1 ve §4 | **Bu belgeyle büyük ölçüde kapandı.** Kalan: T04/T07/T09 API ayrıntıları F1 başında |
 | **F1 — Recipe çekirdeği** | Şema (`settlements`/`roadGraph`/`regionProfile` alanlarının yeri dahil), sahiplik kaydı, `LayoutPlacement.id`, tek stage'li runner (`roads`), dry-run, tek undo, `inspectCapabilities` | Aynı recipe güvenle tekrar çalışıyor (WB-01/02/08) | **KAPANDI** (2026-10-28…30, F1 adım 1–14 + 19): recipe + `/__save-worldrecipe`, sahiplik kaydı, placement `id`/`role`, Stage Runner (placement + spline), dry run + viewport önizlemesi (T10), stage başına tek undo; tekrar çalıştırma boş (WB-02 aşama testlerinde). `inspectCapabilities` yazılmadı (AI komut yüzeyiyle, §6.2) |
 | **F1b — Referanstan plan** (v0.4) | Semantic World Plan şeması, görsel yorumlayıcı (T35), Reference Underlay + plan katmanı (T36), üç test görseli | AI planı görselin üstünde doğru yerde; kullanıcı editörde düzeltebiliyor (WB-13) | Şema (recipe `plan` + kaynak/güven), T36 gösterimi (adım 15), elle düzeltme (15b/15c, 2026-11-02) ve Move to Site (2026-10-30) MEVCUT. T35 ilk dilim: dış analiz JSON içe aktarma/önizleme/birleştirme, tek undo, manuel öğe ve kalıcı silme kaydı koruması MEVCUT ([sözleşme](../../world-builder/REFERENCE_PLAN_IMPORT.md), [rapor](../../reports/WORLD_BUILDER_T35_IMPORT_KABUL_RAPORU.md)). Karar 16 kapandı (2026-11-07). **AÇIK:** üç test görselinin üretimi, gerçek görselden analiz ve WB-13 kabulü. F1b henüz kapanmadı |
+| **Pilot — dikey dilim** (2026-11-07) | 1 × 1 km dağ vadisi: arazi, nehir, yol, kulübe, bitki örtüsü, greybox → onay → detay ([kapsam ve model listesi](../../world-builder/PILOT_MOUNTAIN_VALLEY.md)) | Sahne dünya özetinden uçtan uca üretiliyor; eksikler ölçülmüş listede | Kapsam yazıldı. Üç görselli WB-13 kabulü pilottan sonraya alındı |
 | **F2 — Terrain + Roads + Water** | 03/04/05/07 stage'leri mevcut araçlarla; makro arazi plan bölgelerinden | Test level'ı tekrar üretilebilir; dikişler geçerli (WB-03/04/05) | Yalnız yol kısmı MEVCUT (`roads` aşaması, F1 adım 6/8). Makro arazi (T11), su aşaması (T06), erozyon çağrısı (T12), akış (T13) başlanmadı |
 | **F3a — Yol ağı** (v0.4) | Yol grafı (T38), maliyet haritası + rota çözücü (T14), T/Y kavşak (T15), geçit placeholder'ı (T16) | Hedefler bağlı, eğim/dönüş profile uygun (WB-03/06) | Büyük ölçüde MEVCUT (F1 adım 6, 8a/8b, serpantin): graf (`plan.roadGraph`), rota çözücü (T14), T/Y kavşak (T15). **AÇIK:** geçit/köprü placeholder'ı (T16; roads su geçişini yalnız bildirir), araç profilinin Offroad verisinden okunması |
 | **F3b — Yerleşim** (v0.4) | Bölge profili (T34), yer seçimi + program + ada/parsel (T18), arazi kullanımı (T39), rol placeholder'ı (T40), ped (T21) | WB-06/09/14/15/16/17 | Büyük ölçüde MEVCUT (F1 adım 9–13b): profil (T34), yer seçimi + araziden büyüyen çekirdek + program, iç sokak (organik + eşyükselti), parsel, arazi kullanımı (T39), rol placeholder'ı (T40) + elle Apply Pads (T21), donatı, çit. **AÇIK:** köyde 1 parselsiz konut (`wbTestValley.test.ts`), ızgara/radyal desen ve eşyükselti arası dik bağlantı, ped modeli (karar 19), rol → model çözümü |
@@ -607,16 +608,19 @@ Fazlar bağımlılığa göre paralel ilerleyebilir; takvim taahhüt edilmez. **
 | 7 | Fiziksel zemin ↔ görsel paint eşlemesi | **Kapandı:** paint katmanı `physicalMaterial` taşır (T27 MEVCUT) |
 | 8 | Hedef cihaz, dünya boyutu, bütçeler | KISMİ: OPEN_WORLD_PLAN bütçe tablosu (orta masaüstü, 60 Hz, 4 km) baz alınır; World Builder'a özgü üretim süresi `[AÇIK]` |
 | 9 | Foliage/props: instance mı actor mı? | `[KARAR v0.3]` Doğa = Foliage Type + kural (kayıtsız, yeniden kurulur) ya da boyanmış grup. Etkileşimli/gameplay nesnesi = placement/actor |
-| 10 | AI'ın yazma/commit yetkisi | `[KARAR v0.3]` AI yalnız recipe yazar. Uygulama editörde kullanıcı onayıyla, stage başına tek undo adımıyla yapılır. Otomatik Save yoktur |
-| 11 | Girdi önceliği | `[ONAYLANDI 2026-10-28]` Önce AI ile üretilmiş açık dünya görseli analiz edilir. OpenStreetMap kullanılabilir; gerçek dünya bilgisi ölçek değiştirilerek kullanılır |
+| 10 | AI'ın yazma/commit yetkisi | **Karar 22 ile güncellendi.** `[KARAR v0.3]` AI yalnız recipe yazar. Uygulama editörde kullanıcı onayıyla, stage başına tek undo adımıyla yapılır. Otomatik Save yoktur |
+| 11 | Girdi önceliği | **Karar 20 ile güncellendi.** `[ONAYLANDI 2026-10-28]` Önce AI ile üretilmiş açık dünya görseli analiz edilir. OpenStreetMap kullanılabilir; gerçek dünya bilgisi ölçek değiştirilerek kullanılır |
 | 12 | Ölçek sırası | `[ONAYLANDI 2026-10-28]` Önce köy/kasaba; bu başarılınca büyük ölçek (şehir). LOD/HLOD için kullanıcının ayrı planı var, yakında uygulanacak |
 | 13 | Plan girişi | `[ONAYLANDI 2026-10-28]` Hibrit: AI/OSM taslak üretir, kullanıcı editörde düzeltir, üreticiler doldurur |
-| 14 | Hazır asset | `[ONAYLANDI 2026-10-28]` Hazır obje beklenmez. Seviye semantik rollerle ve renkli placeholder'larla kurulur; modelleri kullanıcı sonra üretir (Codex referans görseli + Tripo AI), ileride otomatikleşebilir (§13.7) |
+| 14 | Hazır asset | **Model kaynağı karar 21 ile güncellendi.** `[ONAYLANDI 2026-10-28]` Hazır obje beklenmez. Seviye semantik rollerle ve renkli placeholder'larla kurulur; modelleri kullanıcı sonra üretir (Codex referans görseli + Tripo AI), ileride otomatikleşebilir (§13.7) |
 | 15 | Placeholder biçimi | `[KARAR v0.4]` `shape:cube` placement + yeni `id`/`role` alanları (§13.4). Blocking Volume kullanılmaz |
 | 16 | Görsel türü | **Kapandı** `[ONAYLANDI 2026-11-07]`: tepeden görsel zorunlu; tarz sade harita (yazısız, gölgesiz); varsayılan test kapsamı 1 km × 1 km, ölçek görsel başına girilir. Perspektif görsel isteğe bağlı stil notu, kabulde kullanılmaz (§13.2) |
 | 17 | OSM lisansı ve verinin saklanması | `[AÇIK — fork başına]` ODbL atfı ve paylaşım şartı (§13.6) |
 | 18 | İlk bölge profili | `[AÇIK — kullanıcı]` Offroad'ın izole dağ köyü için hangi bölge? (ör. Alpler, Japon kırsalı, Anadolu dağ köyü) |
 | 19 | Ped ve yol deform modeli | `[AÇIK — ayrı adım]` Bake + undo mu, yeniden üretilebilir deform patch'i mi (§13.10). Yol deform'u da bugün bake (karar 2 notu); bir yol taşınınca eski kazı arazide kalır. **Kullanıcı kararı 2026-10-28:** adım 6 yol aşaması yalnız spline verisi üretir (mesh + çarpışma spline'dan gelir, araziye dokunulmaz); deform/boya bugünkü elle düğme olarak kalır; otomatik, yeniden üretilebilir deform pedlerle birlikte ayrı adımda çözülür |
+| 20 | Birincil girdi | `[ONAYLANDI 2026-11-07]` Dünya oyun tasarım dokümanından okunur: kroki, ölçü, coğrafya, mimari, tabiat, mevsim ve hava. Doküman oyunun deposunda kalır; Forge'a yalnız genel dünya özeti şeması girer. AI görseli ve OSM ikincil kaynaktır; kroki T35 ile okunabilir |
+| 21 | Model kaynağı | `[ONAYLANDI 2026-11-07]` Obje başına seçilir: Claude + Blender, Tripo AI veya hazır model. Yapı, köprü ve benzeri formları Claude Blender'da üretir ve kapsamı kendisi seçer. Zor organik formlarda (ağaç) kullanıcı hazır model getirir; Claude adı, yolu ve hedef ölçüyü listeler, gelen modeli bağlar. Hareketli objeleri Claude üretmez. Karakterler ne Blender ne Tripo ile üretilir, yalnız hazır modeldir. Görsel ve dokuyu Claude, Codex'e ürettirir |
+| 22 | Otomasyon sınırı | `[ONAYLANDI 2026-11-07]` Hat kullanıcı onayı noktaları arasında otomatik ilerler; aşama sırası teknik bağımlılığa göre değişebilir. Greybox tamamlanınca kullanıcı onayı zorunludur, onaydan sonra detay model ve bake yapılır. `[ÖNERİ]` Üretimden önce plan onayı ve toplu detaydan önce aile başına pilot detay onayı eklenir. Otomatik commit kararı bu kapsamda değildir |
 
 ---
 
@@ -954,7 +958,7 @@ Donatı rolleri (`prop.*`) sarı, bitki rolleri (`vegetation.*`) yeşildir.
 
 ### 13.7. Placeholder'dan modele: gereken model listesi (T41)
 
-Forge'un sorumluluğu üç noktadadır: listeyi çıkarmak, gelen modeli normalize etmek ve rolü modele bağlamak. Görsel ve model üretimi Forge dışında kalır.
+Forge'un sorumluluğu üç noktadadır: listeyi çıkarmak, gelen modeli normalize etmek ve rolü modele bağlamak. Görsel ve model üretimi Forge motorunun dışında kalır. İlk elle uygulanan liste: [pilot](../../world-builder/PILOT_MOUNTAIN_VALLEY.md).
 
 **Akış:**
 1. **Dışa aktarma:**
@@ -967,10 +971,10 @@ Forge'un sorumluluğu üç noktadadır: listeyi çıkarmak, gelen modeli normali
    - Arazi kullanımı ve kısa stil notu (profil + plan metninden).
    - Referans görsel istemi taslağı.
    - Durum: `placeholder | resolved`.
-3. **Üretim** (kullanıcı; ileride otomatik):
-   - Codex ile referans görseli.
-   - Tripo AI ile model.
-   - Otomasyon gelirse bu adımda kalır. Kimlik bilgileri ve dış servis çağrısı motora girmez.
+3. **Üretim** (kaynak obje başına seçilir, karar 21):
+   - Claude + Blender, Tripo AI veya hazır model. Hazır model satırı dosya adı, klasör ve hedef ölçü taşır.
+   - Referans görseli ve dokuyu Claude, Codex'e ürettirir.
+   - Kimlik bilgileri ve dış servis çağrısı motora girmez.
 4. **İçe aktarma normalizasyonu:**
    - Mevcut `/__import-asset` hattının üstüne bir "rol için içe aktar" adımı. Tripo çıktısının ölçeği, pivotu ve ön yüzü düzensizdir.
    - Ölçü: sınırlayıcı kutu → hedef ayak izi/yükseklik.

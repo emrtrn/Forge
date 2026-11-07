@@ -5,18 +5,7 @@
   "instances": [
     {
       "assetId": "floor-400x400",
-      "placements": [
-        {
-          "position": [
-            -4,
-            0,
-            -4
-          ],
-          "scaleLocked": true,
-          "rotationYDeg": 0,
-          "scale": 2
-        }
-      ]
+      "placements": []
     },
     {
       "assetId": "shape:cube",
@@ -24,17 +13,7 @@
     },
     {
       "assetId": "doruk-k180-base",
-      "placements": [
-        {
-          "position": [
-            0.93,
-            0,
-            0.44
-          ],
-          "rotationYDeg": 0,
-          "scale": 1
-        }
-      ]
+      "placements": []
     }
   ],
   "characters": [],
@@ -162,5 +141,6 @@
       "castShadow": true,
       "cascadedShadows": true
     }
-  ]
+  ],
+  "landscapes": []
 }

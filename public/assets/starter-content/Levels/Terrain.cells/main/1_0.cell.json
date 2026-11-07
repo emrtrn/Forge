@@ -63,9 +63,9 @@
     {
       "classRef": "assets/vehicles/doruk-k180/Script_DorukK180.actor.json",
       "position": [
-        181.4,
-        16.17,
-        33.85
+        171.7,
+        0,
+        75.82
       ],
       "id": "act-mw38txqq-8lek",
       "rotationYDeg": 0,

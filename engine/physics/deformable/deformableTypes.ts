@@ -37,6 +37,18 @@ export interface DeformablePartDetach {
   kick: number;
 }
 
+/** Paint a dent scrapes off, on the materials named here. */
+export interface AssetDeformableWear {
+  /** A vertex pushed this far shows bare metal, metres. */
+  depth: number;
+  /** The bare surface: linear RGB, 0..1. */
+  color: DeformableVec3;
+  /** Its roughness, 0..1. */
+  roughness: number;
+  /** Model material names that take the wear; glass and lamps stay out by not being listed. */
+  materials: string[];
+}
+
 /** A separately denting piece of a model. */
 export interface AssetDeformablePart {
   /** Unique in the model and stable across model revisions. */
@@ -79,6 +91,8 @@ export interface AssetDeformableDef {
   collisionPolicy: "visual_only";
   /** Checked in list order, so an earlier zone wins where two overlap. Omitted when empty. */
   parts?: AssetDeformablePart[];
+  /** Omitted: dents leave the paint as it is. */
+  wear?: AssetDeformableWear;
 }
 
 /** Inclusive numeric bounds shared by normalization and editor sliders. */
@@ -89,6 +103,8 @@ export const DEFORMABLE_LIMITS = {
   maxDepth: [0.001, 2],
   plasticity: [0, 1],
   maxDents: [1, 64],
+  wearDepth: [0.001, 2],
+  unit: [0, 1],
 } as const;
 
 export const DEFORMABLE_DETACH_LIMITS = {
@@ -198,6 +214,26 @@ function normalizeParts(value: unknown): AssetDeformablePart[] {
 }
 
 /** Normalizes the shared loader/save field shape; unsupported objects return null. */
+function normalizeWear(value: unknown): AssetDeformableWear | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const color = input.color;
+  const materials = Array.isArray(input.materials)
+    ? [...new Set(input.materials.filter((name): name is string => typeof name === "string" && name.length > 0))]
+    : [];
+  if (materials.length === 0 || !Array.isArray(color) || color.length !== 3) return null;
+  return {
+    depth: bounded(input.depth, 0.05, DEFORMABLE_LIMITS.wearDepth),
+    color: [
+      bounded(color[0], 0, DEFORMABLE_LIMITS.unit),
+      bounded(color[1], 0, DEFORMABLE_LIMITS.unit),
+      bounded(color[2], 0, DEFORMABLE_LIMITS.unit),
+    ],
+    roughness: bounded(input.roughness, 0.7, DEFORMABLE_LIMITS.unit),
+    materials,
+  };
+}
+
 export function normalizeAssetDeformable(value: unknown): AssetDeformableDef | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const input = value as Record<string, unknown>;
@@ -212,6 +248,7 @@ export function normalizeAssetDeformable(value: unknown): AssetDeformableDef | n
   const dentImpulse = bounded(input.dentImpulse, defaults.dentImpulse, DEFORMABLE_LIMITS.dentImpulse);
   const fullImpulse = bounded(input.fullImpulse, defaults.fullImpulse, DEFORMABLE_LIMITS.fullImpulse);
   const parts = normalizeParts(input.parts);
+  const wear = normalizeWear(input.wear);
   return {
     version: DEFORMABLE_ASSET_VERSION,
     enabled: typeof input.enabled === "boolean" ? input.enabled : defaults.enabled,
@@ -225,6 +262,7 @@ export function normalizeAssetDeformable(value: unknown): AssetDeformableDef | n
     maxDents: bounded(input.maxDents, defaults.maxDents, DEFORMABLE_LIMITS.maxDents, true),
     collisionPolicy: "visual_only",
     ...(parts.length > 0 ? { parts } : {}),
+    ...(wear ? { wear } : {}),
   };
 }
 

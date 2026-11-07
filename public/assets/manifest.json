@@ -21327,11 +21327,11 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 2879484
+        "bytes": 7958864
       },
       "source": {
         "origin": "forge",
-        "pack": "Doruk K-180 greybox (art/vehicles/doruk-k180)"
+        "pack": "Doruk K-180 (art/vehicles/doruk-k180)"
       },
       "license": "Project-local placeholder; replace before distribution if needed"
     },

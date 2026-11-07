@@ -42,3 +42,6 @@ public/layouts/WbTestValley.landscapes/
 
 # Blender numbered backups of the art/ masters
 *.blend[0-9]*
+# Baked vehicle atlases: the GLB carries them, their scripts remake them
+art/vehicles/*/textures/
+art/vehicles/*/__pycache__/

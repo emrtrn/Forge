@@ -44,6 +44,7 @@ import {
   type DentSurface,
   type DentVec3,
 } from "../physics/deformable/impactDeform";
+import { DENT_WEAR_ATTRIBUTE } from "./dentWear";
 
 /** Geometry this file copied; the mesh's owner must not treat it as the shared model. */
 const DEFORM_CLONE_FLAG = "forgeDeformClone";
@@ -400,6 +401,23 @@ export class DentTarget {
     }
     positions.needsUpdate = true;
     normals.needsUpdate = true;
+    if (params.wear) this.writeWear(item, geometry, change, params.wear.depth);
+  }
+
+  /** How far each vertex went, for a material that shows scraped paint. */
+  private writeWear(item: DentMesh, geometry: BufferGeometry, change: DentChange, depth: number): void {
+    const { surface } = item;
+    let wear = geometry.getAttribute(DENT_WEAR_ATTRIBUTE) as BufferAttribute | undefined;
+    if (!wear) {
+      wear = new Float32BufferAttribute(new Float32Array(surface.vertexCount), 1);
+      geometry.setAttribute(DENT_WEAR_ATTRIBUTE, wear);
+    }
+    for (const vertex of change.changed) {
+      const offset = vertex * 3;
+      const pushed = Math.hypot(surface.pushes[offset]!, surface.pushes[offset + 1]!, surface.pushes[offset + 2]!);
+      wear.setX(vertex, Math.min(1, pushed / depth));
+    }
+    wear.needsUpdate = true;
   }
 
   private takeOwnership(item: DentMesh, params: DentParams): BufferGeometry {

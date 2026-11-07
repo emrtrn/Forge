@@ -6,6 +6,7 @@ import {
   InterleavedBuffer,
   InterleavedBufferAttribute,
   Mesh,
+  MeshStandardMaterial,
   Object3D,
   PlaneGeometry,
   SkinnedMesh,
@@ -13,6 +14,7 @@ import {
 } from "three";
 
 import { DentTarget } from "../../engine/render-three/deformableMeshSync";
+import { DENT_WEAR_ATTRIBUTE, prepareDentWear } from "../../engine/render-three/dentWear";
 import { modelPartNodes, nodeBounds, partNodeOfMesh } from "../../engine/render-three/deformablePartNodes";
 import type { DentParams, DentPart, DentVec3 } from "../../engine/physics/deformable/impactDeform";
 
@@ -55,6 +57,8 @@ const worldDirection = (root: Object3D, direction: DentVec3): DentVec3 => {
   const value = new Vector3(...direction).transformDirection(root.matrixWorld);
   return [value.x, value.y, value.z];
 };
+
+const wearOf = (mesh: Mesh): number[] => Array.from(mesh.geometry.getAttribute(DENT_WEAR_ATTRIBUTE)?.array ?? []);
 
 const worldVertices = (mesh: Mesh): number[] => {
   mesh.updateWorldMatrix(true, false);
@@ -103,6 +107,55 @@ function dentWidth(mesh: Mesh): number {
 
 /** Registers dent-to-geometry checks. */
 export function registerDeformableMeshSyncTests(check: (label: string, run: () => void) => void): void {
+  check("deformable mesh sync: a dent records how far each vertex went, and only with wear on", () => {
+    const worn = objectWith(panel());
+    const shared = worn.mesh.geometry;
+    const target = new DentTarget(worn.root);
+    target.hit([0, 0, 0], INTO, 0.05, { ...params, wear: { depth: 0.1 } });
+    assert.equal(shared.getAttribute(DENT_WEAR_ATTRIBUTE), undefined, "the shared model never takes the attribute");
+    const wear = wearOf(worn.mesh);
+    assert.equal(wear.length, worn.mesh.geometry.getAttribute("position").count);
+    assert.ok(Math.abs(Math.max(...wear) - 0.5) < 0.05, "half the wear depth, half the wear");
+    assert.equal(Math.min(...wear), 0, "the panel's far edge is untouched");
+
+    const deeper = objectWith(panel());
+    new DentTarget(deeper.root).hit([0, 0, 0], INTO, 0.2, { ...params, wear: { depth: 0.1 } });
+    assert.equal(Math.max(...wearOf(deeper.mesh)), 1, "wear stops at 1");
+
+    const plain = objectWith(panel());
+    new DentTarget(plain.root).hit([0, 0, 0], INTO, 0.05, params);
+    assert.deepEqual(wearOf(plain.mesh), []);
+  });
+
+  check("deformable mesh sync: wear goes on the named materials once and keeps a patch already there", () => {
+    const { root, mesh } = objectWith(panel());
+    const paint = new MeshStandardMaterial({ name: "M_Paint" });
+    const prior: string[] = [];
+    paint.onBeforeCompile = () => { prior.push("ran"); };
+    const key = paint.customProgramCacheKey();
+    const glass = new MeshStandardMaterial({ name: "M_Glass" });
+    const glassPatch = glass.onBeforeCompile;
+    mesh.material = [paint, glass];
+    const wear = { depth: 0.1, color: [0.2, 0.2, 0.2] as [number, number, number], roughness: 0.7, materials: ["M_Paint"] };
+    prepareDentWear(root, wear);
+    const patch = paint.onBeforeCompile;
+    prepareDentWear(root, wear);
+    assert.equal(paint.onBeforeCompile, patch, "a second call changes nothing");
+    assert.equal(glass.onBeforeCompile, glassPatch, "a material not named stays out");
+    assert.notEqual(paint.customProgramCacheKey(), key, "the patched program does not share the plain one");
+
+    const shader = {
+      uniforms: {} as Record<string, { value: unknown }>,
+      vertexShader: "#include <common>\nvoid main() { #include <begin_vertex>\n }",
+      fragmentShader: "#include <common>\nvoid main() { #include <map_fragment>\n #include <roughnessmap_fragment>\n }",
+    };
+    paint.onBeforeCompile(shader as never, undefined as never);
+    assert.deepEqual(prior, ["ran"]);
+    assert.ok(shader.vertexShader.includes(`attribute float ${DENT_WEAR_ATTRIBUTE}`));
+    assert.ok(shader.fragmentShader.includes("forgeDentWearMask"));
+    assert.ok(shader.uniforms.forgeDentWearRoughness);
+  });
+
   check("deformable mesh: only the dented copy changes, the shared geometry stays byte for byte", () => {
     const shared = panel();
     const before = positionsOf(shared);

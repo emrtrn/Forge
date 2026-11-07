@@ -30,6 +30,7 @@ import { assetPath, assetRecordById, assetType, isModelAssetType, type AssetMani
 import type { AssetDeformableDef } from "@engine/physics/deformable/deformableTypes";
 import { dentDepthForImpulse, type Dent, type DentVec3 } from "@engine/physics/deformable/impactDeform";
 import { DentTarget, type DentOutcome, type DetachedPiece } from "@engine/render-three/deformableMeshSync";
+import { prepareDentWear } from "@engine/render-three/dentWear";
 import type { SavedDeformableState } from "@engine/persistence/saveGameState";
 import { readDeformableComponent, readRenderableMeshComponent } from "@engine/scene/components";
 import type { Entity } from "@engine/scene/entity";
@@ -129,6 +130,8 @@ export function createDeformableModule(): CapabilityModule {
   const reportedParts = new WeakSet<AssetDeformableDef>();
   const queue: QueuedHit[] = [];
   const unsubscribes: Array<() => void> = [];
+  /** Objects whose materials still need the wear patch; it goes on before the first crash. */
+  const wearWaiting = new Set<string>();
   /**
    * Save-game entries waiting for their object. Not part of the level teardown:
    * a load's restore may arrive before this module's own `onLevelLoaded`.
@@ -156,6 +159,7 @@ export function createDeformableModule(): CapabilityModule {
       entry.target = null;
     }
     if (entry.target || !object || !source) return;
+    if (source.def.wear) prepareDentWear(object, source.def.wear);
     const wheelNodes = new Set(host?.wheelNodes(entityId) ?? []);
     entry.target = new DentTarget(object, { exclude: (mesh) => isWheelMesh(mesh, wheelNodes), parts: source.def.parts });
     for (const part of entry.detached) entry.target.removePart(part);
@@ -287,6 +291,7 @@ export function createDeformableModule(): CapabilityModule {
     entries.delete(entityId);
     episodes.delete(entityId);
     sources.delete(entityId);
+    wearWaiting.delete(entityId);
     host?.physics.setImpactEventThreshold(entityId, null);
   };
 
@@ -362,6 +367,7 @@ export function createDeformableModule(): CapabilityModule {
     const def = await actorDef(mesh.assetId);
     if (!def || !host || level !== generation) return;
     sources.set(entity.id, { def, assetId: mesh.assetId, actor: true });
+    if (def.wear) wearWaiting.add(entity.id);
     host.physics.setImpactEventThreshold(entity.id, def.dentImpulse);
     applyRestore(entity.id);
   };
@@ -470,6 +476,7 @@ export function createDeformableModule(): CapabilityModule {
           if (placement.hidden) return;
           const entityId = instanceEntityId(group.assetId, index);
           sources.set(entityId, { def, assetId: group.assetId, actor: false });
+          if (def.wear) wearWaiting.add(entityId);
           hostRef.physics.setImpactEventThreshold(entityId, def.dentImpulse);
           applyRestore(entityId);
         });
@@ -495,6 +502,12 @@ export function createDeformableModule(): CapabilityModule {
     update(deltaSeconds) {
       clock += deltaSeconds;
       if (!host) return;
+      for (const entityId of wearWaiting) {
+        const object = host.renderObject(entityId);
+        const wear = sources.get(entityId)?.def.wear;
+        if (object && wear) prepareDentWear(object, wear);
+        if (object || !wear) wearWaiting.delete(entityId);
+      }
       for (const impact of host.physics.impacts()) {
         // Out of `a`, towards `b`: the surface of `a` is pushed against the normal.
         for (const [entityId, other, sign] of [[impact.a, impact.b, -1], [impact.b, impact.a, 1]] as const) {

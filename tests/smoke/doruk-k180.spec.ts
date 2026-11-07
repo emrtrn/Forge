@@ -760,6 +760,14 @@ for (const hit of HARD_HITS) {
     console.log(`[doruk smoke] ${hit.name}: deepest ${deepest.toFixed(3)} m, ${JSON.stringify(dented)} ${await readDeform()}`);
     expect(deepest).toBeGreaterThan(0.002);
     expect(deepest).toBeLessThanOrEqual(MAX_DENT + 1e-4);
+    // The dent also tells the paint how far it went.
+    expect(await page.evaluate(({ id, name }) => {
+      let found: any;
+      for (const scene of (window as unknown as { __vehicleScenes: any[] }).__vehicleScenes) scene.traverse((item: any) => {
+        if (item.userData.actorEntityId === id && item.getObjectByName("Chassis_Frame")) found = item.getObjectByName(name);
+      });
+      return Math.max(...(found.geometry.getAttribute("forgeDentWear")?.array ?? [0]));
+    }, { id: hit.truck, name: hit.node })).toBeGreaterThan(0);
     expect(pieces).toEqual([]);
     expect(nodes.sort()).toEqual(before.nodes.sort());
     expect(await readDeform()).not.toMatch(/detached/);

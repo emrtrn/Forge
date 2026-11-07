@@ -10,6 +10,7 @@ import { collectDroppedFields } from "../../tools/droppedFields";
 const maximal: AssetDeformableDef = {
   version: 1, enabled: false, mode: "impact", dentImpulse: 500000, fullImpulse: 2000000,
   radius: 10, maxDepth: 2, plasticity: 1, maxDents: 64, collisionPolicy: "visual_only",
+  wear: { depth: 2, color: [1, 0.5, 0], roughness: 1, materials: ["M_Paint", "M_Trim"] },
   parts: [{
     id: "door_left", nodes: ["Door_L", "Door_L_Trim"], zone: { min: [0.7, 0.4, -0.6], max: [1.3, 2.6, 0.45] },
     detach: { impulse: 1000000, massKg: 100000, kick: 50 },

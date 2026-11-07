@@ -47,6 +47,8 @@ export interface DentParams {
   readonly maxDepth: number;
   readonly plasticity: number;
   readonly maxDents: number;
+  /** Paint the dent scrapes off; only its depth matters here. */
+  readonly wear?: { readonly depth: number } | undefined;
 }
 
 /** One mesh's vertices in dent space, with the working buffers of its dents. */

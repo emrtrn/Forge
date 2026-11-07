@@ -21,6 +21,7 @@ The master .blend is an output of this script: hand edits to it are lost on the
 next run. Node names, pivots and the sizes of DIMENSIONS.md are a contract with
 the damage data; a mesh with a second material gets a child node (`*_Trim`).
 """
+import importlib.util
 import math
 import os
 import sys
@@ -1314,6 +1315,8 @@ def export_glb(path):
         export_lights=False,
         export_extras=False,
         export_materials="EXPORT",
+        export_image_format="WEBP",
+        export_image_quality=88,
         use_selection=False,
     )
 
@@ -1412,6 +1415,10 @@ def main():
     bpy.ops.wm.read_factory_settings(use_empty=True)
     build()
     bpy.context.view_layer.update()
+    texture = importlib.util.spec_from_file_location("doruk_texture", os.path.join(here, "doruk-k180_texture.py"))
+    surface = importlib.util.module_from_spec(texture)
+    texture.loader.exec_module(surface)
+    surface.apply(here, force="--bake" in args)
     export_glb(glb)
     if renders:
         bpy.ops.wm.save_as_mainfile(filepath=os.path.join(here, "Doruk-K180_Master.blend"))

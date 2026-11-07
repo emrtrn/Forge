@@ -8,7 +8,12 @@
  * Walls, steps and terraces are pad data: measured once from the ground beside
  * the pad and kept with it, so baking the pad (which changes that ground) does
  * not change them. A walled pad blends into the terrain over `WALL_FALLOFF`
- * instead of the long soft margin, so the wall is what holds the step.
+ * instead of the long soft margin, and its walls are that wide: the terrain
+ * cannot hold a sharper step on a 1 m grid without its rotated edge turning
+ * into a saw (`PAD_MIN_FALLOFF_SPACINGS`), so the blend runs under the wall and
+ * the wall's outer face is the crisp edge. Between two terraces the lower one
+ * stops a falloff short of the upper one; the bake fills that band with one
+ * ramp between their levels, under the wall between them.
  *
  * First used for the Derekavak greybox (Ridgebound). Pure and deterministic;
  * dependency-free.
@@ -16,12 +21,12 @@
 import type { WorldPoint } from "./normalize";
 
 /** Cut or fill beside a pad above this needs a retaining wall, metres. */
+export const WALL_FALLOFF = 2;
 export const WALL_THRESHOLD = 0.8;
-/** A walled pad blends into the terrain over this distance, metres. */
-export const WALL_FALLOFF = 1;
 /** The ground beside a pad is read this far outside its edge (past the walled falloff), metres. */
-export const WALL_PROBE = 2;
-export const WALL_THICKNESS = 0.6;
+export const WALL_PROBE = WALL_FALLOFF + 1;
+/** A wall covers its pad's blend band, so the blend never shows. */
+export const WALL_THICKNESS = WALL_FALLOFF;
 /** A fill wall stands this far above its pad (a parapet); a cut wall reaches this far below it. */
 export const WALL_PARAPET = 0.4;
 export const WALL_FOOTING = 0.4;
@@ -247,9 +252,21 @@ export function terracePad(frame: PadFrame, sampleHeight: Sample): TerracedPad |
   }
   const count = Math.max(1, Math.ceil((high - low) / TERRACE_STEP - 1e-9));
   if (count === 1) return { terraces: [{ polygon: frameCorners(frame), level: round(whole, 2) }], walls: [], stairs: [] };
+  // Equal strips across the depth; at each boundary the lower strip gives up a falloff band.
+  const extents = Array.from({ length: count }, (_, k) => [-frame.front + (depth * k) / count, -frame.front + (depth * (k + 1)) / count] as [number, number]);
+  const rough: number[] = [];
+  for (const [s0, s1] of extents) {
+    const level = stripLevel(frame, s0, s1, sampleHeight);
+    if (level === null) return null;
+    rough.push(level);
+  }
+  const boundaries = extents.slice(1).map(([edge], index) => ({ edge, lowerIsFront: rough[index]! < rough[index + 1]! }));
+  boundaries.forEach(({ lowerIsFront }, index) => {
+    if (lowerIsFront) extents[index]![1] -= WALL_FALLOFF;
+    else extents[index + 1]![0] += WALL_FALLOFF;
+  });
   const terraces: Terrace[] = [];
-  for (let k = 0; k < count; k += 1) {
-    const s0 = -frame.front + (depth * k) / count, s1 = -frame.front + (depth * (k + 1)) / count;
+  for (const [s0, s1] of extents) {
     const level = stripLevel(frame, s0, s1, sampleHeight);
     if (level === null) return null;
     terraces.push({ polygon: frameCorners(frame, -s0, s1), level: round(level, 2) });
@@ -257,23 +274,28 @@ export function terracePad(frame: PadFrame, sampleHeight: Sample): TerracedPad |
   const walls: TerracedPad["walls"] = [];
   const stairs: TerracedPad["stairs"] = [];
   const run = (rise: number) => rise / Math.tan((STAIR_ANGLE_DEG * Math.PI) / 180);
-  for (let k = 1; k < count; k += 1) {
+  boundaries.forEach(({ edge, lowerIsFront }, index) => {
+    const k = index + 1;
     const lower = Math.min(terraces[k - 1]!.level, terraces[k]!.level), upper = Math.max(terraces[k - 1]!.level, terraces[k]!.level);
-    // The shared edge: back edge of terrace k - 1 (corners 3 → 2).
-    const [left, right] = [terraces[k - 1]!.polygon[3]!, terraces[k - 1]!.polygon[2]!];
+    const down: WorldPoint = lowerIsFront ? [-frame.inward[0], -frame.inward[1]] : frame.inward;
+    // The upper terrace's edge, and the wall over the band below it.
+    const at = (a: number, b: number): WorldPoint => [frame.center[0] + frame.along[0] * a + frame.inward[0] * b, frame.center[1] + frame.along[1] * a + frame.inward[1] * b];
+    const left = at(-frame.halfAlong, edge), right = at(frame.halfAlong, edge);
     const mid: WorldPoint = [(left[0] + right[0]) / 2, (left[1] + right[1]) / 2];
     const half = TERRACE_STAIR_WIDTH / 2 + 0.5;
-    const span = length(sub(right, left));
-    const along: WorldPoint = [(right[0] - left[0]) / span, (right[1] - left[1]) / span];
+    const span = 2 * frame.halfAlong;
     for (const [s0, s1] of [[0, span / 2 - half], [span / 2 + half, span]] as const) {
-      if (s1 - s0 > 0.5) walls.push({ from: roundPoint(add(left, along, s0)), to: roundPoint(add(left, along, s1)), bottom: round(lower - WALL_FOOTING, 2), top: round(upper + WALL_PARAPET, 2), boundary: k });
+      if (s1 - s0 <= 0.5) continue;
+      walls.push({
+        from: roundPoint(add(add(left, frame.along, s0), down, WALL_THICKNESS / 2)),
+        to: roundPoint(add(add(left, frame.along, s1), down, WALL_THICKNESS / 2)),
+        bottom: round(lower - WALL_FOOTING, 2), top: round(upper + WALL_PARAPET, 2), boundary: k,
+      });
     }
     if (upper - lower > STEP_FREE) {
-      // Down from the shared edge onto the lower terrace.
-      const lowerIsFront = terraces[k - 1]!.level < terraces[k]!.level;
-      const down: WorldPoint = lowerIsFront ? [-frame.inward[0], -frame.inward[1]] : frame.inward;
+      // Down from the upper terrace's edge onto the lower terrace.
       stairs.push({ foot: roundPoint(add(mid, down, run(upper - lower))), head: roundPoint(mid), width: TERRACE_STAIR_WIDTH, low: round(lower, 2), high: round(upper, 2), boundary: k });
     }
-  }
+  });
   return { terraces, walls, stairs };
 }

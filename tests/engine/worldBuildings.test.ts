@@ -19,6 +19,7 @@ import { createWorldRecipe, normalizeWorldRecipe, type ProgramLine, type WorldRe
 import { normalizeRegionProfile, type RegionProfile } from "../../engine/worldbuilder/regionProfile";
 import { applyPlacementGroupChanges, planStage, type StageInput } from "../../engine/worldbuilder/stage";
 import { buildingPlacementId, buildingsStage } from "../../engine/worldbuilder/stages/buildings";
+import { WALL_FALLOFF } from "../../engine/worldbuilder/terraces";
 import { landUseStage } from "../../engine/worldbuilder/stages/landUse";
 import { parcelsStage } from "../../engine/worldbuilder/stages/parcels";
 import { validateLayout } from "../../tools/saveValidator";
@@ -204,7 +205,7 @@ export function registerWorldBuildingTests(check: Check): void {
     assert.ok(walls.length > 0, "walls hold the cut and fill");
     assert.ok(steps.length > 0, "entrances meeting a height difference get steps");
     assert.equal(walls.length, pads.reduce((sum, pad) => sum + (pad.walls?.length ?? 0), 0), "one placement per wall");
-    assert.ok(pads.filter((pad) => pad.walls).every((pad) => pad.falloff === 1), "a walled pad blends in short");
+    assert.ok(pads.filter((pad) => pad.walls).every((pad) => pad.falloff === WALL_FALLOFF), "a walled pad blends in short, under its walls");
     // The square (an open lot) splits into terraces that belong to its building.
     const terraces = pads.filter((pad) => pad.building !== undefined);
     assert.ok(terraces.length > 0, "the square terraces");

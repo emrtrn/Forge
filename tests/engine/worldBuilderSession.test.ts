@@ -256,7 +256,7 @@ export async function registerWorldBuilderSessionTests(checkAsync: CheckAsync): 
       { id: "streets", label: "Streets", version: 1, recordedVersion: null },
       { id: "parcels", label: "Parcels", version: 2, recordedVersion: null },
       { id: "landUse", label: "Land use", version: 2, recordedVersion: null },
-      { id: "buildings", label: "Buildings", version: 2, recordedVersion: null },
+      { id: "buildings", label: "Buildings", version: 3, recordedVersion: null },
       { id: "furniture", label: "Street furniture", version: 1, recordedVersion: null },
       { id: "fences", label: "Fences", version: 1, recordedVersion: null },
     ]);

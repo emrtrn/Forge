@@ -35,12 +35,16 @@
 >      değişiyorsa derinlik boyunca setlere bölünür, setler arası duvar + merdiven. Duvar,
 >      basamak ve setler ped verisi (`generated.pads[].walls/stairs/falloff/building`), bir
 >      kez ölçülür, ped aynı kaldıkça yeniden kullanılır (bake sonrası değişmez); duvarlı ped
->      1 m geçişle işlenir. TAMAM. Araç rampası (setler arası) yok; gerekirse sonra.
+>      2 m geçişle işlenir ve duvar o bandı örter (2f). TAMAM. Araç rampası (setler arası)
+>      yok; gerekirse sonra.
 >    - d. Parsel–yol ilişkisi: parsel yoldan açıklıkla kaydırılır, parsele giden yol kenarda
 >      ve set kotunda biter.
 >    - e. Sahne denetimi: yol–set kesişmesi, giriş kotu, eğim, rölyefin korunan alana değmesi.
->    - f. Set kenarı testere dişi: döndürülmüş ped kenarı 1 m ızgarada basamaklanıyor
->      (`terrainPads`, motor düzeltmesi).
+>    - f. ~~Set kenarı testere dişi~~: `terrainPads` geçişi en az 2 ızgara aralığı
+>      (`PAD_MIN_FALLOFF_SPACINGS`; 27° kenarda çizgi sapması 0,55 m → 0,16 m) ve üst üste
+>      binen geçişler simetrik, sürekli karışır ("güçlü çekiş kazanır" sıçraması yok); WB'de
+>      alçak set 2 m geri çekilir, duvar bandı örter. TAMAM. Izgaranın eğimli bantta üçgen
+>      deseni doğal; görünürlüğü Derekavak kabulünde duvarlarla kontrol edilecek.
 > 3. **Dünya özeti sabit koordinatlı girdi alır** (ana plandan yol çizgisi, parsel, yapı,
 >    yönlenme kuralı). Eski 3b (göl + `ridgeElevation`, artık 2a çekirdeğiyle) ve 3c–3e
 >    (boya / bitki / kaya kuralları bölge profiline) bu adımda birleşir.

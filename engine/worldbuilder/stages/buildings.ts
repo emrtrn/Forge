@@ -60,7 +60,7 @@ const SEED_SALT = 0x424c4447;
 export const buildingsStage: WorldStage = {
   id: BUILDINGS_STAGE_ID,
   label: "Buildings",
-  version: 2,
+  version: 3,
   run(input: StageInput): StageOutput {
     const { recipe, profile } = input;
     const warnings: string[] = [];

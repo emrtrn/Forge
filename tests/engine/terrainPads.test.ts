@@ -54,7 +54,7 @@ export function registerTerrainPadTests(check: Check): void {
     assert.equal(heightAt(world, 30, 15), base);
   });
 
-  check("terrain pads: the stronger pull wins where falloffs overlap; tile keys cover the reach", () => {
+  check("terrain pads: overlapping falloffs blend by weight; tile keys cover the reach", () => {
     const world = fixture();
     const base = world.def.origin[1];
     const low = pad(world, [4, 4, 12, 12], base - 1);
@@ -63,9 +63,52 @@ export function registerTerrainPadTests(check: Check): void {
     assert.equal(heightAt(world, 12, 8), base - 1, "inside the low pad, in the high one's falloff");
     assert.equal(heightAt(world, 14, 8), base + 3);
     assert.equal(padWeight(low, world.def.origin[0] + 13, world.def.origin[2] + 8), padWeight(high, world.def.origin[0] + 13, world.def.origin[2] + 8));
+    const between = heightAt(world, 13, 8);
+    assert.ok(between > base - 1 && between < base + 3, "between the two pads the ground lies between their levels");
+    // Symmetric: half way between them the pulls are equal, so swapping the levels changes nothing there.
+    const swapped = fixture();
+    applyTerrainUndoPatches(swapped, createTerrainPadPatches(swapped, [pad(swapped, [4, 4, 12, 12], base + 3), pad(swapped, [14, 4, 22, 12], base - 1)]));
+    assert.ok(Math.abs(heightAt(swapped, 13, 8) - between) < 1e-3);
 
     assert.deepEqual(terrainPadTileKeys(world.def, [low]), ["0_0"]);
     assert.deepEqual(terrainPadTileKeys(world.def, [pad(world, [26, 10, 30, 20], base)]).sort(), ["0_0", "1_0"]);
     assert.deepEqual(createTerrainPadPatches(world, []), []);
+  });
+
+  check("terrain pads: a narrow falloff widens to two grid spacings, so a rotated edge stays straight", () => {
+    // A pad edge at 27° to the grid, 3 m above the ground, asking for a 0.5 m falloff.
+    const world = fixture();
+    const base = world.def.origin[1];
+    const [ox, , oz] = world.def.origin;
+    const angle = (27 * Math.PI) / 180;
+    const along: [number, number] = [Math.cos(angle), Math.sin(angle)];
+    const out: [number, number] = [along[1], -along[0]];
+    const c: [number, number] = [32, 34];
+    const corner = (a: number, b: number): [number, number] => [ox + c[0] + along[0] * a - out[0] * b, oz + c[1] + along[1] * a - out[1] * b];
+    const tilted: TerrainPad = { polygon: [corner(-20, 0), corner(20, 0), corner(20, 20), corner(-20, 20)], height: base + 3, falloff: 0.5 };
+    applyTerrainUndoPatches(world, createTerrainPadPatches(world, [tilted]));
+    // Where the surface crosses half way down, measured across the edge at many points along it.
+    const crossings: number[] = [];
+    for (let s = -12; s <= 12; s += 0.37) {
+      for (let t = -1; t <= 4; t += 0.01) {
+        const x = c[0] + along[0] * s + out[0] * t, z = c[1] + along[1] * s + out[1] * t;
+        if (heightAt(world, x, z) < base + 1.5) { crossings.push(t); break; }
+      }
+    }
+    assert.ok(Math.max(...crossings) - Math.min(...crossings) < 0.3, `edge wanders ${(Math.max(...crossings) - Math.min(...crossings)).toFixed(2)} m`);
+    assert.deepEqual(terrainPadTileKeys(world.def, [tilted]).sort(), ["0_0", "0_1", "1_0", "1_1"]);
+  });
+
+  check("terrain pads: two terraces a falloff apart meet in one ramp between their levels", () => {
+    const world = fixture();
+    const base = world.def.origin[1];
+    // Upper terrace ends at x = 20, lower starts at x = 22 (a 2 m falloff apart).
+    const upper = pad(world, [4, 4, 20, 24], base + 3, 2);
+    const lower = pad(world, [22, 4, 40, 24], base, 2);
+    applyTerrainUndoPatches(world, createTerrainPadPatches(world, [upper, lower]));
+    const ramp = [20, 20.5, 21, 21.5, 22].map((x) => heightAt(world, x, 14));
+    assert.ok(Math.abs(ramp[0]! - (base + 3)) < 1e-3 && Math.abs(ramp[4]! - base) < 1e-3, "levels hold up to the edges");
+    assert.ok(ramp.every((value, index) => index === 0 || value <= ramp[index - 1]! + 1e-6), "the ramp only goes down");
+    assert.ok(ramp[2]! > base && ramp[2]! < base + 3, "the middle lies between the levels");
   });
 }

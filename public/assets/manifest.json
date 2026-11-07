@@ -22322,52 +22322,6 @@
       "license": "Unknown"
     },
     {
-      "id": "ridgeboundp1-level",
-      "name": "Ridgebound P1.Level",
-      "assetType": "level",
-      "category": "layouts",
-      "path": "layouts/RidgeboundP1.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "layouts",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 832
-      },
-      "license": "Unknown"
-    },
-    {
-      "id": "ridgeboundreliefa-level",
-      "name": "Ridgebound Relief A.Level",
-      "assetType": "level",
-      "category": "layouts",
-      "path": "layouts/RidgeboundReliefA.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "layouts",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 847
-      },
-      "license": "Unknown"
-    },
-    {
       "id": "foliage-type-foliagetype",
       "name": "Foliage Type.Foliagetype",
       "assetType": "foliageType",

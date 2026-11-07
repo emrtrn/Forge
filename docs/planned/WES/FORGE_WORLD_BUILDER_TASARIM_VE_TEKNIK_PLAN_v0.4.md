@@ -11,6 +11,26 @@
 - Uygulama durumu 2 Kasım 2026: **F1 çekirdeği kapandı**; F1b referans altlığı ve elle plan düzeltme (15b/15c) mevcut. T35 dış analiz JSON önizleme/birleştirme ilk dilimi mevcut; gerçek görsel analizi ve üç görselle kabul açık (§9).
 - Bu sürümde üzerine kurulacağı editör araçlarının gerçek durumu kodla işaretlendi.
 
+> **Tek aktif hat (7 Kasım 2026).** World Builder'da yürüyen tek iş, dünya özetinden
+> level üretme hattıdır (karar 20–22; [pilot](../../world-builder/PILOT_MOUNTAIN_VALLEY.md),
+> [dünya özeti sözleşmesi](../../world-builder/WORLD_BRIEF.md)). Sıra:
+>
+> 1. ~~Dünya özeti şeması + editörsüz `npm run world:brief`~~ (pilot adım 1–2, TAMAM).
+> 2. **Pilot adım 3:** çalıştırıcının geçici adımları (makro arazi, nehir yatağı + su,
+>    boya, bitki kuralları, ped) World Builder aşamasına dönüşür. Makro arazi
+>    çekirdeği `engine/worldbuilder/macroRelief.ts` hazır (T11).
+> 3. **Pilot adım 4:** T41 model listesi + rol → model bağlama (F3c).
+> 4. **Greybox onayı → aile başına detay onayı → detay ve bake** (karar 22).
+> 5. **F1b kabulü:** üç görselli WB-13, pilottan sonra.
+>
+> §9'daki diğer satırlar bu hattın kullandığı ya da sonraya kalan parçalardır; ayrı
+> iş başlatmaz. Codex'le yürütülen Ridgebound/Derekavak metrik içe aktarma hattı
+> (P0, P1, Relief A, v0.3 konut incelemesi) **kaldırıldı**: oyuna özel veri ve
+> dönüştürücüler Forge'dan silindi, raporlar `Forge-Archive/ridgebound-world-import-2026-11-07/`
+> altında. Genel parçalar kaldı: `metricFrame.ts` (dünya özeti kullanır),
+> `referenceImport.ts` (T35), `planBlockout` aşaması, `macroRelief.ts`. Ridgebound
+> dünyası kendi deposundaki tasarım dokümanından bir dünya özetiyle bu hattan kurulur.
+
 **İlgili:** [WES v0.3](FORGE_WORLD_ENVIRONMENT_MEVSIM_HAVA_ZAMAN_TEKNIK_TASARIM_VE_UYGULAMA_PLANI_v0.3.md) · [OPEN_WORLD_PLAN](../OPEN_WORLD_PLAN.md) · [WORLD_TERRAIN_WATER_BODY_PLAN](../WORLD_TERRAIN_WATER_BODY_PLAN.md) · [TERRAIN_DEFORMATION_PLAN](../TERRAIN_DEFORMATION_PLAN.md) · [Forge Water System](../Forge_Water_System/README.md)
 
 > **Etiketler**
@@ -283,7 +303,7 @@ Terrain tarafında kirli bölge ve undo patch altyapısı mevcuttur (`engine/ter
 
 | ID | Araç | Durum | Kanıt / not |
 |---|---|---|---|
-| **T11** | Procedural Macro Terrain | KISMİ | Heightmap import + `noise/terrace/ramp` fırçaları. Recipe'den bölge maskeli makro üretim YENİ |
+| **T11** | Procedural Macro Terrain | KISMİ | Heightmap import + `noise/terrace/ramp` fırçaları. Tohumlu, koruma maskeli makro rölyef çekirdeği `engine/worldbuilder/macroRelief.ts` MEVCUT (dünya koordinatlı, tile dikişi tutarlı; `tests/engine/macroRelief.test.ts`); aşama, panel önizlemesi ve undo YENİ (pilot adım 3) |
 | **T12** | Erosion / Sediment | **MEVCUT** (fırça) | `terrainErosion.ts` termal + hidrolik. Bölge/recipe çağrısı küçük iş |
 | **T13** | Flow / Drainage Analyzer | YENİ | Akış yönü/birikimi, havza, çukur tespiti. Global map üzerinden worker |
 | **T14** | Road Cost Map & Route Solver | YENİ → **MEVCUT** (F1 adım 8a, `engine/worldbuilder/route.ts`; araç profili Offroad verisinden henüz okunmuyor, sınırlar bölge profilinden). **Serpantin** (2026-10-29, dağlık test açığı): ilk A* hâlâ sınırdan dik çıkarsa yön bilen ikinci A* (hücre × 16 yön, dönüş açısıyla orantılı ceza, traverseler sınırın %85'ine hedeflenir, ızgara ≤ 60 000 hücre) traverse + dönemeç üretir; yumuşatma köşe koruyan yeniden örneklemeyi de dener (dönemeç kirişi yoldan diktir). 24,7° yamaçta 20° sınırlı patika 12,3°'de kalıyor; `minTurnRadius`'tan dar dönemeçler `tightBends` olarak raporlanır (dönemeç genişletme/kavşak düzleme yok). `roads` aşaması v4 | Araç profili Offroad verisinden (`src/game`/proje) okunur. Ayrıntı §13.5 |
@@ -582,7 +602,7 @@ Doğrulama sonucu | Manuel override korundu mu (sayı)
 | **F1 — Recipe çekirdeği** | Şema (`settlements`/`roadGraph`/`regionProfile` alanlarının yeri dahil), sahiplik kaydı, `LayoutPlacement.id`, tek stage'li runner (`roads`), dry-run, tek undo, `inspectCapabilities` | Aynı recipe güvenle tekrar çalışıyor (WB-01/02/08) | **KAPANDI** (2026-10-28…30, F1 adım 1–14 + 19): recipe + `/__save-worldrecipe`, sahiplik kaydı, placement `id`/`role`, Stage Runner (placement + spline), dry run + viewport önizlemesi (T10), stage başına tek undo; tekrar çalıştırma boş (WB-02 aşama testlerinde). `inspectCapabilities` yazılmadı (AI komut yüzeyiyle, §6.2) |
 | **F1b — Referanstan plan** (v0.4) | Semantic World Plan şeması, görsel yorumlayıcı (T35), Reference Underlay + plan katmanı (T36), üç test görseli | AI planı görselin üstünde doğru yerde; kullanıcı editörde düzeltebiliyor (WB-13) | Şema (recipe `plan` + kaynak/güven), T36 gösterimi (adım 15), elle düzeltme (15b/15c, 2026-11-02) ve Move to Site (2026-10-30) MEVCUT. T35 ilk dilim: dış analiz JSON içe aktarma/önizleme/birleştirme, tek undo, manuel öğe ve kalıcı silme kaydı koruması MEVCUT ([sözleşme](../../world-builder/REFERENCE_PLAN_IMPORT.md), [rapor](../../reports/WORLD_BUILDER_T35_IMPORT_KABUL_RAPORU.md)). Karar 16 kapandı (2026-11-07). **AÇIK:** üç test görselinin üretimi, gerçek görselden analiz ve WB-13 kabulü. F1b henüz kapanmadı |
 | **Pilot — dikey dilim** (2026-11-07) | 1 × 1 km dağ vadisi: arazi, nehir, yol, kulübe, bitki örtüsü, greybox → onay → detay ([kapsam ve model listesi](../../world-builder/PILOT_MOUNTAIN_VALLEY.md)) | Sahne dünya özetinden uçtan uca üretiliyor; eksikler ölçülmüş listede | Greybox sahne üretildi. **Adım 1–2 TAMAM** (2026-11-07): genel dünya özeti şeması `*.worldbrief.json` (`engine/worldbuilder/worldBrief.ts`, [sözleşme](../../world-builder/WORLD_BRIEF.md)) ve editörsüz çalıştırıcı `npm run world:brief` (aşamalar `planStage` ile, kayıt editörün biçiminde: partition, eski hücre temizliği; editörde aç + kaydet dosya değiştirmiyor). **AÇIK:** adım 3 — çalıştırıcının geçici adımları (makro arazi, nehir yatağı + su, boya, bitki kuralları, ped) aşamaya dönüşür; adım 4 — T41 model listesi + rol → model bağlama. Üç görselli WB-13 kabulü pilottan sonraya alındı |
-| **F2 — Terrain + Roads + Water** | 03/04/05/07 stage'leri mevcut araçlarla; makro arazi plan bölgelerinden | Test level'ı tekrar üretilebilir; dikişler geçerli (WB-03/04/05) | Yalnız yol kısmı MEVCUT (`roads` aşaması, F1 adım 6/8). Makro arazi (T11), su aşaması (T06), erozyon çağrısı (T12), akış (T13) başlanmadı |
+| **F2 — Terrain + Roads + Water** | 03/04/05/07 stage'leri mevcut araçlarla; makro arazi plan bölgelerinden | Test level'ı tekrar üretilebilir; dikişler geçerli (WB-03/04/05) | Yalnız yol kısmı MEVCUT (`roads` aşaması, F1 adım 6/8). Makro arazi aşaması (T11; çekirdek `macroRelief.ts` var), su aşaması (T06), erozyon çağrısı (T12), akış (T13) başlanmadı; makro arazi ve su pilot adım 3'te |
 | **F3a — Yol ağı** (v0.4) | Yol grafı (T38), maliyet haritası + rota çözücü (T14), T/Y kavşak (T15), geçit placeholder'ı (T16) | Hedefler bağlı, eğim/dönüş profile uygun (WB-03/06) | Büyük ölçüde MEVCUT (F1 adım 6, 8a/8b, serpantin): graf (`plan.roadGraph`), rota çözücü (T14), T/Y kavşak (T15). **AÇIK:** geçit/köprü placeholder'ı (T16; roads su geçişini yalnız bildirir), araç profilinin Offroad verisinden okunması |
 | **F3b — Yerleşim** (v0.4) | Bölge profili (T34), yer seçimi + program + ada/parsel (T18), arazi kullanımı (T39), rol placeholder'ı (T40), ped (T21) | WB-06/09/14/15/16/17 | Büyük ölçüde MEVCUT (F1 adım 9–13b): profil (T34), yer seçimi + araziden büyüyen çekirdek + program, iç sokak (organik + eşyükselti), parsel, arazi kullanımı (T39), rol placeholder'ı (T40) + elle Apply Pads (T21), donatı, çit. **AÇIK:** köyde 1 parselsiz konut (`wbTestValley.test.ts`), ızgara/radyal desen ve eşyükselti arası dik bağlantı, ped modeli (karar 19), rol → model çözümü |
 | **F3c — Model listesi** (v0.4) | Gereken model listesi (T41) ve placeholder → model içe aktarma normalizasyonu | WB-19; bir Tripo modeli placeholder'ın yerine oturuyor | Başlanmadı (F3b sonrası) |
@@ -1022,6 +1042,7 @@ Forge'un sorumluluğu üç noktadadır: listeyi çıkarmak, gelen modeli normali
 
 | Sürüm | Tarih | Not |
 |---|---|---|
+| 0.4 eki | 07.11.2026 | Tek aktif hat: dünya özetinden level üretimi (başlıktaki kutu). Ridgebound/Derekavak metrik içe aktarma hattı Forge'dan kaldırıldı; raporları Forge-Archive'de. T11 satırına `macroRelief.ts` çekirdeği işlendi. |
 | **0.4** | 28.10.2026 | Yerleşim, yol ağı ve bölge profili tasarımı (§13: L0–L7, veri sözleşmeleri, algoritmalar, OSM, model listesi, ölçek yolu). Kullanıcı kararları 11–14 (AI görseli önce, OSM ölçekli, köy/kasaba önce, hibrit giriş, hazır asset yok). Kod bulgusu: `LayoutPlacement`'ta `id` yok; T07/§5.5/§6.3 düzeltildi. T34–T41, WB-13–19, F1b ve F3a–F3d eklendi; açık kararlar 5 ve 6 kapandı; 15–19 eklendi. |
 | 0.3 | 27.10.2026 | `main@f9aa05f` repo doğrulaması: durum tablosu kodla değiştirildi; T01–T33'e durum/kanıt eklendi (4 MEVCUT, 18 KISMİ, 11 YENİ); "orkestrasyon katmanı" sınırı; 13 aşamaya mevcut araç sütunu; hibrit katman modeli, recipe/sahiplik sidecar önerisi, stage başına tek undo; açık kararlardan 5'i kapandı ya da karara bağlandı; `WbTestValley` fixture; WES v0.3 bağı. |
 | 0.2 | 26.10.2026 | WES entegrasyon eki, onaylı dört WES kararı, stage bağlantıları. |

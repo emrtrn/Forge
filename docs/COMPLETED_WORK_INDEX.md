@@ -65,3 +65,7 @@ Archived completed documents:
 - `VEHICLE_SOFT_GROUND_RESISTANCE_PLAN.md`
 - `VFX_Lite_Plan.md`
 - `WORLD_BUILDER_WINDOW_PLAN.md`
+- `ridgebound-world-import-2026-11-07/` — Ridgebound/Derekavak metrik içe
+  aktarma hattının (P0, P1 terrain, Relief A, v0.3 konut incelemesi) raporları
+  ve sözleşmesi; hat 7 Kasım 2026'da Forge'dan kaldırıldı, World Builder
+  planının başındaki "Tek aktif hat" kutusuna bakın.

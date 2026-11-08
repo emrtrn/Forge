@@ -125,7 +125,10 @@ test("vehicle telemetry: recording panel shows live pedals, drivetrain, soil and
     flatLane(level);
   });
   const panel = page.getByRole("region", { name: "Araç sürüş ölçümleri" });
+  await expect(panel).toBeHidden();
+  await page.keyboard.press("F8");
   await expect(panel).toBeVisible();
+  await expect.poll(async () => Number(await panel.locator('[data-vt="fps"]').innerText())).toBeGreaterThan(0);
   await expect(panel.locator("tbody tr")).toHaveCount(4);
   await expect(panel).toContainText("neutral");
   await expect(panel.locator('[data-vt="gear"]')).toHaveText("1");

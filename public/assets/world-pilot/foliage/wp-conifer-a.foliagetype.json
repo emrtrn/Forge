@@ -1,34 +1,36 @@
 {
   "schema": 1,
   "type": "foliageType",
-  "density": 1,
-  "randomYaw": true,
-  "zOffsetMin": 0,
-  "zOffsetMax": 0,
-  "slopeMin": 0,
-  "receiveShadow": true,
-  "collision": false,
-  "cullStart": 0,
   "name": "WP Conifer A",
   "meshAssetId": "forest-tree-01",
   "radius": 4,
+  "density": 0.01,
   "scaleMin": [
     0.8,
     0.8,
     0.8
   ],
   "scaleMax": [
-    1,
-    1,
-    1
+    1.2,
+    1.2,
+    1.2
   ],
+  "randomYaw": true,
   "alignToNormal": false,
+  "zOffsetMin": 0,
+  "zOffsetMax": 0,
+  "slopeMin": 0,
   "slopeMax": 40,
   "castShadow": true,
+  "receiveShadow": true,
+  "collision": false,
+  "cullStart": 0,
   "cullEnd": 900,
   "sway": {
-    "amplitude": 0.04,
-    "height": 1,
-    "frequency": 0.4
-  }
+    "amplitude": 0.2,
+    "height": 10,
+    "frequency": 0.2
+  },
+  "farDistance": 3000,
+  "farTint": 1
 }

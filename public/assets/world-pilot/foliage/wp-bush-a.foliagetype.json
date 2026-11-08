@@ -1,17 +1,10 @@
 {
   "schema": 1,
   "type": "foliageType",
-  "density": 1,
-  "randomYaw": true,
-  "zOffsetMin": 0,
-  "zOffsetMax": 0,
-  "slopeMin": 0,
-  "receiveShadow": true,
-  "collision": false,
-  "cullStart": 0,
   "name": "WP Bush A",
   "meshAssetId": "forest-lowpolyprop-03",
   "radius": 1.2,
+  "density": 1,
   "scaleMin": [
     0.45,
     0.45,
@@ -22,13 +15,20 @@
     0.7,
     0.7
   ],
+  "randomYaw": true,
   "alignToNormal": true,
+  "zOffsetMin": 0,
+  "zOffsetMax": 0,
+  "slopeMin": 0,
   "slopeMax": 45,
   "castShadow": false,
+  "receiveShadow": true,
+  "collision": false,
+  "cullStart": 0,
   "cullEnd": 350,
   "sway": {
-    "amplitude": 0.08,
-    "height": 1,
-    "frequency": 0.6
+    "amplitude": 0.47,
+    "height": 2.81,
+    "frequency": 1.1
   }
 }

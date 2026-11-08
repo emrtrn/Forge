@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "type": "foliage",
+  "groups": [],
+  "landscapeRules": [
+    {
+      "id": "forest-conifer-a",
+      "landscapeId": "terrain",
+      "layerId": "forest",
+      "foliageTypeId": "wp-conifer-a-type",
+      "density": 0.01,
+      "minWeight": 0.6,
+      "seed": 101,
+      "heightMin": -14,
+      "heightMax": 40
+    },
+    {
+      "id": "forest-conifer-b",
+      "landscapeId": "terrain",
+      "layerId": "forest",
+      "foliageTypeId": "wp-conifer-b-type",
+      "density": 0.01,
+      "minWeight": 0.45,
+      "seed": 102,
+      "heightMin": -14,
+      "heightMax": 40
+    },
+    {
+      "id": "forest-conifer-c",
+      "landscapeId": "terrain",
+      "layerId": "forest",
+      "foliageTypeId": "wp-conifer-c-type",
+      "density": 0.01,
+      "minWeight": 0.35,
+      "seed": 106,
+      "heightMin": -14,
+      "heightMax": 40
+    },
+    {
+      "id": "forest-bush",
+      "landscapeId": "terrain",
+      "layerId": "forest",
+      "foliageTypeId": "wp-bush-a-type",
+      "density": 0.0015,
+      "minWeight": 0.5,
+      "seed": 103
+    },
+    {
+      "id": "forest-bush-b",
+      "landscapeId": "terrain",
+      "layerId": "forest",
+      "foliageTypeId": "wp-bush-b-type",
+      "density": 0.001,
+      "minWeight": 0.5,
+      "seed": 107
+    },
+    {
+      "id": "meadow-bush",
+      "landscapeId": "terrain",
+      "layerId": "meadow",
+      "foliageTypeId": "wp-bush-a-type",
+      "density": 0.0006,
+      "minWeight": 0.6,
+      "seed": 104
+    },
+    {
+      "id": "meadow-grass",
+      "landscapeId": "terrain",
+      "layerId": "meadow",
+      "foliageTypeId": "wp-grass-a-type",
+      "density": 0.02,
+      "minWeight": 0.5,
+      "seed": 105
+    }
+  ]
+}

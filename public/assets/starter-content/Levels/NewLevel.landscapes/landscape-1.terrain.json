@@ -1,0 +1,595 @@
+{
+  "schema": 1,
+  "type": "worldTerrain",
+  "name": "Landscape",
+  "tileQuads": 256,
+  "spacing": 2,
+  "tilesX": 8,
+  "tilesZ": 8,
+  "origin": [
+    -2048,
+    0,
+    -2048
+  ],
+  "heightMin": -256,
+  "heightMax": 256,
+  "layers": [
+    {
+      "id": "grass",
+      "name": "Grass",
+      "color": "#5f9449",
+      "material": "starter-mat-grass"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "color": "#8a6441",
+      "material": "lt-earth"
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "color": "#7f8485",
+      "material": "lt-rock"
+    },
+    {
+      "id": "snow",
+      "name": "Snow",
+      "color": "#dce7ec",
+      "material": "lt-snow"
+    }
+  ],
+  "tiles": [
+    {
+      "key": "0_0",
+      "minHeight": -202.10855102539062,
+      "maxHeight": -111.29467010498047
+    },
+    {
+      "key": "1_0",
+      "minHeight": -195.2334442138672,
+      "maxHeight": -114.02908325195312
+    },
+    {
+      "key": "2_0",
+      "minHeight": -204.13983154296875,
+      "maxHeight": -118.24789428710938
+    },
+    {
+      "key": "3_0",
+      "minHeight": -215.8900146484375,
+      "maxHeight": -148.34210205078125
+    },
+    {
+      "key": "4_0",
+      "minHeight": -206.67112731933594,
+      "maxHeight": -117.13850402832031
+    },
+    {
+      "key": "5_0",
+      "minHeight": -192.2958984375,
+      "maxHeight": -19.808895111083984
+    },
+    {
+      "key": "6_0",
+      "minHeight": -214.90562438964844,
+      "maxHeight": -72.0596923828125
+    },
+    {
+      "key": "7_0",
+      "minHeight": -243.2029266357422,
+      "maxHeight": -206.35861206054688
+    },
+    {
+      "key": "0_1",
+      "minHeight": -147.2483367919922,
+      "maxHeight": 104.73206329345703
+    },
+    {
+      "key": "1_1",
+      "minHeight": -123.63860321044922,
+      "maxHeight": 89.5599594116211
+    },
+    {
+      "key": "2_1",
+      "minHeight": -151.38902282714844,
+      "maxHeight": 67.68462371826172
+    },
+    {
+      "key": "3_1",
+      "minHeight": -165.3267364501953,
+      "maxHeight": -3.3398947715759277
+    },
+    {
+      "key": "4_1",
+      "minHeight": -158.76414489746094,
+      "maxHeight": -10.605630874633789
+    },
+    {
+      "key": "5_1",
+      "minHeight": -171.88934326171875,
+      "maxHeight": -19.68389320373535
+    },
+    {
+      "key": "6_1",
+      "minHeight": -211.1868133544922,
+      "maxHeight": -76.27851104736328
+    },
+    {
+      "key": "7_1",
+      "minHeight": -235.4840545654297,
+      "maxHeight": -204.5148468017578
+    },
+    {
+      "key": "0_2",
+      "minHeight": -84.23175048828125,
+      "maxHeight": 168.0924072265625
+    },
+    {
+      "key": "1_2",
+      "minHeight": -41.27797317504883,
+      "maxHeight": 126.4823989868164
+    },
+    {
+      "key": "2_2",
+      "minHeight": -61.981414794921875,
+      "maxHeight": 120.96669006347656
+    },
+    {
+      "key": "3_2",
+      "minHeight": -73.62259674072266,
+      "maxHeight": 25.996490478515625
+    },
+    {
+      "key": "4_2",
+      "minHeight": -108.49774932861328,
+      "maxHeight": 39.2779426574707
+    },
+    {
+      "key": "5_2",
+      "minHeight": -172.9049835205078,
+      "maxHeight": -41.09046936035156
+    },
+    {
+      "key": "6_2",
+      "minHeight": -206.70237731933594,
+      "maxHeight": -116.35724639892578
+    },
+    {
+      "key": "7_2",
+      "minHeight": -227.2964324951172,
+      "maxHeight": -163.1860809326172
+    },
+    {
+      "key": "0_3",
+      "minHeight": -152.2327880859375,
+      "maxHeight": 32.8559684753418
+    },
+    {
+      "key": "1_3",
+      "minHeight": -170.8424530029297,
+      "maxHeight": -3.3398947715759277
+    },
+    {
+      "key": "2_3",
+      "minHeight": -183.23326110839844,
+      "maxHeight": -33.35597610473633
+    },
+    {
+      "key": "3_3",
+      "minHeight": -182.26449584960938,
+      "maxHeight": -18.090120315551758
+    },
+    {
+      "key": "4_3",
+      "minHeight": -163.2173309326172,
+      "maxHeight": 18.902631759643555
+    },
+    {
+      "key": "5_3",
+      "minHeight": -116.35724639892578,
+      "maxHeight": 9.918120384216309
+    },
+    {
+      "key": "6_3",
+      "minHeight": -163.85797119140625,
+      "maxHeight": 17.199481964111328
+    },
+    {
+      "key": "7_3",
+      "minHeight": -200.76478576660156,
+      "maxHeight": -27.52776336669922
+    },
+    {
+      "key": "0_4",
+      "minHeight": -215.6243896484375,
+      "maxHeight": -124.06048583984375
+    },
+    {
+      "key": "1_4",
+      "minHeight": -211.2024383544922,
+      "maxHeight": -129.32618713378906
+    },
+    {
+      "key": "2_4",
+      "minHeight": -212.5774688720703,
+      "maxHeight": -170.8424530029297
+    },
+    {
+      "key": "3_4",
+      "minHeight": -212.03057861328125,
+      "maxHeight": -163.2173309326172
+    },
+    {
+      "key": "4_4",
+      "minHeight": -206.88987731933594,
+      "maxHeight": -54.559425354003906
+    },
+    {
+      "key": "5_4",
+      "minHeight": -157.0922393798828,
+      "maxHeight": 18.183870315551758
+    },
+    {
+      "key": "6_4",
+      "minHeight": -32.6372184753418,
+      "maxHeight": 106.06021118164062
+    },
+    {
+      "key": "7_4",
+      "minHeight": -167.8736572265625,
+      "maxHeight": 44.184268951416016
+    },
+    {
+      "key": "0_5",
+      "minHeight": -233.01527404785156,
+      "maxHeight": -209.06178283691406
+    },
+    {
+      "key": "1_5",
+      "minHeight": -231.17149353027344,
+      "maxHeight": -203.54608154296875
+    },
+    {
+      "key": "2_5",
+      "minHeight": -229.96835327148438,
+      "maxHeight": -204.23358154296875
+    },
+    {
+      "key": "3_5",
+      "minHeight": -232.2496337890625,
+      "maxHeight": -206.88987731933594
+    },
+    {
+      "key": "4_5",
+      "minHeight": -218.8275604248047,
+      "maxHeight": -157.0922393798828
+    },
+    {
+      "key": "5_5",
+      "minHeight": -191.9365234375,
+      "maxHeight": -32.6372184753418
+    },
+    {
+      "key": "6_5",
+      "minHeight": -114.26346588134766,
+      "maxHeight": 87.51305389404297
+    },
+    {
+      "key": "7_5",
+      "minHeight": -121.4823226928711,
+      "maxHeight": 106.85710144042969
+    },
+    {
+      "key": "0_6",
+      "minHeight": -241.35914611816406,
+      "maxHeight": -220.39007568359375
+    },
+    {
+      "key": "1_6",
+      "minHeight": -241.79666137695312,
+      "maxHeight": -222.26510620117188
+    },
+    {
+      "key": "2_6",
+      "minHeight": -229.0308380126953,
+      "maxHeight": -217.56192016601562
+    },
+    {
+      "key": "3_6",
+      "minHeight": -230.70274353027344,
+      "maxHeight": -215.5462646484375
+    },
+    {
+      "key": "4_6",
+      "minHeight": -221.78073120117188,
+      "maxHeight": -191.9365234375
+    },
+    {
+      "key": "5_6",
+      "minHeight": -203.2804412841797,
+      "maxHeight": -114.26346588134766
+    },
+    {
+      "key": "6_6",
+      "minHeight": -147.4202117919922,
+      "maxHeight": 86.4192886352539
+    },
+    {
+      "key": "7_6",
+      "minHeight": -111.935302734375,
+      "maxHeight": 114.99784851074219
+    },
+    {
+      "key": "0_7",
+      "minHeight": -243.2029266357422,
+      "maxHeight": -225.14015197753906
+    },
+    {
+      "key": "1_7",
+      "minHeight": -243.2029266357422,
+      "maxHeight": -225.76516723632812
+    },
+    {
+      "key": "2_7",
+      "minHeight": -235.92156982421875,
+      "maxHeight": -216.4212646484375
+    },
+    {
+      "key": "3_7",
+      "minHeight": -232.3121337890625,
+      "maxHeight": -215.7493896484375
+    },
+    {
+      "key": "4_7",
+      "minHeight": -224.01513671875,
+      "maxHeight": -203.2804412841797
+    },
+    {
+      "key": "5_7",
+      "minHeight": -222.14010620117188,
+      "maxHeight": -143.513916015625
+    },
+    {
+      "key": "6_7",
+      "minHeight": -202.9991912841797,
+      "maxHeight": -46.82493209838867
+    },
+    {
+      "key": "7_7",
+      "minHeight": -182.56138610839844,
+      "maxHeight": -51.90313720703125
+    }
+  ],
+  "collision": true,
+  "splines": [
+    {
+      "id": "spline-1",
+      "points": [
+        {
+          "id": "point-1",
+          "position": [
+            323.35,
+            -161.71,
+            390.09
+          ],
+          "width": 12,
+          "falloff": 3
+        },
+        {
+          "id": "point-2",
+          "position": [
+            187.75,
+            -136.5,
+            112.83
+          ],
+          "width": 12,
+          "falloff": 3
+        },
+        {
+          "id": "point-3",
+          "position": [
+            -135.96,
+            -143.07,
+            -154.53
+          ],
+          "width": 12,
+          "falloff": 3
+        },
+        {
+          "id": "point-4",
+          "position": [
+            -355.77,
+            -97.67,
+            -420.77
+          ],
+          "width": 12,
+          "falloff": 3
+        },
+        {
+          "id": "point-5",
+          "position": [
+            -413.81,
+            -51.64,
+            -572.38
+          ],
+          "width": 12,
+          "falloff": 3
+        },
+        {
+          "id": "point-6",
+          "position": [
+            -257.5,
+            -35.21,
+            -556.54
+          ],
+          "width": 12,
+          "falloff": 3
+        },
+        {
+          "id": "point-7",
+          "position": [
+            -96.78,
+            -42.21,
+            -458.77
+          ],
+          "width": 12,
+          "falloff": 3
+        },
+        {
+          "id": "point-8",
+          "position": [
+            33.57,
+            -72.33,
+            -346.33
+          ],
+          "width": 12,
+          "falloff": 3
+        },
+        {
+          "id": "point-9",
+          "position": [
+            268.77,
+            -67.66,
+            -322.08
+          ],
+          "width": 12,
+          "falloff": 3
+        }
+      ],
+      "segments": [
+        {
+          "id": "segment-1",
+          "startPointId": "point-1",
+          "endPointId": "point-2",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-2",
+          "startPointId": "point-2",
+          "endPointId": "point-3",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-3",
+          "startPointId": "point-3",
+          "endPointId": "point-4",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-4",
+          "startPointId": "point-4",
+          "endPointId": "point-5",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-5",
+          "startPointId": "point-5",
+          "endPointId": "point-6",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-6",
+          "startPointId": "point-6",
+          "endPointId": "point-7",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-7",
+          "startPointId": "point-7",
+          "endPointId": "point-8",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          }
+        },
+        {
+          "id": "segment-8",
+          "startPointId": "point-8",
+          "endPointId": "point-9",
+          "deform": {
+            "enabled": true,
+            "raiseTerrain": true,
+            "lowerTerrain": true,
+            "flatten": true
+          },
+          "paint": {
+            "enabled": true,
+            "layerId": "dirt",
+            "strength": 1
+          }
+        }
+      ],
+      "name": "Spline 1",
+      "smooth": true,
+      "coordinateSpace": "world"
+    }
+  ]
+}

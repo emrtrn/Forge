@@ -55,8 +55,11 @@ export function createVehicleTelemetryModule(): CapabilityModule {
   let style: HTMLStyleElement | null = null;
   let cells = new Map<string, HTMLElement>();
   let rows: HTMLTableRowElement[] = [];
-  let enabled = true;
+  let enabled = false;
   let elapsed = 0;
+  let fps = "—";
+  let fpsSampleStart: number | null = null;
+  let fpsFrames = 0;
 
   const set = (key: string, value: string): void => {
     const cell = cells.get(key);
@@ -78,9 +81,11 @@ export function createVehicleTelemetryModule(): CapabilityModule {
     document.head.append(style);
     root = document.createElement("section");
     root.className = "forge-vehicle-telemetry";
+    root.hidden = !enabled;
     root.setAttribute("aria-label", "Araç sürüş ölçümleri");
     // Static markup only; live material ids and all numbers are assigned with textContent.
     root.innerHTML = `<header><b>Sürüş ölçümleri</b><span data-vt="movement"></span></header>
+      <div class="vt-row"><span>FPS</span><strong data-vt="fps">—</strong></div>
       <div class="vt-speed"><span data-vt="speed">0.0</span> <small>km/sa</small></div>
       <div class="vt-drivetrain"><span>Vites <b data-vt="gear"></b></span><span><b data-vt="rpm"></b> d/d</span><span data-vt="shift"></span></div>
       <div class="vt-inputs">
@@ -105,6 +110,7 @@ export function createVehicleTelemetryModule(): CapabilityModule {
     mount();
     if (!root) return;
     root.hidden = !enabled;
+    set("fps", fps);
     for (const [key, value] of Object.entries(vehicleTelemetryValues(state))) set(key, value);
     const body = root.querySelector("tbody")!;
     if (rows.length !== state.wheels.length) {
@@ -135,6 +141,18 @@ export function createVehicleTelemetryModule(): CapabilityModule {
       if (typeof window !== "undefined") window.addEventListener("keydown", keydown);
     },
     update(dt) {
+      // Use real frame time: the simulation delta is clamped and can understate slow frames.
+      const now = performance.now();
+      if (fpsSampleStart === null) fpsSampleStart = now;
+      else {
+        fpsFrames++;
+        const sampleMs = now - fpsSampleStart;
+        if (sampleMs >= 500) {
+          fps = number(fpsFrames * 1000 / sampleMs);
+          fpsSampleStart = now;
+          fpsFrames = 0;
+        }
+      }
       elapsed += dt;
       const host = services?.resolve(vehicleHostService);
       const id = host?.possessedEntityId();

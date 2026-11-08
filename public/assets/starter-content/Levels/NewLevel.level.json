@@ -18,8 +18,26 @@
   ],
   "characters": [],
   "worldSettings": {
-    "staticObjectsCastShadow": true
+    "partition": {
+      "enabled": true,
+      "grids": {
+        "main": {
+          "cellSize": 128,
+          "loadRange": 384
+        },
+        "foliage": {
+          "cellSize": 64,
+          "loadRange": 256
+        }
+      }
+    },
+    "staticObjectsCastShadow": true,
+    "viewDistance": 3000,
+    "gameMode": "forge.vehicle"
   },
+  "worldCells": [
+    "2_2"
+  ],
   "skyAtmosphere": {
     "name": "Sky Atmosphere",
     "rayleigh": 1,
@@ -35,9 +53,15 @@
     "name": "Exponential Height Fog",
     "mode": "exp",
     "color": "#bcc6d1",
-    "density": 0.001,
-    "start": 5,
-    "end": 60
+    "sunColor": "#ffe2bd",
+    "density": 0.000659,
+    "heightFalloff": 0,
+    "baseHeight": 0,
+    "startDistance": 0,
+    "maxOpacity": 1,
+    "sunStrength": 0.25,
+    "start": 100,
+    "end": 200
   },
   "cloudLayer": {
     "name": "Cloud Layer",
@@ -87,8 +111,8 @@
   "worldEnvironment": {
     "name": "World Environment",
     "time": {
-      "hour": 10,
-      "dayLengthMinutes": 1
+      "hour": 13.636,
+      "dayLengthMinutes": 0
     },
     "sunPath": {
       "azimuthDeg": 96.056,
@@ -142,5 +166,17 @@
       "cascadedShadows": true
     }
   ],
-  "landscapes": []
+  "landscapes": [
+    {
+      "id": "landscape-1",
+      "position": [
+        0,
+        0,
+        0
+      ],
+      "dataRef": "assets/starter-content/Levels/NewLevel.landscapes/landscape-1.terrain.json",
+      "name": "Landscape"
+    }
+  ],
+  "actors": []
 }

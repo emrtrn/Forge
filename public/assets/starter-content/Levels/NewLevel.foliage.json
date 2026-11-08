@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "type": "foliage",
+  "groups": [],
+  "landscapeRules": [
+    {
+      "id": "landscape-foliage-rule-1",
+      "landscapeId": "landscape-1",
+      "layerId": "grass",
+      "foliageTypeId": "wp-conifer-a-type",
+      "density": 0.01,
+      "minWeight": 0.5,
+      "seed": 1,
+      "heightMax": 0,
+      "heightFalloff": 10,
+      "noiseAmount": 0.35,
+      "noiseScale": 50,
+      "edgeScale": 0.5
+    }
+  ],
+  "foliageCells": []
+}

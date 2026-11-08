@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "2_2",
+  "actors": [
+    {
+      "classRef": "assets/vehicles/doruk-k180/Script_DorukK180.actor.json",
+      "position": [
+        320.27,
+        -161.04,
+        383.14
+      ],
+      "id": "act-mw7n3h14-3anz",
+      "rotationYDeg": 0,
+      "rotation": [
+        0,
+        -152,
+        0
+      ],
+      "scale": 1
+    }
+  ]
+}

@@ -12,7 +12,7 @@ import { smokePublicPath } from "./smokeProject.mjs";
  * cells, the terrain, the recipe nor the foliage sidecar.
  */
 
-const BRIEF = "assets/world-pilot/Levels/WbPilotValley.worldbrief.json";
+const BRIEF = "assets/world-builder/Levels/WbPilotValley.worldbrief.json";
 const PARTITION = { enabled: true, grids: { main: { cellSize: 128, loadRange: 384 }, foliage: { cellSize: 64, loadRange: 256 } } };
 
 /** Every file of the level, by public path → SHA-256. */
@@ -37,7 +37,7 @@ async function snapshot(level: string): Promise<Record<string, string>> {
 for (const partitioned of [false, true]) {
   test(`world brief: the built ${partitioned ? "partitioned " : ""}pilot opens and saves in the editor without a file changing`, async ({ page, request }) => {
     test.setTimeout(420_000);
-    const level = `assets/world-pilot/Levels/__playwright-world-brief${partitioned ? "-wp" : ""}.level.json`;
+    const level = `assets/world-builder/Levels/__playwright-world-brief${partitioned ? "-wp" : ""}.level.json`;
     if (partitioned) {
       // The runner keeps the partition settings of the level it replaces.
       await mkdir(dirname(smokePublicPath(level)), { recursive: true });

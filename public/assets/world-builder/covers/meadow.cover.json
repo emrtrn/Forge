@@ -80,7 +80,7 @@
     {
       "id": "grove-conifer",
       "layer": "forest",
-      "foliageType": "assets/world-pilot/foliage/wp-conifer-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-conifer-a.foliagetype.json",
       "density": 0.0008,
       "minWeight": 0.55,
       "seed": 202
@@ -88,7 +88,7 @@
     {
       "id": "grove-bush",
       "layer": "forest",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-a.foliagetype.json",
       "density": 0.0015,
       "minWeight": 0.5,
       "seed": 203
@@ -96,7 +96,7 @@
     {
       "id": "meadow-grass",
       "layer": "meadow",
-      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-grass-a.foliagetype.json",
       "density": 0.03,
       "minWeight": 0.45,
       "seed": 204
@@ -104,7 +104,7 @@
     {
       "id": "meadow-bush",
       "layer": "meadow",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-a.foliagetype.json",
       "density": 0.0012,
       "minWeight": 0.6,
       "seed": 205
@@ -112,7 +112,7 @@
     {
       "id": "meadow-bush-b",
       "layer": "meadow",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-b.foliagetype.json",
       "density": 0.0008,
       "minWeight": 0.6,
       "seed": 206

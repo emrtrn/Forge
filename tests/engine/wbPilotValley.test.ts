@@ -22,7 +22,7 @@ import { PILOT_BRIEF } from "./worldBrief.test";
 type Check = (label: string, run: () => void) => void;
 type CheckAsync = (label: string, run: () => Promise<void>) => Promise<void>;
 
-const LEVEL = "assets/world-pilot/Levels/WbPilotValley.level.json";
+const LEVEL = "assets/world-builder/Levels/WbPilotValley.level.json";
 const PARTITION = { enabled: true, grids: { main: { cellSize: 128, loadRange: 384 }, foliage: { cellSize: 64, loadRange: 256 } } };
 
 function lazy<T>(make: () => T): () => T {
@@ -132,11 +132,11 @@ export async function registerWbPilotValleyTests(check: Check, checkSlowAsync: C
     const text = (path: string) => world.files.get(path) as string;
     const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
     assert.equal(json(validateSavePayload({ layout: JSON.parse(text(LEVEL)) }).layout), text(LEVEL));
-    const recipePath = "assets/world-pilot/Levels/WbPilotValley.worldrecipe.json";
+    const recipePath = "assets/world-builder/Levels/WbPilotValley.worldrecipe.json";
     assert.equal(json(validateSaveWorldRecipePayload({ level: LEVEL, recipe: JSON.parse(text(recipePath)) }).recipe), text(recipePath));
-    const foliagePath = "assets/world-pilot/Levels/WbPilotValley.foliage.json";
+    const foliagePath = "assets/world-builder/Levels/WbPilotValley.foliage.json";
     assert.equal(json(validateFoliageData(JSON.parse(text(foliagePath)))), text(foliagePath));
-    const terrainPath = "assets/world-pilot/Levels/WbPilotValley.landscapes/valley.terrain.json";
+    const terrainPath = "assets/world-builder/Levels/WbPilotValley.landscapes/valley.terrain.json";
     assert.equal(json(normalizeWorldTerrain(JSON.parse(text(terrainPath)))), text(terrainPath));
     assert.ok(!text(LEVEL).includes('"collision": true'), "default collision is not written");
   });
@@ -151,7 +151,7 @@ export async function registerWbPilotValleyTests(check: Check, checkSlowAsync: C
     assert.equal(saved.level, world.files.get(LEVEL));
     const written = [...world.files].filter(([path]) => path.includes(".cells/main/"));
     assert.deepEqual([...saved.cells], written);
-    const foliage = JSON.parse(world.files.get("assets/world-pilot/Levels/WbPilotValley.foliage.json") as string);
+    const foliage = JSON.parse(world.files.get("assets/world-builder/Levels/WbPilotValley.foliage.json") as string);
     assert.deepEqual(foliage.foliageCells, [], "plant rules only: the partitioned foliage index lists no cells");
   });
 

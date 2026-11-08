@@ -25,7 +25,7 @@
     "dialogue:report": "node tools/dialogue-report.mjs",
     "world:test": "node tools/world/generate-test-world.mjs",
     "world:valley": "node tools/world/generate-wb-test-valley.mjs",
-    "world:pilot": "node tools/world/build-world-brief.mjs assets/world-pilot/Levels/WbPilotValley.worldbrief.json",
+    "world:pilot": "node tools/world/build-world-brief.mjs assets/world-builder/Levels/WbPilotValley.worldbrief.json",
     "world:brief": "node tools/world/build-world-brief.mjs",
     "world:random": "node tools/world/build-random-world.mjs",
     "world:offroad": "node tools/world/generate-offroad-test.mjs",

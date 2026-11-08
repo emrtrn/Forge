@@ -10,7 +10,7 @@ karar 20–22.
 ## Üretim
 
 Pilot artık bir dünya özetinden üretilir:
-`public/assets/world-pilot/Levels/WbPilotValley.worldbrief.json`. Vadi kesitleri, nehir,
+`public/assets/world-builder/Levels/WbPilotValley.worldbrief.json`. Vadi kesitleri, nehir,
 yol uçları, kulübe ve proplar, mevsim ve model kaynakları bu dosyadadır
 ([WORLD_BRIEF.md](WORLD_BRIEF.md)).
 
@@ -20,9 +20,9 @@ yeniden böler ve eski hücreleri siler. `npm run world:pilot` pilot özetiyle a
 Var olan level'ın üstüne `--force` olmadan yazmaz; `--force` editörde yapılan değişiklikleri
 (partition ayarı dışında) siler. Denemeler `--out` ile ayrı bir yola yapılır.
 
-Level: `public/assets/world-pilot/Levels/WbPilotValley.level.json` (Content Browser'da
+Level: `public/assets/world-builder/Levels/WbPilotValley.level.json` (Content Browser'da
 görünür, editörde düzenlenip commit'lenir). Greybox modelleri `art/world-pilot/wp_greybox.py`
-üretir. Foliage tipleri `public/assets/world-pilot/foliage/*.foliagetype.json`
+üretir. Foliage tipleri `public/assets/world-builder/foliage/*.foliagetype.json`
 dosyalarıdır; hazır model gelince yalnız `meshAssetId` değişir.
 
 ### Adımlar
@@ -86,7 +86,7 @@ Liste pilot boyunca güncel tutulur. **Bekliyor** satırları sahnede placeholde
 ### Hazır modeller (kullanıcı)
 
 7 Kasım'da `starter-content/StaticMeshes/Environment/` altına gelen `Forest_*` paketi
-bağlandı. Foliage tipleri `public/assets/world-pilot/foliage/` altında; bir modeli
+bağlandı. Foliage tipleri `public/assets/world-builder/foliage/` altında; bir modeli
 değiştirmek için yalnız tipin `meshAssetId` alanı değişir.
 
 | Tip / kullanım | Model | Ölçek |
@@ -111,7 +111,7 @@ Yeni model kuralları:
 
 ### Claude'un Blender ile üreteceği modeller
 
-Klasör: `public/assets/world-pilot/structures/` ve `.../props/`; kaynak script'ler
+Klasör: `public/assets/world-builder/structures/` ve `.../props/`; kaynak script'ler
 `art/world-pilot/`.
 
 | Dosya | Ne | Durum |

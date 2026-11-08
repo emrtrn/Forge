@@ -22,7 +22,7 @@ import {
 
 type Check = (label: string, run: () => void) => void;
 
-export const PILOT_BRIEF = "public/assets/world-pilot/Levels/WbPilotValley.worldbrief.json";
+export const PILOT_BRIEF = "public/assets/world-builder/Levels/WbPilotValley.worldbrief.json";
 
 function minimalBrief(): Record<string, unknown> {
   return {
@@ -71,7 +71,7 @@ export function registerWorldBriefTests(check: Check): void {
     assert.deepEqual(valley.guide![0], [-39, 401]);
     assert.equal(valley.confidence, 0.9);
     assert.deepEqual(recipe.reference, {
-      image: "assets/world-pilot/Levels/WbPilotValley.reference.png", origin: [-500, -500], size: [1000, 1000], view: "topDown",
+      image: "assets/world-builder/Levels/WbPilotValley.reference.png", origin: [-500, -500], size: [1000, 1000], view: "topDown",
     });
   });
 

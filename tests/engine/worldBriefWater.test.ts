@@ -17,7 +17,7 @@ import { PILOT_BRIEF } from "./worldBrief.test";
 type CheckAsync = (label: string, run: () => Promise<void>) => Promise<void>;
 
 const LEVEL = "assets/trial/Water.level.json";
-const PROFILE = "assets/world-pilot/Levels/WbPilotValley.regionprofile.json";
+const PROFILE = "assets/world-builder/Levels/WbPilotValley.regionprofile.json";
 
 /** A plain falling 20 m to the south with low hills, a lake on it. */
 export const WATER_BRIEF = {

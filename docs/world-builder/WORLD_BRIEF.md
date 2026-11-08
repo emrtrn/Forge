@@ -8,7 +8,7 @@ Forge'a yalnız bu genel dünya özeti şeması girer
 ## Dosya
 
 - Yer: level'ın yanında, `<Level>.worldbrief.json`. Pilot:
-  `public/assets/world-pilot/Levels/WbPilotValley.worldbrief.json`.
+  `public/assets/world-builder/Levels/WbPilotValley.worldbrief.json`.
 - Şema ve normalizer: `engine/worldbuilder/worldBrief.ts` (`normalizeWorldBrief`).
   Normalizer katıdır: bilinmeyen alan, alan dışı nokta, eksik yol düğümü gibi her sorun
   özeti reddeder; hiçbir alan sessizce düşmez. Kayıt yüzeyi yoktur, dosya elle veya
@@ -52,7 +52,7 @@ Plan öğeleri (`water`, `roads`, `landmarks`, `regions`, `settlements`, `valley
 ## Çalıştırma
 
 ```powershell
-npm.cmd run world:brief -- assets/world-pilot/Levels/WbPilotValley.worldbrief.json --out assets/deneme/Vadi.level.json
+npm.cmd run world:brief -- assets/world-builder/Levels/WbPilotValley.worldbrief.json --out assets/deneme/Vadi.level.json
 ```
 
 - Yollar `public/` altına göredir. `--out` verilmezse özetin yanındaki `<Ad>.level.json` yazılır.

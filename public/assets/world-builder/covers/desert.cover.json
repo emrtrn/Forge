@@ -84,7 +84,7 @@
     {
       "id": "desert-shrub",
       "layer": "sand",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-b.foliagetype.json",
       "density": 0.0003,
       "minWeight": 0.6,
       "seed": 501
@@ -100,7 +100,7 @@
     {
       "id": "oasis-grass",
       "layer": "meadow",
-      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-grass-a.foliagetype.json",
       "density": 0.02,
       "minWeight": 0.5,
       "seed": 503
@@ -108,7 +108,7 @@
     {
       "id": "oasis-bush",
       "layer": "meadow",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-a.foliagetype.json",
       "density": 0.001,
       "minWeight": 0.6,
       "seed": 504

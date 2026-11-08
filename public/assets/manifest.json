@@ -22371,10 +22371,10 @@
       "id": "wp-conifer-a-type",
       "name": "WP Conifer A",
       "assetType": "foliageType",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/foliage/wp-conifer-a.foliagetype.json",
+      "category": "world-builder",
+      "path": "assets/world-builder/foliage/wp-conifer-a.foliagetype.json",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "foliage"
       ],
       "placeable": false,
@@ -22401,10 +22401,10 @@
       "id": "wp-conifer-b-type",
       "name": "WP Conifer B",
       "assetType": "foliageType",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/foliage/wp-conifer-b.foliagetype.json",
+      "category": "world-builder",
+      "path": "assets/world-builder/foliage/wp-conifer-b.foliagetype.json",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "foliage"
       ],
       "placeable": false,
@@ -22431,10 +22431,10 @@
       "id": "wp-bush-a-type",
       "name": "WP Bush A",
       "assetType": "foliageType",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "category": "world-builder",
+      "path": "assets/world-builder/foliage/wp-bush-a.foliagetype.json",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "foliage"
       ],
       "placeable": false,
@@ -22461,10 +22461,10 @@
       "id": "wp-grass-a-type",
       "name": "WP Grass A",
       "assetType": "foliageType",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "category": "world-builder",
+      "path": "assets/world-builder/foliage/wp-grass-a.foliagetype.json",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "foliage"
       ],
       "placeable": false,
@@ -22491,10 +22491,10 @@
       "id": "wp-cabin",
       "name": "WP Cabin",
       "assetType": "staticMesh",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/structures/wp-cabin.glb",
+      "category": "world-builder",
+      "path": "assets/world-builder/structures/wp-cabin.glb",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "greybox"
       ],
       "placeable": true,
@@ -22505,7 +22505,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "world-pilot",
+        "loadGroup": "world-builder",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -22522,10 +22522,10 @@
       "id": "wp-woodpile",
       "name": "WP Woodpile",
       "assetType": "staticMesh",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/props/wp-woodpile.glb",
+      "category": "world-builder",
+      "path": "assets/world-builder/props/wp-woodpile.glb",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "greybox"
       ],
       "placeable": true,
@@ -22536,7 +22536,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "world-pilot",
+        "loadGroup": "world-builder",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -22553,10 +22553,10 @@
       "id": "wp-fence-module",
       "name": "WP Fence Module",
       "assetType": "staticMesh",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/props/wp-fence-module.glb",
+      "category": "world-builder",
+      "path": "assets/world-builder/props/wp-fence-module.glb",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "greybox"
       ],
       "placeable": true,
@@ -22567,7 +22567,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "world-pilot",
+        "loadGroup": "world-builder",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -22584,10 +22584,10 @@
       "id": "wp-signpost",
       "name": "WP Signpost",
       "assetType": "staticMesh",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/props/wp-signpost.glb",
+      "category": "world-builder",
+      "path": "assets/world-builder/props/wp-signpost.glb",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "greybox"
       ],
       "placeable": true,
@@ -22598,7 +22598,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "world-pilot",
+        "loadGroup": "world-builder",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -22615,10 +22615,10 @@
       "id": "wp-rock-a",
       "name": "WP Rock A",
       "assetType": "staticMesh",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/props/wp-rock-a.glb",
+      "category": "world-builder",
+      "path": "assets/world-builder/props/wp-rock-a.glb",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "greybox"
       ],
       "placeable": true,
@@ -22629,7 +22629,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "world-pilot",
+        "loadGroup": "world-builder",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -22646,10 +22646,10 @@
       "id": "wp-rock-b",
       "name": "WP Rock B",
       "assetType": "staticMesh",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/props/wp-rock-b.glb",
+      "category": "world-builder",
+      "path": "assets/world-builder/props/wp-rock-b.glb",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "greybox"
       ],
       "placeable": true,
@@ -22660,7 +22660,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "world-pilot",
+        "loadGroup": "world-builder",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -22677,10 +22677,10 @@
       "id": "wp-rock-c",
       "name": "WP Rock C",
       "assetType": "staticMesh",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/props/wp-rock-c.glb",
+      "category": "world-builder",
+      "path": "assets/world-builder/props/wp-rock-c.glb",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "greybox"
       ],
       "placeable": true,
@@ -22691,7 +22691,7 @@
         "allowScale": true
       },
       "runtime": {
-        "loadGroup": "world-pilot",
+        "loadGroup": "world-builder",
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
@@ -22709,9 +22709,9 @@
       "name": "WB Pilot Valley.Level",
       "assetType": "level",
       "category": "Levels",
-      "path": "assets/world-pilot/Levels/WbPilotValley.level.json",
+      "path": "assets/world-builder/Levels/WbPilotValley.level.json",
       "tags": [
-        "world-pilot"
+        "world-builder"
       ],
       "placeable": false,
       "placement": {
@@ -24283,10 +24283,10 @@
       "id": "wp-conifer-c-type",
       "name": "WP Conifer C",
       "assetType": "foliageType",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/foliage/wp-conifer-c.foliagetype.json",
+      "category": "world-builder",
+      "path": "assets/world-builder/foliage/wp-conifer-c.foliagetype.json",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "foliage"
       ],
       "placeable": false,
@@ -24313,10 +24313,10 @@
       "id": "wp-bush-b-type",
       "name": "WP Bush B",
       "assetType": "foliageType",
-      "category": "world-pilot",
-      "path": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "category": "world-builder",
+      "path": "assets/world-builder/foliage/wp-bush-b.foliagetype.json",
       "tags": [
-        "world-pilot",
+        "world-builder",
         "foliage"
       ],
       "placeable": false,

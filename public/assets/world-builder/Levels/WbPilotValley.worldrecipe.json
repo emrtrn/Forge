@@ -778,9 +778,9 @@
     "foliageRules": {},
     "protectedRegions": []
   },
-  "regionProfile": "assets/world-pilot/Levels/WbPilotValley.regionprofile.json",
+  "regionProfile": "assets/world-builder/Levels/WbPilotValley.regionprofile.json",
   "reference": {
-    "image": "assets/world-pilot/Levels/WbPilotValley.reference.png",
+    "image": "assets/world-builder/Levels/WbPilotValley.reference.png",
     "origin": [
       -500,
       -500

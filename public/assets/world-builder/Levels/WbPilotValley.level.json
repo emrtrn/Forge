@@ -178,7 +178,7 @@
         0,
         0
       ],
-      "dataRef": "assets/world-pilot/Levels/WbPilotValley.landscapes/valley.terrain.json",
+      "dataRef": "assets/world-builder/Levels/WbPilotValley.landscapes/valley.terrain.json",
       "name": "WB Pilot Valley"
     }
   ],

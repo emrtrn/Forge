@@ -83,7 +83,7 @@
     {
       "id": "steppe-grass",
       "layer": "steppe",
-      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-grass-a.foliagetype.json",
       "density": 0.006,
       "minWeight": 0.5,
       "seed": 401
@@ -91,7 +91,7 @@
     {
       "id": "steppe-bush",
       "layer": "steppe",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-b.foliagetype.json",
       "density": 0.0006,
       "minWeight": 0.55,
       "seed": 402
@@ -107,7 +107,7 @@
     {
       "id": "riverside-grass",
       "layer": "meadow",
-      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-grass-a.foliagetype.json",
       "density": 0.02,
       "minWeight": 0.5,
       "seed": 404

@@ -141,7 +141,7 @@ yanda 0,6 m yol payı; 3 m girişte her yanda yalnız 0,1 m kalır. Bunlar görs
 
 Kod dayanakları: `engine/worldbuilder/roadClass.ts`, `roadSpline.ts`, `parcels.ts`,
 `buildings.ts`, `fences.ts`, `terraces.ts`, `streets.ts`, `stages/streets.ts`,
-`sceneCheck.ts` ve `public/assets/world-pilot/Levels/WbPilotValley.regionprofile.json`.
+`sceneCheck.ts` ve `public/assets/world-builder/Levels/WbPilotValley.regionprofile.json`.
 
 ### Hedef ve başlangıç önerileri
 

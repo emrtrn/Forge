@@ -59,7 +59,7 @@ export const COVERS = {
 export type CoverName = keyof typeof COVERS;
 
 /** Region profile a random world uses unless told otherwise (Forge's pilot profile). */
-export const DEFAULT_REGION_PROFILE = "assets/world-pilot/Levels/WbPilotValley.regionprofile.json";
+export const DEFAULT_REGION_PROFILE = "assets/world-builder/Levels/WbPilotValley.regionprofile.json";
 
 /** Forge's starter nature models: rocks by where they lie, conifers, bushes, grass. */
 export const DEFAULT_NATURE_MODELS: readonly BriefModel[] = [

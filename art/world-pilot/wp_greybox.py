@@ -14,7 +14,7 @@ import bpy
 
 SCRIPT_PATH = os.path.abspath(__file__) if os.path.isabs(__file__) else os.path.abspath(os.path.join(os.getcwd(), __file__))
 ROOT = os.path.normpath(os.path.join(os.path.dirname(SCRIPT_PATH), "..", ".."))
-OUT = os.path.join(ROOT, "public", "assets", "world-pilot")
+OUT = os.path.join(ROOT, "public", "assets", "world-builder")
 COLOURS = {
     "stone": (0.42, 0.41, 0.38), "plank": (0.46, 0.31, 0.18), "timber": (0.36, 0.23, 0.13),
     "roof": (0.24, 0.20, 0.17), "door": (0.30, 0.19, 0.11), "glass": (0.14, 0.20, 0.24),

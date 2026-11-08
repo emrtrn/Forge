@@ -18,7 +18,7 @@ import { PILOT_BRIEF } from "./worldBrief.test";
 type Check = (label: string, run: () => void) => void;
 
 const LEVEL = "assets/trial/Village.level.json";
-const PROFILE = "assets/world-pilot/Levels/WbPilotValley.regionprofile.json";
+const PROFILE = "assets/world-builder/Levels/WbPilotValley.regionprofile.json";
 
 export const VILLAGE_BRIEF = {
   schema: 1,

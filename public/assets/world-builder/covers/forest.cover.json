@@ -72,7 +72,7 @@
     {
       "id": "forest-conifer-a",
       "layer": "forest",
-      "foliageType": "assets/world-pilot/foliage/wp-conifer-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-conifer-a.foliagetype.json",
       "density": 0.0025,
       "minWeight": 0.6,
       "seed": 101
@@ -80,7 +80,7 @@
     {
       "id": "forest-conifer-b",
       "layer": "forest",
-      "foliageType": "assets/world-pilot/foliage/wp-conifer-b.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-conifer-b.foliagetype.json",
       "density": 0.002,
       "minWeight": 0.45,
       "seed": 102
@@ -88,7 +88,7 @@
     {
       "id": "forest-conifer-c",
       "layer": "forest",
-      "foliageType": "assets/world-pilot/foliage/wp-conifer-c.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-conifer-c.foliagetype.json",
       "density": 0.0015,
       "minWeight": 0.35,
       "seed": 106
@@ -96,7 +96,7 @@
     {
       "id": "forest-bush",
       "layer": "forest",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-a.foliagetype.json",
       "density": 0.0015,
       "minWeight": 0.5,
       "seed": 103
@@ -104,7 +104,7 @@
     {
       "id": "forest-bush-b",
       "layer": "forest",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-b.foliagetype.json",
       "density": 0.001,
       "minWeight": 0.5,
       "seed": 107
@@ -112,7 +112,7 @@
     {
       "id": "meadow-bush",
       "layer": "meadow",
-      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-bush-a.foliagetype.json",
       "density": 0.0006,
       "minWeight": 0.6,
       "seed": 104
@@ -120,7 +120,7 @@
     {
       "id": "meadow-grass",
       "layer": "meadow",
-      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "foliageType": "assets/world-builder/foliage/wp-grass-a.foliagetype.json",
       "density": 0.02,
       "minWeight": 0.5,
       "seed": 105

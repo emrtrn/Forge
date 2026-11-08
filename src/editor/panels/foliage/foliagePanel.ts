@@ -1,5 +1,11 @@
 import { WIND_SWAY_DEFAULTS, WIND_SWAY_LIMITS, type WindSwaySettings } from "@engine/environment/wind";
-import type { FoliageResourceUsage, ForgeFoliageTypeDef, LandscapeFoliageRule } from "@engine/scene/foliage";
+import {
+  LANDSCAPE_FOLIAGE_RULE_BAND_DEFAULTS as BAND_DEFAULTS,
+  LANDSCAPE_FOLIAGE_RULE_RANGES as BAND_RANGES,
+  type FoliageResourceUsage,
+  type ForgeFoliageTypeDef,
+  type LandscapeFoliageRule,
+} from "@engine/scene/foliage";
 import type {
   FoliageTargetFilters,
   FoliageTool,
@@ -232,6 +238,43 @@ function selectOptions(options: Array<{ id: string; name: string }>, selected: s
     .join("");
 }
 
+type RuleBandField = keyof typeof BAND_DEFAULTS | "heightMin" | "heightMax";
+
+const bandNumber = (value: number): string => String(Number(value.toFixed(3)));
+
+/**
+ * A rule's placement bands (height / slope / noise / edge scale). Heights may be
+ * left empty (no limit); the height sliders span the terrain's own ground.
+ */
+function renderRuleBands(rule: LandscapeFoliageRule, groundRange: [number, number] | null): string {
+  const [low, high] = groundRange ?? [0, 100];
+  const margin = Math.max(5, (high - low) * 0.05);
+  const spanLow = Math.floor(low - margin), spanHigh = Math.ceil(high + margin);
+  const falloffSpan = Math.max(10, Math.ceil((spanHigh - spanLow) / 2));
+  const row = (field: RuleBandField, label: string, tip: string, range: { min: number; max: number }, step: number, extra = ""): string => {
+    const value = rule[field];
+    const shown = value ?? (field === "heightMin" || field === "heightMax" ? undefined : BAND_DEFAULTS[field]);
+    const placeholder = field === "heightMin" || field === "heightMax" ? ' placeholder="none"' : "";
+    return `<label class="detail-row" title="${escapeHtml(tip)}"><span>${label}</span><input type="number" data-rule-band="${field}" min="${range.min}" max="${range.max}" step="${step}" value="${shown === undefined ? "" : bandNumber(shown)}"${placeholder} ${extra} /></label>`;
+  };
+  const heightSlider = `data-slider-min="${spanLow}" data-slider-max="${spanHigh}"`;
+  const ground = groundRange
+    ? `Zemin ${bandNumber(groundRange[0])} – ${bandNumber(groundRange[1])} m. `
+    : "";
+  return `
+          <div class="detail-subsection-title">Placement</div>
+          ${row("heightMin", "Height Min", "Bu yüksekliğin altında foliage çıkmaz (dünya yüksekliği, m). Boş: sınır yok.", BAND_RANGES.height, 0.5, heightSlider)}
+          ${row("heightMax", "Height Max", "Bu yüksekliğin üstünde foliage çıkmaz (dünya yüksekliği, m). Boş: sınır yok.", BAND_RANGES.height, 0.5, heightSlider)}
+          ${row("heightFalloff", "Height Falloff", "Yükseklik sınırının dışında kaç metre boyunca seyrelerek biteceği. 0 keskin kenar verir.", BAND_RANGES.heightFalloff, 0.5, `data-slider-max="${falloffSpan}"`)}
+          ${row("slopeMin", "Slope Min", "En düşük eğim (derece). 0 düz zemin, 90 dik duvar.", BAND_RANGES.slope, 1)}
+          ${row("slopeMax", "Slope Max", "En yüksek eğim (derece).", BAND_RANGES.slope, 1)}
+          ${row("slopeFalloff", "Slope Falloff", "Eğim aralığının dışında kaç derece boyunca seyrelerek biteceği. 0 keskin kenar verir.", BAND_RANGES.slopeFalloff, 0.5)}
+          ${row("noiseAmount", "Noise Amount", "Yoğunluğu gürültüyle kırar: çayırda öbekler, ormanda açıklıklar. 0 kapalı.", BAND_RANGES.noiseAmount, 0.05)}
+          ${row("noiseScale", "Noise Scale", "Öbeklerin / açıklıkların boyu (m).", BAND_RANGES.noiseScale, 1, 'data-slider-max="100"')}
+          ${row("edgeScale", "Edge Scale", "Sınıra yaklaştıkça örneklerin küçüleceği ölçek (ağaç sınırında cılız ağaçlar). 1 değiştirmez. Falloff veya Noise ile işe yarar.", BAND_RANGES.edgeScale, 0.05)}
+          <div class="detail-hint">${ground}Sınırlar türün kendi Slope/Height filtrelerinin üstüne uygulanır.</div>`;
+}
+
 function renderGeneratedRules(options: FoliagePanelOptions): string {
   const landscapes = options.landscapeOptions;
   const types = options.types.map((type) => ({ id: type.id, name: type.name }));
@@ -259,6 +302,7 @@ function renderGeneratedRules(options: FoliagePanelOptions): string {
           <label class="detail-row"><span>Density</span><input type="number" min="0" max="10" step="0.05" value="${rule.density}" data-rule-density /></label>
           <label class="detail-row"><span>Min Weight</span><input type="number" min="0" max="1" step="0.05" value="${rule.minWeight}" data-rule-min-weight /></label>
           <label class="detail-row"><span>Seed</span><input type="number" min="0" step="1" value="${rule.seed}" data-rule-seed /></label>
+          ${renderRuleBands(rule, landscape?.groundRange ?? null)}
           <button type="button" class="foliage-type-remove" data-rule-remove>Remove Rule</button>
         </div>`;
     }).join("");
@@ -509,6 +553,19 @@ function bindGeneratedRules(options: FoliagePanelOptions): void {
     density?.addEventListener("change", () => options.updateLandscapeRule(id, { density: Number(density.value) }));
     minWeight?.addEventListener("change", () => options.updateLandscapeRule(id, { minWeight: Number(minWeight.value) }));
     seed?.addEventListener("change", () => options.updateLandscapeRule(id, { seed: Number(seed.value) }));
+    row.querySelectorAll<HTMLInputElement>("[data-rule-band]").forEach((input) => {
+      input.addEventListener("change", () => {
+        const field = input.dataset.ruleBand as RuleBandField;
+        const raw = input.value.trim();
+        if (raw === "") {
+          // Heights clear to "no limit"; the other fields fall back to their default.
+          options.updateLandscapeRule(id, { [field]: undefined });
+          return;
+        }
+        const value = Number(raw);
+        if (Number.isFinite(value)) options.updateLandscapeRule(id, { [field]: value });
+      });
+    });
     row.querySelector<HTMLButtonElement>("[data-rule-remove]")?.addEventListener("click", () => options.removeLandscapeRule(id));
   });
   const newLandscape = body.querySelector<HTMLSelectElement>("[data-rule-new-landscape]");

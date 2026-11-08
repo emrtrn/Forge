@@ -313,6 +313,7 @@ import {
   computeFoliageResourceUsage,
   createEmptyFoliageData,
   normalizeFoliageType,
+  normalizeLandscapeFoliageRule,
   resolveFoliageTarget,
   uniqueLandscapeFoliageRuleId,
   uniqueFoliageGroupId,
@@ -904,6 +905,8 @@ export interface LandscapeFoliageLandscapeView {
   id: string;
   name: string;
   layers: Array<{ id: string; name: string }>;
+  /** World Y of the terrain's lowest and highest ground, or null when it is not loaded. */
+  groundRange: [number, number] | null;
 }
 
 export interface LandscapeFoliageRuleView extends LandscapeFoliageRule {
@@ -8665,9 +8668,10 @@ export class SceneApp {
     return (this.layout?.landscapes ?? []).map((actor) => {
       const world = this.worldTerrains.get(actor.id);
       if (world) {
-        return { id: actor.id, name: actor.name ?? actor.id, layers: world.def.layers.map((layer) => ({ id: layer.id, name: layer.name })) };
+        return { id: actor.id, name: actor.name ?? actor.id, layers: world.def.layers.map((layer) => ({ id: layer.id, name: layer.name })),
+          groundRange: worldTerrainGroundRange(world.def) };
       }
-      return { id: actor.id, name: actor.name ?? actor.id, layers: [] };
+      return { id: actor.id, name: actor.name ?? actor.id, layers: [], groundRange: null };
     });
   }
 
@@ -8823,15 +8827,8 @@ export class SceneApp {
   /** Adds a persisted Landscape layer rule; its generated instances are never saved. */
   addLandscapeFoliageRule(input: Omit<LandscapeFoliageRule, "id">): void {
     const rules = this.foliageData.landscapeRules ?? [];
-    const rule: LandscapeFoliageRule = {
-      id: uniqueLandscapeFoliageRuleId(rules),
-      landscapeId: input.landscapeId,
-      layerId: input.layerId,
-      foliageTypeId: input.foliageTypeId,
-      density: Math.max(0, Math.min(10, input.density)),
-      minWeight: Math.max(0, Math.min(1, input.minWeight)),
-      seed: Math.max(0, Math.floor(input.seed)) >>> 0,
-    };
+    const rule = normalizeLandscapeFoliageRule({ ...input, id: uniqueLandscapeFoliageRuleId(rules) }, rules);
+    if (!rule) return;
     this.foliageData.landscapeRules = [...rules, rule];
     this.editorSaves.foliageSaveRevision.markDirty();
     this.rebuildAllGeneratedFoliage();
@@ -8844,13 +8841,9 @@ export class SceneApp {
     const index = rules.findIndex((rule) => rule.id === id);
     if (index < 0) return;
     const current = rules[index]!;
-    const next: LandscapeFoliageRule = {
-      ...current,
-      ...patch,
-      density: Math.max(0, Math.min(10, patch.density ?? current.density)),
-      minWeight: Math.max(0, Math.min(1, patch.minWeight ?? current.minWeight)),
-      seed: Math.max(0, Math.floor(patch.seed ?? current.seed)) >>> 0,
-    };
+    // An `undefined` in the patch clears that band field (an emptied Height box).
+    const next = normalizeLandscapeFoliageRule({ ...current, ...patch, id }, rules.filter((rule) => rule.id !== id));
+    if (!next) return;
     this.foliageData.landscapeRules = rules.map((rule) => (rule.id === id ? next : rule));
     this.editorSaves.foliageSaveRevision.markDirty();
     this.rebuildAllGeneratedFoliage();

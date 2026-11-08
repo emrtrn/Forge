@@ -1,4 +1,5 @@
 import { normalizeWindSwaySettings, type WindSwaySettings } from "../environment/wind";
+import { TERRAIN_MASK_RANGES, type TerrainMaskBands } from "../terrain/terrainMask";
 import { parseWorldCellKey } from "../world/worldGrid";
 import type { Vec3 } from "./layout";
 
@@ -234,6 +235,59 @@ export interface LandscapeFoliageRule {
   minWeight: number;
   /** Stable seed; generated instances are rebuilt from this instead of saved. */
   seed: number;
+  /**
+   * Placement bands over the ground's world height (m) and slope (degrees),
+   * with the same meaning as Auto Paint's (`engine/terrain/terrainMask.ts`):
+   * full density inside, thinning to nothing over the falloff outside, noise
+   * breaking the coverage into patches. All optional; an absent field is open
+   * (height), the full range (slope) or off (falloff, noise). The Foliage
+   * Type's own slope/height limits still apply on top as hard limits.
+   */
+  heightMin?: number;
+  heightMax?: number;
+  heightFalloff?: number;
+  slopeMin?: number;
+  slopeMax?: number;
+  slopeFalloff?: number;
+  noiseAmount?: number;
+  noiseScale?: number;
+  /** Scale factor where the bands fade out (0..1; 1 or absent = no change), e.g. stunted trees at the tree line. */
+  edgeScale?: number;
+}
+
+/** Values an absent {@link LandscapeFoliageRule} band field stands for. */
+export const LANDSCAPE_FOLIAGE_RULE_BAND_DEFAULTS = {
+  heightFalloff: 0, slopeMin: 0, slopeMax: 90, slopeFalloff: 0, noiseAmount: 0, noiseScale: 20, edgeScale: 1,
+} as const;
+
+/** Clamp ranges of the rule's band fields; the editor's sliders read them too. */
+export const LANDSCAPE_FOLIAGE_RULE_RANGES = {
+  ...TERRAIN_MASK_RANGES,
+  edgeScale: { min: 0, max: 1 },
+} as const;
+
+/** The rule's bands with every default filled in (open heights are `±Infinity`). */
+export function landscapeFoliageRuleBands(rule: LandscapeFoliageRule): TerrainMaskBands & { edgeScale: number } {
+  const d = LANDSCAPE_FOLIAGE_RULE_BAND_DEFAULTS;
+  return {
+    heightMin: rule.heightMin ?? -Infinity,
+    heightMax: rule.heightMax ?? Infinity,
+    heightFalloff: rule.heightFalloff ?? d.heightFalloff,
+    slopeMin: rule.slopeMin ?? d.slopeMin,
+    slopeMax: rule.slopeMax ?? d.slopeMax,
+    slopeFalloff: rule.slopeFalloff ?? d.slopeFalloff,
+    noiseAmount: rule.noiseAmount ?? d.noiseAmount,
+    noiseScale: rule.noiseScale ?? d.noiseScale,
+    edgeScale: rule.edgeScale ?? d.edgeScale,
+  };
+}
+
+/** True when the rule narrows nothing: every candidate keeps full density and scale. */
+export function landscapeFoliageRuleIsUnbanded(rule: LandscapeFoliageRule): boolean {
+  const d = LANDSCAPE_FOLIAGE_RULE_BAND_DEFAULTS;
+  return rule.heightMin === undefined && rule.heightMax === undefined
+    && (rule.slopeMin ?? d.slopeMin) <= 0 && (rule.slopeMax ?? d.slopeMax) >= 90
+    && !((rule.noiseAmount ?? 0) > 0);
 }
 
 export interface LayoutFoliageData {
@@ -279,7 +333,13 @@ function normalizeFoliageTarget(raw: unknown): LayoutFoliageTarget {
   return { kind, id: readString(source.id, "") };
 }
 
-function normalizeLandscapeFoliageRule(raw: unknown, existing: readonly LandscapeFoliageRule[]): LandscapeFoliageRule | null {
+/**
+ * Normalizes one Landscape foliage rule (loader, save validator and editor
+ * edits). `existing` holds the rules already accepted, for a unique id. Band
+ * fields are clamped and written only when they differ from their default,
+ * so a rule without bands saves exactly as before they existed.
+ */
+export function normalizeLandscapeFoliageRule(raw: unknown, existing: readonly LandscapeFoliageRule[]): LandscapeFoliageRule | null {
   if (!raw || typeof raw !== "object") return null;
   const source = raw as Partial<LandscapeFoliageRule>;
   const landscapeId = readString(source.landscapeId, "");
@@ -296,7 +356,30 @@ function normalizeLandscapeFoliageRule(raw: unknown, existing: readonly Landscap
     density: clampRange(finiteNumber(source.density, 0.25), 0, 10),
     minWeight: clampRange(finiteNumber(source.minWeight, 0.5), 0, 1),
     seed: Math.floor(clampRange(finiteNumber(source.seed, 1), 0, 0xffffffff)) >>> 0,
+    ...normalizeLandscapeFoliageRuleBands(source),
   };
+}
+
+function normalizeLandscapeFoliageRuleBands(source: Partial<LandscapeFoliageRule>): Partial<LandscapeFoliageRule> {
+  const r = LANDSCAPE_FOLIAGE_RULE_RANGES;
+  const d = LANDSCAPE_FOLIAGE_RULE_BAND_DEFAULTS;
+  const bands: Partial<LandscapeFoliageRule> = {};
+  const set = (key: keyof typeof d | "heightMin" | "heightMax", range: { min: number; max: number }, fallback?: number): void => {
+    const value = readOptionalNumber(source[key]);
+    if (value === undefined) return;
+    const clamped = clampRange(value, range.min, range.max);
+    if (clamped !== fallback) bands[key] = clamped;
+  };
+  set("heightMin", r.height);
+  set("heightMax", r.height);
+  set("heightFalloff", r.heightFalloff, d.heightFalloff);
+  set("slopeMin", r.slope, d.slopeMin);
+  set("slopeMax", r.slope, d.slopeMax);
+  set("slopeFalloff", r.slopeFalloff, d.slopeFalloff);
+  set("noiseAmount", r.noiseAmount, d.noiseAmount);
+  set("noiseScale", r.noiseScale, d.noiseScale);
+  set("edgeScale", r.edgeScale, d.edgeScale);
+  return bands;
 }
 
 /**

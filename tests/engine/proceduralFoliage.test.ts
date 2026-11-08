@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { Matrix4, Quaternion, Vector3 } from "three";
-import { normalizeFoliageType, type LandscapeFoliageRule } from "../../engine/scene/foliage";
+import {
+  normalizeFoliageData, normalizeFoliageType, normalizeLandscapeFoliageRule, type LandscapeFoliageRule,
+} from "../../engine/scene/foliage";
 import { makeFoliageRng } from "../../engine/scene/foliagePaint";
 import {
   foliageCellSeed, generateFoliageCell, MAX_FOLIAGE_CELL_INSTANCES,
@@ -172,5 +174,90 @@ export function registerProceduralFoliageTests(check: Check): void {
     assert.equal(surface.normalAt(15, -2), null);
     assert.equal(surface.layerWeightAt("b", 15, -2), null);
     assert.equal(surface.heightAt(14, -2), terrainHeightAt(def, tiles, 14, -2));
+  });
+
+  // Ground rises with X (height = x), so a height band cuts the cell along X.
+  const RAMP: FoliageSurface = { ...FLAT, heightAt: (x) => x };
+  const heights = (cell: GeneratedFoliageCell): number[] =>
+    Array.from({ length: cell.count }, (_, i) => cell.matrices[i * 16 + 13]!);
+  const scales = (cell: GeneratedFoliageCell): number[] =>
+    Array.from({ length: cell.count }, (_, i) => Math.hypot(cell.matrices[i * 16]!, cell.matrices[i * 16 + 1]!, cell.matrices[i * 16 + 2]!));
+  const subset = (small: GeneratedFoliageCell, large: GeneratedFoliageCell): void => {
+    const all = new Set(translations(large));
+    for (const translation of translations(small)) assert.ok(all.has(translation), `${translation} missing`);
+  };
+
+  check("procedural foliage rule bands: Height Min/Max cut hard, an open side and the type limits still apply", () => {
+    const full = generateFoliageCell(RULE, TYPE, RAMP, REQUEST);
+    const capped = generateFoliageCell({ ...RULE, heightMax: 8 }, TYPE, RAMP, REQUEST);
+    assert.ok(capped.count > 0 && capped.count < full.count);
+    assert.ok(heights(capped).every((y) => y <= 8));
+    subset(capped, full);
+    const band = generateFoliageCell({ ...RULE, heightMin: 4, heightMax: 8 }, TYPE, RAMP, REQUEST);
+    assert.ok(heights(band).every((y) => y >= 4 && y <= 8) && band.count < capped.count);
+    // The type's own Height Max is a hard limit on top of the rule's band.
+    const typeCapped = generateFoliageCell({ ...RULE, heightMax: 8 }, { ...TYPE, heightMax: 6 }, RAMP, REQUEST);
+    assert.ok(heights(typeCapped).every((y) => y <= 6));
+  });
+
+  check("procedural foliage rule bands: falloff thins the edge as a nested subset, never moves a plant", () => {
+    const hard8 = generateFoliageCell({ ...RULE, heightMax: 8 }, TYPE, RAMP, REQUEST);
+    const soft = generateFoliageCell({ ...RULE, heightMax: 8, heightFalloff: 4 }, TYPE, RAMP, REQUEST);
+    const hard12 = generateFoliageCell({ ...RULE, heightMax: 12 }, TYPE, RAMP, REQUEST);
+    assert.ok(hard8.count < soft.count && soft.count < hard12.count);
+    assert.ok(heights(soft).every((y) => y < 12));
+    subset(hard8, soft);
+    subset(soft, hard12);
+    // Thinning grows toward the outer edge of the falloff.
+    const inBand = (lo: number, hi: number) => heights(soft).filter((y) => y >= lo && y < hi).length;
+    assert.ok(inBand(8, 10) > inBand(10, 12));
+  });
+
+  check("procedural foliage rule bands: Edge Scale shrinks plants in the falloff only", () => {
+    const rule = { ...RULE, heightMax: 8, heightFalloff: 4 };
+    const plain = generateFoliageCell(rule, TYPE, RAMP, REQUEST);
+    const shrunk = generateFoliageCell({ ...rule, edgeScale: 0.25 }, TYPE, RAMP, REQUEST);
+    assert.deepEqual(translations(shrunk), translations(plain));
+    const ys = heights(shrunk), ss = scales(shrunk);
+    assert.ok(scales(plain).every((scale) => Math.abs(scale - 1) < 1e-5));
+    ys.forEach((y, i) => {
+      if (y <= 8) near(ss[i]!, 1);
+      else assert.ok(ss[i]! < 1 && ss[i]! >= 0.25 - 1e-5);
+    });
+    assert.ok(ys.some((y) => y > 8));
+  });
+
+  check("procedural foliage rule bands: slope band and noise thin deterministically", () => {
+    const tilted = new Vector3(Math.sin(Math.PI / 6), Math.cos(Math.PI / 6), 0).toArray() as [number, number, number];
+    const slope30: FoliageSurface = { ...FLAT, normalAt: () => tilted };
+    assert.equal(generateFoliageCell({ ...RULE, slopeMax: 20 }, TYPE, slope30, REQUEST).count, 0);
+    const partial = generateFoliageCell({ ...RULE, slopeMax: 20, slopeFalloff: 20 }, TYPE, slope30, REQUEST).count;
+    const all = generateFoliageCell(RULE, TYPE, slope30, REQUEST).count;
+    assert.ok(partial > 0 && partial < all);
+    assert.equal(generateFoliageCell({ ...RULE, slopeMin: 40 }, TYPE, slope30, REQUEST).count, 0);
+    const noisy = { ...RULE, noiseAmount: 1, noiseScale: 4 };
+    const first = generateFoliageCell(noisy, TYPE, FLAT, REQUEST);
+    assert.deepEqual(first, generateFoliageCell(noisy, TYPE, FLAT, REQUEST));
+    assert.ok(first.count > 0 && first.count < generateFoliageCell(RULE, TYPE, FLAT, REQUEST).count);
+    subset(first, generateFoliageCell(RULE, TYPE, FLAT, REQUEST));
+  });
+
+  check("procedural foliage rule bands: a band that covers everything matches an unbanded rule bit for bit", () => {
+    assert.deepEqual(
+      generateFoliageCell({ ...RULE, heightMin: -1e4, heightMax: 1e4, heightFalloff: 5, edgeScale: 0.2 }, TYPE, RAMP, REQUEST),
+      generateFoliageCell(RULE, TYPE, RAMP, REQUEST),
+    );
+  });
+
+  check("landscape foliage rule normalizer: bands round-trip, clamp, and defaults stay out of the file", () => {
+    const maximal: LandscapeFoliageRule = { ...RULE, heightMin: -12.5, heightMax: 340, heightFalloff: 25,
+      slopeMin: 5, slopeMax: 35, slopeFalloff: 10, noiseAmount: 0.4, noiseScale: 30, edgeScale: 0.3 };
+    assert.deepEqual(normalizeLandscapeFoliageRule(maximal, []), maximal);
+    assert.deepEqual(normalizeFoliageData({ schema: 1, type: "foliage", groups: [], landscapeRules: [maximal] }).landscapeRules, [maximal]);
+    assert.deepEqual(normalizeLandscapeFoliageRule({ ...RULE, heightFalloff: 0, slopeMin: 0, slopeMax: 90, slopeFalloff: 0,
+      noiseAmount: 0, noiseScale: 20, edgeScale: 1, heightMax: undefined }, []), RULE);
+    assert.deepEqual(normalizeLandscapeFoliageRule({ ...RULE, heightMax: 1e9, heightFalloff: -3, slopeMax: 200,
+      slopeFalloff: 99, noiseAmount: 4, noiseScale: 0, edgeScale: -1, slopeMin: "steep" }, []),
+    { ...RULE, heightMax: 10000, slopeFalloff: 45, noiseAmount: 1, noiseScale: 1, edgeScale: 0 });
   });
 }

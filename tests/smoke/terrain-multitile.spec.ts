@@ -466,6 +466,36 @@ test("World Terrain foliage tools paint across a seam, save exact surface height
   expect(expectedRing(1)).toBeGreaterThan(expectedRing(0.8));
   await expect.poll(ringCount, { timeout: 30_000 }).toBe(expectedRing(1));
   await expect(page.locator('[data-landscape-rule="world-rule"] [data-rule-notes]')).toContainText("never culls");
+  // The rule's own Height Max (with a falloff) thins the ring live; emptying it restores the rule.
+  {
+    const ground: number[] = [];
+    for (let x = bounds.minX; x <= bounds.maxX; x += 4) for (let z = bounds.minZ; z <= bounds.maxZ; z += 4) {
+      const y = surface.heightAt(x, z);
+      if (y !== null) ground.push(y);
+    }
+    ground.sort((a, b) => a - b);
+    const heightMax = Math.round(ground[Math.floor(ground.length / 2)]! * 2) / 2;
+    const banded: LandscapeFoliageRule = { ...rule, heightMax, heightFalloff: 2 };
+    const cells = planFoliageRing({ center: SPAWN, radius: Infinity, density: 1, bounds, built: new Map() }).build;
+    const expectedBanded = cells.reduce((sum, cell) => sum + generateFoliageCell(banded, foliageType, surface, {
+      cellX: cell.cellX, cellZ: cell.cellZ, cellSize: 32, keepFraction: cell.keepFraction,
+    }).count, 0);
+    expect(expectedBanded).toBeGreaterThan(0);
+    expect(expectedBanded).toBeLessThan(expectedRing(1));
+    const band = (field: string) => page.locator(`[data-landscape-rule="world-rule"] [data-rule-band="${field}"]`);
+    const setBand = async (field: string, value: string) => {
+      await band(field).fill(value);
+      await band(field).dispatchEvent("change");
+    };
+    await expect(band("heightMax")).toBeVisible();
+    await setBand("heightMax", String(heightMax));
+    await setBand("heightFalloff", "2");
+    await expect.poll(ringCount, { timeout: 30_000 }).toBe(expectedBanded);
+    await setBand("heightMax", "");
+    await setBand("heightFalloff", "0");
+    await expect.poll(ringCount, { timeout: 30_000 }).toBe(expectedRing(1));
+    await expect(band("heightMax")).toHaveValue("");
+  }
   const count = page.locator(".foliage-type-count");
   const viewport = (await page.locator("[data-viewport-host]").boundingBox())!;
   const centre = { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };

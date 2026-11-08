@@ -7,35 +7,22 @@
  *
  * Every vertex starts as the base layer; each enabled rule, top to bottom,
  * then lays its layer over what is there with `mask × strength`, so a later
- * rule wins where rules overlap. The mask is the product of a height band and
- * a slope band, each full inside `[min, max]` and fading to nothing over its
- * falloff outside it, and optional noise breaks up the coverage.
+ * rule wins where rules overlap. The mask (`terrainMask.ts`, shared with the
+ * Landscape foliage rules) is the product of a height band and a slope band,
+ * each full inside `[min, max]` and fading to nothing over its falloff outside
+ * it, and optional noise breaks up the coverage.
  *
  * Slope comes from the neighbouring vertices across tile seams, so the two
  * copies of a seam vertex get the same weights. Pure; no three.js.
  */
 import { captureTerrainTileRect, quantizeTerrainWeights, type TerrainEditWorld, type TerrainUndoPatch } from "./terrainEdit";
-import { terrainSculptNoise } from "./terrainSculpt";
+import { terrainMaskAt, terrainMaskBand, TERRAIN_MASK_RANGES, type TerrainMaskBands } from "./terrainMask";
 import { tileKey } from "./terrainTypes";
 
-export interface TerrainAutoPaintRule {
+export interface TerrainAutoPaintRule extends TerrainMaskBands {
   /** Paint layer id this rule lays down. */
   layerId: string;
   enabled: boolean;
-  /** World-space height band, metres. */
-  heightMin: number;
-  heightMax: number;
-  /** Fade outside the height band, metres; 0 is a hard edge. */
-  heightFalloff: number;
-  /** Slope band, degrees from horizontal (0 flat, 90 vertical). */
-  slopeMin: number;
-  slopeMax: number;
-  /** Fade outside the slope band, degrees; 0 is a hard edge. */
-  slopeFalloff: number;
-  /** 0..1, how much the rule's coverage is broken up by noise. */
-  noiseAmount: number;
-  /** Noise feature size, metres. */
-  noiseScale: number;
   /** 0..1, the rule's weight where it fully applies. */
   strength: number;
 }
@@ -50,11 +37,7 @@ export interface TerrainAutoPaintSettings {
 
 /** UI and clamp ranges, the single source for the editor's sliders. */
 export const TERRAIN_AUTO_PAINT_RANGES = {
-  slope: { min: 0, max: 90 },
-  slopeFalloff: { min: 0, max: 45 },
-  heightFalloff: { min: 0, max: 500 },
-  noiseAmount: { min: 0, max: 1 },
-  noiseScale: { min: 1, max: 500 },
+  ...TERRAIN_MASK_RANGES,
   strength: { min: 0, max: 1 },
 } as const;
 
@@ -68,30 +51,13 @@ export function defaultTerrainAutoPaintRule(layerId: string, heightMin: number, 
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
-const smooth = (t: number): number => t * t * (3 - 2 * t);
 
 /** 1 inside `[min, max]`, smoothstep to 0 over `falloff` outside it. */
-export function terrainAutoPaintBand(value: number, min: number, max: number, falloff: number): number {
-  const lo = Math.min(min, max), hi = Math.max(min, max);
-  if (value >= lo && value <= hi) return 1;
-  if (!(falloff > 0)) return 0;
-  const outside = value < lo ? lo - value : value - hi;
-  return outside >= falloff ? 0 : smooth(1 - outside / falloff);
-}
-
-/** Two octaves of the sculpt value noise, in -1..1. */
-function ruleNoise(x: number, z: number, scale: number, seed: number): number {
-  const s = Math.max(1e-3, scale);
-  return (terrainSculptNoise(x / s, z / s, seed) * 2 + terrainSculptNoise(x / s * 2.03, z / s * 2.03, seed + 7919)) / 3;
-}
+export const terrainAutoPaintBand = terrainMaskBand;
 
 /** 0..1 coverage of one rule at a point; `strength` not applied. */
 export function terrainAutoPaintMask(rule: TerrainAutoPaintRule, height: number, slopeDeg: number, x: number, z: number, seed: number): number {
-  let mask = terrainAutoPaintBand(height, rule.heightMin, rule.heightMax, Math.max(0, rule.heightFalloff))
-    * terrainAutoPaintBand(slopeDeg, rule.slopeMin, rule.slopeMax, Math.max(0, rule.slopeFalloff));
-  const amount = clamp(rule.noiseAmount, 0, 1);
-  if (amount > 0 && mask > 0) mask = clamp(mask + ruleNoise(x, z, rule.noiseScale, seed) * amount, 0, 1);
-  return mask;
+  return terrainMaskAt(rule, height, slopeDeg, x, z, seed);
 }
 
 interface ResolvedRule { rule: TerrainAutoPaintRule; layer: number; seed: number }

@@ -4,8 +4,12 @@ import {
   type TerrainQueryDef, type TerrainTileLookup,
 } from "../terrain/terrainHeightQuery";
 import type { TerrainTileData } from "../terrain/terrainTypes";
-import type { ForgeFoliageTypeDef, LandscapeFoliageRule } from "./foliage";
-import { makeFoliageRng, passesFoliageFilters } from "./foliagePaint";
+import { terrainMaskAt } from "../terrain/terrainMask";
+import {
+  landscapeFoliageRuleBands, landscapeFoliageRuleIsUnbanded,
+  type ForgeFoliageTypeDef, type LandscapeFoliageRule,
+} from "./foliage";
+import { makeFoliageRng, passesFoliageFilters, surfaceSlopeDegrees } from "./foliagePaint";
 import type { Vec3 } from "./layout";
 
 export interface FoliageSurface {
@@ -147,7 +151,13 @@ function writeMatrix(matrices: Float32Array, at: number, x: number, y: number, z
   matrices[at + 15] = 1;
 }
 
-/** Generates stable jittered candidates, consuming six random draws before any rejection. */
+/**
+ * Generates stable jittered candidates, consuming six random draws before any rejection.
+ * The rule's height/slope/noise bands give each candidate a 0..1 mask; it stays only
+ * while its fixed `r < keepFraction × mask`, so a narrower band or a lower mask only
+ * removes plants and never moves the others. `edgeScale` shrinks a plant toward the
+ * band edge (`scale × lerp(edgeScale, 1, mask)`).
+ */
 export function generateFoliageCell(
   rule: LandscapeFoliageRule,
   type: ForgeFoliageTypeDef,
@@ -161,6 +171,8 @@ export function generateFoliageCell(
   const step = cellSize / perSide;
   const maxInstances = Math.max(0, Math.floor(request.maxInstances ?? MAX_FOLIAGE_CELL_INSTANCES));
   const matrices = new Float32Array(Math.min(perSide * perSide, maxInstances) * 16);
+  const bands = landscapeFoliageRuleIsUnbanded(rule) ? null : landscapeFoliageRuleBands(rule);
+  const noiseSeed = rule.seed | 0;
   let count = 0;
   for (let row = 0; row < perSide && count < maxInstances; row += 1) {
     for (let col = 0; col < perSide && count < maxInstances; col += 1) {
@@ -173,7 +185,13 @@ export function generateFoliageCell(
       const y = surface.heightAt(x, z);
       const n = surface.normalAt(x, z);
       if (y === null || n === null || !passesFoliageFilters(type, { position: [x, y, z], normal: n })) continue;
-      const scale = type.scaleMin[0] + (type.scaleMax[0] - type.scaleMin[0]) * scaleT;
+      let edge = 1;
+      if (bands) {
+        const mask = terrainMaskAt(bands, y, surfaceSlopeDegrees(n), x, z, noiseSeed);
+        if (r >= keepFraction * mask) continue;
+        edge = bands.edgeScale + (1 - bands.edgeScale) * mask;
+      }
+      const scale = (type.scaleMin[0] + (type.scaleMax[0] - type.scaleMin[0]) * scaleT) * edge;
       const yaw = type.randomYaw ? yawT * 2 * Math.PI : 0;
       const offset = type.zOffsetMin + (type.zOffsetMax - type.zOffsetMin) * offsetT;
       writeMatrix(matrices, count * 16, x, y, z, n, type.alignToNormal, yaw, scale, offset);

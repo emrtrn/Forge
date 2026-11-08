@@ -1,7 +1,7 @@
 import { access, readFile, rm } from "node:fs/promises";
 import { smokePublicPath } from "./smokeProject.mjs";
 import { expect, test, type Page } from "./test";
-import { openWorldBuilder } from "./worldBuilder";
+import { expectNoSidewaysOverflow, openWorldBuilder } from "./worldBuilder";
 
 /**
  * World Builder window (RANDOM_WORLD_PLAN step 5): Add Actor → Terrain →
@@ -57,6 +57,12 @@ test("World Builder window: random world choices, live preview, Create builds an
     await openWorldBuilder(page);
     const panel = page.getByTestId("random-world-panel");
     await expect(panel).toBeVisible();
+
+    // Nothing spills sideways, also in a narrow browser window (the preview goes under the choices).
+    await expectNoSidewaysOverflow(page);
+    await page.setViewportSize({ width: 900, height: 900 });
+    await expectNoSidewaysOverflow(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
 
     // The first preview: a picture, not a blank canvas, and its summary.
     let id = await nextPreview(page, 0);

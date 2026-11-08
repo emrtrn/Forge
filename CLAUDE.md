@@ -173,30 +173,35 @@ engine/editor.
   restores it on unload, and leaves model geometry/material ownership with the
   asset loader. Omitted/unusable nodes use the procedural wheel fallback.
 
-- **Sixth allowlist surface — `<Level>.worldrecipe.json` World Builder
-  recipe (schema 1):** `/__save-worldrecipe` takes `{ level, recipe }`, derives
-  the sidecar path from the level (`worldRecipePath`) and only writes for the
-  open level. `validateSaveWorldRecipePayload` reuses `normalizeWorldRecipe`
-  (`engine/worldbuilder/recipe.ts`) as the single source of field shape, but is
-  stricter: any normalization issue (bad entry, dangling id reference) rejects
-  the save. New recipe fields go in the normalizer and
-  `tests/engine/worldRecipe.test.ts`'s maximal recipe. Objects not listed in
-  `ownership` are manual; stages never move or delete them. The editor's
-  World Builder window (Add Actor → Terrain; non-modal, tabbed,
-  `src/editor/panels/world/worldBuilderPanel.ts` over
-  `src/editor/worldBuilderSession.ts`) applies a stage as one
-  undo step over level + World Terrain splines + recipe, and Save Layout writes
-  the recipe first, then terrain definitions, then the level. Stages may own
-  placements (`ownership.placements`) and World Terrain splines
-  (`ownership.splines`, e.g. the `roads` stage's `wb-road-<edge>`); stages only
-  write spline data, never terrain heights or paint. Generated placements must
-  be save-canonical (`planStage` rounds the transform like the save; stages
-  omit default-valued flags) and generated splines go through
-  `normalizeTerrainSplines`, or the ownership `outputHash` stops matching after
-  a reload and every object looks hand-edited.
-  Region profiles
+- **World Builder (random worlds) and its recipe sidecar:** Add Actor →
+  Terrain → World Builder… opens a non-modal window
+  (`src/editor/panels/world/randomWorldPanel.ts` in the `ForgeWindow` frame of
+  `worldBuilderWindow.ts`): size, landform, settlements, roads, water, cover,
+  densities and seed, with a bird's-eye preview drawn in a worker by the
+  builder's own generator (`engine/worldbuilder/randomWorldPreview.ts`).
+  Create posts to `/__world-random` (`tools/world/randomWorldEndpoint.ts`;
+  request allowlist `validateRandomWorldRequest` in `randomWorldRequest.ts`:
+  only the generator's own choices, a `.level.json` under `assets/`), which
+  answers 409 for an existing level unless `force`, runs
+  `build-random-world.mjs --request` in a child process (a large world is
+  ~1–2 min of CPU) and streams one JSON line per build step
+  (`WORLD_BUILD_STEPS`), then `done`/`error`; the window then opens the level
+  (as Open Level) with a bird's-eye camera pose. New window choices go in the
+  request allowlist and `randomWorldBrief` together. The builder
+  (`tools/world/worldBriefBuild.ts`, also `npm run world:brief` /
+  `world:random`) writes `<Level>.worldrecipe.json` beside the level; nothing
+  in the editor reads or saves it any more (the old stage/plan window and
+  `/__save-worldrecipe` were removed 2026-11-08). `validateSaveWorldRecipePayload`
+  (reusing `normalizeWorldRecipe`, `engine/worldbuilder/recipe.ts`; stricter:
+  any issue rejects) stays as the check that builder output is save-canonical;
+  new recipe fields go in the normalizer and `tests/engine/worldRecipe.test.ts`'s
+  maximal recipe. Builder road and pad bakes over a large world pass
+  `{ split: true }` (`splitTerrainRegion`) because one editor terrain
+  transaction is capped at `TERRAIN_REGION_MAX_VERTICES`; the editor's own
+  bakes keep refusing oversized regions. Region profiles
   (`*.regionprofile.json`, `normalizeRegionProfile` in
-  `engine/worldbuilder/regionProfile.ts`) are fork data with no save surface
+  `engine/worldbuilder/regionProfile.ts`) and ground covers
+  (`*.cover.json`, `normalizeGroundCover`) are fork data with no save surface
   yet; one added later must reuse that normalizer.
 
 - **Seventh allowlist surface — `<Model>.fracture.json` fracture asset
@@ -322,10 +327,10 @@ engine/editor.
   `/__save-world-cells`, `/__save-foliage-cells`,
   `/__save-ui`, `/__save-soundcue`, `/__save-effect`, `/__save-vehicle`,
   `/__save-fracture`, `/__save-deformable`,
-  `/__save-worldrecipe`,
   `/__save-dialogue-voice`, `/__save-dialogue-line`, `/__save-uvw`,
   `/__content-new`, `/__content-rename`, `/__content-delete`,
-  `/__import-asset`, and `/__open-level`.
+  `/__import-asset`, `/__open-level`, and `/__world-random` (builds a random
+  world under `assets/`; see World Builder above).
 - Editor Play is not an in-viewport PIE mode: the toolbar saves the layout,
   stores a temporary camera handoff, and opens the runtime route (`/`) in a new
   tab/window.

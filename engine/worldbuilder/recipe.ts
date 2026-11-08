@@ -14,9 +14,10 @@
  *   moved or deleted by a stage.
  *
  * Coordinates are world metres on the XZ plane, rounded like layout positions.
- * `normalizeWorldRecipe` is the single source of field shape: the editor reads
- * through it and `/__save-worldrecipe` validates through it (stricter: any issue
- * rejects the save). Dependency-free; no three.js.
+ * `normalizeWorldRecipe` is the single source of field shape: the world brief
+ * builder writes its recipe through it and `validateSaveWorldRecipePayload`
+ * checks that output is save-canonical (stricter: any issue rejects it).
+ * Dependency-free; no three.js.
  */
 import { isPlacementId, isSemanticRole } from "../scene/placementIdentity";
 import {

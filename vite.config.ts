@@ -47,7 +47,6 @@ import {
   validateSaveVehiclePayload,
   validateSaveFracturePayload,
   validateSaveDeformablePayload,
-  validateSaveWorldRecipePayload,
   validateSaveFoliagePayload,
   validateSaveMeshPaintPayload,
   validateSaveAssetVertexColorsPayload,
@@ -928,7 +927,6 @@ const PRIVILEGED_URLS = new Set([
   "/__save-vehicle",
   "/__save-fracture",
   "/__save-deformable",
-  "/__save-worldrecipe",
   "/__save-foliage",
   "/__save-foliage-type",
   "/__save-dialogue-voice",
@@ -1588,42 +1586,6 @@ function isLocalRequest(req: IncomingMessage): boolean {
             const next = `${JSON.stringify(payload.deformable, null, 2)}
 `;
             await writeFile(filePath, next, "utf8");
-            res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, dropped }));
-          } catch (error) {
-            res.statusCode = 400;
-            res.setHeader("Content-Type", "application/json; charset=utf-8");
-            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
-          }
-          return;
-        }
-
-        // World Builder recipe: `<Level>.worldrecipe.json` beside the open level.
-        // The path is derived from the level (validateSaveWorldRecipePayload) and,
-        // like /__save-world-cells, only the level the editor has open is writable.
-        if (req.url === "/__save-worldrecipe") {
-          if (req.method !== "POST") {
-            res.statusCode = 405;
-            res.end("Method not allowed");
-            return;
-          }
-          try {
-            const body = await readJsonBody(req, LANDSCAPE_BODY_MAX_BYTES);
-            const payload = validateSaveWorldRecipePayload(body);
-            const manifest = await readProjectManifest();
-            if (normalizePublicRelativePath(payload.level) !== normalizePublicRelativePath(manifest.editor.defaultScene)) {
-              throw new Error(`a world recipe can only be saved for the open level (${manifest.editor.defaultScene})`);
-            }
-            const dropped = reportDroppedFields(
-              (body as { recipe?: unknown } | null)?.recipe,
-              payload.recipe,
-              "recipe",
-            );
-            const filePath = resolvePublicPath(payload.path);
-            await mkdir(resolve(filePath, ".."), { recursive: true });
-            const previous = await readFile(filePath, "utf8").catch(() => null);
-            const next = `${JSON.stringify(payload.recipe, null, 2)}\n`;
-            if (previous !== next) await writeFile(filePath, next, "utf8");
             res.setHeader("Content-Type", "application/json; charset=utf-8");
             res.end(JSON.stringify({ ok: true, path: payload.path, changed: previous !== next, dropped }));
           } catch (error) {

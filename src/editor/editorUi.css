@@ -897,51 +897,8 @@
   background: linear-gradient(135deg, transparent 50%, var(--forge-border) 50%);
 }
 
-/* World Builder window (WORLD_BUILDER_WINDOW_PLAN; plan v0.4 §6.2): recipe, stages, last plan. */
-.world-builder-panel { display: grid; gap: 8px; }
-.world-builder-panel textarea { box-sizing: border-box; width: 100%; resize: vertical; font: 11px/1.4 monospace; }
-.world-builder-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
-.world-builder-summary strong { color: var(--forge-text); font-weight: 600; }
-.world-builder-path { color: var(--forge-text-secondary); font-size: 11px; word-break: break-all; }
-.world-builder-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-.world-builder-stage { display: grid; gap: 2px; padding: 6px 0; border-top: 1px solid var(--forge-border-mid); }
-.world-builder-stage:first-of-type { border-top: 0; }
-.world-builder-list { margin: 2px 0 0; padding-left: 16px; }
-.world-builder-dirty { color: #ff9b52; font-size: 11px; }
-.world-builder-error { color: #ff7a7a; }
-.world-builder-notice { padding: 6px 8px; border: 1px solid rgba(255, 155, 82, 0.4); border-radius: 4px; color: #ffb27a; font-size: 12px; }
-/* Dry run preview (T10); swatch colours match WorldBuilderPreviewOverlay's PREVIEW_COLORS. */
-.world-builder-change { all: unset; cursor: pointer; color: var(--forge-text); }
-.world-builder-change:hover, .world-builder-change:focus-visible { text-decoration: underline; }
-.world-builder-change:disabled { opacity: 0.45; cursor: default; text-decoration: none; }
-.world-builder-selected { color: #3dff9a; font-weight: 600; }
-.world-builder-swatch { display: inline-block; width: 9px; height: 9px; margin-right: 5px; border-radius: 2px; vertical-align: baseline; }
-.world-builder-swatch-added { background: #3ddc84; }
-.world-builder-swatch-updated { background: #f5b041; }
-.world-builder-swatch-removed { background: #ef5350; }
-.world-builder-swatch-kept { background: #5dade2; }
-.world-builder-swatch-blocked { background: #c06cff; }
-/* Recipe layer; matches WorldBuilderRecipeOverlay's LAYER_COLORS. */
-.world-builder-swatch-core { background: #ffd166; }
-.world-builder-swatch-settlement { background: #ffffff; }
-.world-builder-swatch-road { background: #ff9f43; }
-.world-builder-swatch-water { background: #4aa3ff; }
-.world-builder-swatch-region { background: #4fd1c5; }
-.world-builder-swatch-landmark { background: #ff8fab; }
-.world-builder-swatch-protected { background: #b388ff; }
-.world-builder-swatch-selected { background: #3dff9a; }
-.world-builder-swatch-low { background: #ff5c5c; }
-.world-builder-swatch-pad { background: #e0e0e0; }
-.world-builder-legend { font-size: 11px; }
-.world-builder-row { display: flex; align-items: center; gap: 6px; }
-.world-builder-row input[type="number"] { width: 72px; }
-.world-builder-row input[type="text"] { flex: 1; min-width: 0; }
-.world-builder-reference { display: grid; gap: 4px; margin-top: 6px; font-size: 12px; }
-/* In the window: long lists (plan elements, changes) scroll on their own, and a
-   wide window pairs the form rows (x/z, Population + Search radius) side by
-   side; a row with a button, and anything that is not a row, keeps the width. */
+/* Forge windows size their bodies' content by the window, not the viewport. */
 .forge-window-body { container-type: inline-size; }
-.forge-window .world-builder-list { max-height: 16em; overflow-y: auto; }
 
 /* World Builder window: random world choices, preview and Create (RANDOM_WORLD_PLAN step 5). */
 .random-world { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
@@ -968,6 +925,7 @@
 .random-world[data-preview-state="pending"] .random-world-preview canvas { opacity: 0.75; }
 .random-world-summary { color: var(--forge-text); font-size: 12px; }
 .random-world-hint { color: var(--forge-text-dim); font-size: 11px; line-height: 1.4; }
+.random-world-error { color: var(--forge-error-text); font-size: 12px; }
 .random-world-notes { margin: 0; padding-left: 16px; color: var(--forge-warning-text); font-size: 11px; }
 .random-world-create { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--forge-border-mid); }
 .random-world-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
@@ -978,10 +936,6 @@
 .random-world-progress { display: flex; align-items: center; gap: 8px; color: var(--forge-text-secondary); font-size: 12px; }
 .random-world-progress[hidden] { display: none; }
 .random-world-progress progress { flex: 0 0 160px; height: 8px; }
-@container (min-width: 600px) {
-  .world-builder-reference { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
-  .world-builder-reference > :not(.world-builder-row), .world-builder-reference > .world-builder-row:has(button) { grid-column: 1 / -1; }
-}
 .world-partition-summary { display: grid; gap: 3px; color: var(--forge-text-secondary); font-size: 12px; line-height: 1.45; }
 .world-partition-summary strong { color: var(--forge-text); font-weight: 600; }
 .world-partition-map {

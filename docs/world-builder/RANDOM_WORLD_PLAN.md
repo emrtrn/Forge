@@ -83,6 +83,21 @@ Plan modu (Derekavak, sabit koordinatlı özet) aynı kurucunun üstüne sonra d
   alçak zeminin en az 60 m üstü; altında ağaç sınırı), bitkiler (`*.foliagetype.json` yolu) ve kaya
   sayıları. Toplanan doğa varlıkları gelince yalnız bu dosyalar değişir. Kar yalnız dağlıkta oluşur;
   "her yer karlı" mevsim işi (WES). Test: `tests/engine/groundCover.test.ts`.
-- [ ] 5. Editör penceresi
+- [x] 5. Editör penceresi (8 Kasım 2026, kod; görsel onay bekliyor): Add Actor → Terrain →
+  **World Builder…** penceresi komut satırındaki seçenekleri sorar (boyut, arazi, dağ yüksekliği,
+  yerleşimler, yollar, nehir/göl, örtü, yoğunluklar, tohum + Roll Dice); plato, kanyon, önemli
+  noktalar ve mevsim henüz yok. Kuşbakışı önizleme kurucunun kendi üreticisini bir worker'da
+  çalıştırır (`engine/worldbuilder/randomWorldPreview.ts`, seçim başına ~0,3–0,6 s): dağlar,
+  boya, su ve köy yerleri kurulacak sahneyle aynı yerde; yollar düz çizgi, sokak/yapı/ağaç yok.
+  **Create** level'ı `public/assets` altına `/__world-random` ile kurar (yalnız geliştirme
+  sunucusu, ayrı Node süreci, adım adım ilerleme; var olan level'ın üstüne yazmadan önce sorar;
+  hata pencerede görünür), bitince level kuşbakışı kamerayla açılır. Kurucu düzeltmeleri: büyük
+  dünyada uzun yol / dağınık kasabalar "Terrain edit region is too large" ile duruyordu (yol ve
+  ped işleme artık parça parça, çıktı bayt bayt aynı); başarısız kurulum özet dosyası bırakmıyor.
+  Eski World Builder penceresi kalktı: panel, oturum, plan düzenleme, sahne katmanları,
+  Save'in tarif yazması ve `/__save-worldrecipe`. Kalanlar: aşamalar (`engine/worldbuilder/stages/*`),
+  tarif biçimi ve doğrulayıcısı, `world:brief` / `world:random`, pencere çerçevesi (`ForgeWindow`).
+  Test: `randomWorldPreview.test.ts`, `randomWorldRequest.test.ts`, `terrainSplitBake.test.ts`,
+  smoke `world-builder-random.spec.ts`.
 - [ ] 6. Rol → model
 - [ ] 7. Ada ve kıyı

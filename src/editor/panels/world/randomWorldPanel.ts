@@ -260,7 +260,7 @@ export class RandomWorldPanel {
           <div class="random-world-summary" data-preview-summary data-testid="random-world-summary">Önizleme hazırlanıyor…</div>
           <div class="random-world-hint">Kuzey yukarıda. Yollar düz çizgiyle gösterilir; gerçek güzergâh kurulumda çizilir. Sokak, yapı ve ağaç önizlemede yok.</div>
           <ul class="random-world-notes" data-preview-notes hidden></ul>
-          <div class="world-builder-error" data-preview-error role="alert" hidden></div>
+          <div class="random-world-error" data-preview-error role="alert" hidden></div>
         </div>
         <div class="random-world-create">
           <label class="detail-row"><span title="${escapeHtml(TIPS.folder)}">Folder</span><input type="text" data-folder aria-label="Folder" spellcheck="false"></label>
@@ -273,7 +273,7 @@ export class RandomWorldPanel {
             <progress max="1" value="0"></progress>
             <span data-progress-label></span>
           </div>
-          <div class="world-builder-error" data-create-error data-testid="random-world-error" role="alert" hidden></div>
+          <div class="random-world-error" data-create-error data-testid="random-world-error" role="alert" hidden></div>
         </div>
       </div>`;
   }

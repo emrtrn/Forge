@@ -51,7 +51,6 @@ import { migrateTerrainSplineCoordinates } from "@engine/terrain/terrainSplineDa
 import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMeshes";
 import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
-import { createTerrainPadPatches, terrainPadTileKeys, type TerrainPad } from "@engine/terrain/terrainPads";
 import { createTerrainAutoPaintPatches, type TerrainAutoPaintSettings } from "@engine/terrain/terrainAutoPaint";
 import { terrainHeightAt, raycastTerrain } from "@engine/terrain/terrainHeightQuery";
 import { createFlatWorldTerrain, createWorldTerrainFromHeightmap, type WorldTerrainCreateOptions, type WorldTerrainHeightmapSource } from "@engine/terrain/worldTerrainCreate";
@@ -356,18 +355,6 @@ import {
 } from "@engine/scene/meshPaint";
 import { EditorSaveSession, type EditorSaveSource } from "@/editor/editorSaveCoordinator";
 import { WorldTerrainEditSession } from "@/editor/terrainStore";
-import { WorldBuilderSession } from "@/editor/worldBuilderSession";
-import type { PreviewItem, StagePreview } from "@/editor/worldBuilderPreview";
-import { framePreviewCamera } from "@/editor/previewCameraFrame";
-import { WorldBuilderPreviewOverlay } from "./worldBuilderPreviewOverlay";
-import { HANDLE_LIFT, WorldBuilderRecipeOverlay } from "./worldBuilderRecipeOverlay";
-import type { PlanPointRef } from "@/editor/worldBuilderPlanEdit";
-import {
-  applyPlacementGroupChanges,
-  type PlacementGroupChange,
-  type StageTerrain,
-  type TerrainSplineChange,
-} from "@engine/worldbuilder/stage";
 import {
   loadAssetVertexColors,
   saveAssetVertexColors,
@@ -1308,8 +1295,6 @@ export interface LayoutSaveResult {
 
 export type LayoutSaver =(payload: LayoutSavePayload) => Promise<LayoutSaveResult>;
 
-/** How close to a World Builder Edit Plan handle a press must land, screen pixels. */
-const WORLD_BUILDER_HANDLE_REACH = 12;
 const ORTHO_MIN_VIEW_HEIGHT = 3;
 const ORTHO_MAX_VIEW_HEIGHT = 80;
 const ORTHO_DEFAULT_VIEW_HEIGHT = 10;
@@ -1473,36 +1458,6 @@ export class SceneApp {
     () => this.editorSaveSource(),
     (message, tone) => this.onStatus?.(message, tone),
   );
-  /** World Builder recipe and stage runner of the open level (World Builder plan v0.4 §6). */
-  readonly worldBuilder = new WorldBuilderSession({
-    scenePath: () => this.activeProject?.manifest.editor.defaultScene ?? "",
-    layout: () => this.layout,
-    sampleHeight: (x, z) => this.worldTerrainHeightAt(x, z),
-    executeCommand: (command) => this.executeCommand(command),
-    applyGroupChanges: (changes, side) => this.applyWorldBuilderGroupChanges(changes, side),
-    terrains: () => this.worldBuilderTerrains(),
-    applySplineChanges: (changes, side) => this.applyWorldBuilderSplineChanges(changes, side),
-    applyPads: (pads) => this.applyWorldBuilderPads(pads),
-    viewTarget: () => this.worldBuilderViewTarget(),
-    showRecipeLayer: (recipe, options, selection) => this.worldBuilderRecipeLayer.show(recipe, options, selection),
-    showPreview: (preview) => this.worldBuilderPreview.show(preview),
-    focusPreview: (preview, item) => this.focusWorldBuilderPreview(preview, item),
-    onStatus: (message, tone) => this.onStatus?.(message, tone),
-  });
-  /** The Edit Plan handle being dragged; `point` stays null until the pointer has moved. */
-  private worldBuilderPlanDrag: { pointerId: number; ref: PlanPointRef; startX: number; startY: number; point: [number, number] | null } | null = null;
-  /** Viewport layer of the World Builder recipe: reference underlay, plan and generated data. */
-  private readonly worldBuilderRecipeLayer = new WorldBuilderRecipeOverlay(
-    (x, z) => this.worldTerrainHeightAt(x, z),
-    (path) => projectFileUrl(path),
-    (counts) => this.worldBuilder.layerRedrawn(counts),
-  );
-  /** Viewport layer of the last World Builder dry run (T10). */
-  private readonly worldBuilderPreview = new WorldBuilderPreviewOverlay((assetId) => {
-    // Shape bounds come from the procedural model, which a level without that shape has not built yet.
-    this.ensureShapeModel(assetId);
-    return this.localBounds.get(assetId) ?? null;
-  });
   /** Resolved albedo (base color + tiling texture) of materials assigned to landscape layers, by material id. */
   private landscapeLayerMaterialCache = new Map<string, ForgeMaterialLayer>();
   private landscapeSculptSettings: LandscapeSculptSettings = {
@@ -2012,8 +1967,6 @@ export class SceneApp {
     this.gizmoGroup.name = "editor-transform-gizmo";
     this.gizmoGroup.visible = false;
     this.scene.add(tagSceneSource(this.gizmoGroup, EDITOR_OVERLAY_SOURCE));
-    this.scene.add(tagSceneSource(this.worldBuilderPreview.group, EDITOR_OVERLAY_SOURCE));
-    this.scene.add(tagSceneSource(this.worldBuilderRecipeLayer.group, EDITOR_OVERLAY_SOURCE));
 
     // Register subsystems before scene load adds work to them (e.g. character
     // animations push mixers during loadActiveProjectScene) and before the
@@ -2827,99 +2780,6 @@ export class SceneApp {
     this.cameraController.markViewChanged();
     this.cameraController.syncAnglesFromCurrentView();
     this.onStatus?.(`Moved the camera to ${Math.round(x)}, ${Math.round(z)}.`, "info");
-  }
-
-  /**
-   * Frames a World Builder preview item, or the whole preview, along the
-   * current view direction. Unlike Focus Selected the distance is not capped:
-   * a stage can touch a whole settlement.
-   */
-  private focusWorldBuilderPreview(preview: StagePreview, item: PreviewItem | null): void {
-    const box = this.worldBuilderPreview.worldBox(preview, item);
-    if (!box) {
-      this.onStatus?.(item ? `${item.id} has nothing to show in the viewport.` : "The preview has nothing to show in the viewport.", "warning");
-      return;
-    }
-    const camera = this.editorViewportCamera();
-    const canvas = this.renderer.domElement;
-    const height = framePreviewCamera(camera, box, canvas.clientWidth / Math.max(1, canvas.clientHeight));
-    if (height !== null) {
-      this.orthoViewHeight = height;
-      this.updateOrthoProjection();
-    }
-    this.cameraController.markViewChanged();
-    this.cameraController.syncAnglesFromCurrentView();
-    this.onStatus?.(item ? `Focused ${item.id}.` : `Focused the ${preview.stageLabel} preview.`, "info");
-  }
-
-  /**
-   * Edit Plan (World Builder 15b): a left press within reach of a plan handle
-   * selects its element and drags the point over the ground; the drop is one
-   * undo step. A press that misses every handle falls through to normal
-   * picking, and a press released without moving only selects.
-   */
-  private beginWorldBuilderPlanDrag(event: PointerEvent): boolean {
-    const handles = this.worldBuilder.planHandles();
-    if (handles.length === 0) return false;
-    const rect = this.canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return false;
-    const camera = this.editorViewportCamera();
-    const projected = new Vector3();
-    let best: { ref: PlanPointRef; distance: number } | null = null;
-    for (const { ref, point } of handles) {
-      projected.set(point[0], (this.worldTerrainHeightAt(point[0], point[1]) ?? 0) + HANDLE_LIFT, point[1]).project(camera);
-      if (projected.z < -1 || projected.z > 1) continue;
-      const distance = Math.hypot(
-        (projected.x * 0.5 + 0.5) * rect.width - (event.clientX - rect.left),
-        (-projected.y * 0.5 + 0.5) * rect.height - (event.clientY - rect.top),
-      );
-      if (distance <= WORLD_BUILDER_HANDLE_REACH && (!best || distance < best.distance)) best = { ref, distance };
-    }
-    if (!best) return false;
-    this.worldBuilderPlanDrag = { pointerId: event.pointerId, ref: best.ref, startX: event.clientX, startY: event.clientY, point: null };
-    this.canvas.setPointerCapture(event.pointerId);
-    this.worldBuilder.beginPlanDrag(best.ref);
-    return true;
-  }
-
-  private updateWorldBuilderPlanDrag(event: PointerEvent): boolean {
-    const drag = this.worldBuilderPlanDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return false;
-    // A few pixels of jitter on a click is not a move.
-    if (!drag.point && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 3) return true;
-    const hit = this.picker.pickLandscapeSurface(event.clientX, event.clientY)?.point
-      ?? this.picker.clientToPlane(event.clientX, event.clientY, this.floorPlane);
-    if (!hit) return true;
-    drag.point = [Math.round(hit.x * 100) / 100, Math.round(hit.z * 100) / 100];
-    this.worldBuilder.dragPlanPoint(drag.ref, drag.point);
-    return true;
-  }
-
-  private endWorldBuilderPlanDrag(event: PointerEvent): boolean {
-    const drag = this.worldBuilderPlanDrag;
-    if (!drag || drag.pointerId !== event.pointerId) return false;
-    this.worldBuilderPlanDrag = null;
-    if (this.canvas.hasPointerCapture(event.pointerId)) this.canvas.releasePointerCapture(event.pointerId);
-    this.worldBuilder.endPlanDrag(drag.ref, event.type === "pointerup" ? drag.point : null);
-    return true;
-  }
-
-  /**
-   * Where the view ray from the viewport centre meets the ground (World
-   * Builder adds a plan element there); without ground, a point ahead.
-   */
-  private worldBuilderViewTarget(): [number, number] {
-    const camera = this.editorViewportCamera();
-    const direction = camera.getWorldDirection(new Vector3());
-    const point = camera.position.clone();
-    for (let travelled = 0; travelled < 4000; travelled += 2) {
-      point.addScaledVector(direction, 2);
-      const ground = this.worldTerrainHeightAt(point.x, point.z) ?? 0;
-      if (point.y <= ground) return [point.x, point.z];
-    }
-    const flat = new Vector3(direction.x, 0, direction.z);
-    if (flat.lengthSq() > 0) flat.normalize().multiplyScalar(50);
-    return [camera.position.x + flat.x, camera.position.z + flat.z];
   }
 
   getWorldSettings(): EditorWorldSettings {
@@ -4356,7 +4216,6 @@ export class SceneApp {
       lakeFoamSteps: () => [...lakeFoamSaveSteps(this.lakes?.foam,this.layout?.waterBodies ?? []),...lakeFoamSaveSteps(this.riverFoam,this.layout?.riverWaters??[])],
       foliageData: this.foliageData,
       meshPaintData: this.meshPaintData,
-      worldRecipe: this.worldBuilder,
     };
   }
 
@@ -4399,8 +4258,6 @@ export class SceneApp {
     this.ensureDefaultLights();
     this.physicsSubsystem.setGravity(resolveSceneWorldSettings(this.layout).gravity);
     await this.levelRuntime.build();
-    // After the build: stages sample the World Terrains, which exist only now.
-    await this.worldBuilder.load(this.activeProject.manifest.editor.defaultScene);
 
     this.buildAiNavigationVolumes();
     this.buildTargetPoints();
@@ -4873,136 +4730,6 @@ export class SceneApp {
     const index = clampIndex(placementIndex, instance.placements.length);
     instance.placements.splice(index, 0, clonePlacement(placement));
     this.rebuildInstanceGroup(assetId);
-  }
-
-  /**
-   * Writes one side of a World Builder stage's group changes and rebuilds
-   * those groups once each. Placement indices shift, so the selection clears.
-   */
-  private applyWorldBuilderGroupChanges(changes: readonly PlacementGroupChange[], side: "before" | "after"): void {
-    if (!this.layout) return;
-    this.clearSelection();
-    // A stage can add the level's first shape of a kind; load only registered the ones it had.
-    for (const change of changes) this.ensureShapeModel(change.assetId);
-    for (const assetId of applyPlacementGroupChanges(this.layout, changes, side)) {
-      if (this.models.has(assetId)) {
-        this.rebuildInstanceGroup(assetId);
-        continue;
-      }
-      // A profile model outside the level's load groups loads first, as a drag-and-drop does;
-      // the rebuild then reads whatever the layout holds by the time it arrives.
-      void this.ensureAssetLoaded(assetId).then((ok) => {
-        if (ok) this.rebuildInstanceGroup(assetId);
-      });
-    }
-    this.emitSceneObjectsChanged();
-  }
-
-  /**
-   * Bakes World Builder pads into the World Terrains under them, one terrain
-   * undo command per terrain (decision 19: an explicit button, like a spline
-   * deform). Pads off every terrain or on a locked one are skipped and counted.
-   */
-  private async applyWorldBuilderPads(pads: readonly TerrainPad[]): Promise<void> {
-    if (this.worldTerrainSplineBusy) {
-      this.onStatus?.("Loading terrain for the previous terrain operation…", "info");
-      return;
-    }
-    const terrains = this.worldBuilderTerrains();
-    const byTerrain = new Map<string, TerrainPad[]>();
-    let skipped = 0;
-    for (const pad of pads) {
-      const [x, z] = pad.polygon[0]!;
-      const terrain = terrains.find((entry) => x >= entry.min[0] && x <= entry.max[0] && z >= entry.min[1] && z <= entry.max[1]);
-      if (!terrain || terrain.locked) {
-        skipped += 1;
-        continue;
-      }
-      byTerrain.set(terrain.id, [...(byTerrain.get(terrain.id) ?? []), pad]);
-    }
-    this.worldTerrainSplineBusy = true;
-    let applied = 0;
-    let tiles = 0;
-    try {
-      for (const [landscapeId, own] of byTerrain) {
-        const document = this.worldTerrains.get(landscapeId);
-        const session = document ? this.worldTerrainSessions.get(document) : undefined;
-        if (!document || !session) {
-          skipped += own.length;
-          continue;
-        }
-        const streaming = this.worldTerrainStreams.get(document);
-        const keys = terrainPadTileKeys(document.def, own);
-        if (streaming) this.onStatus?.("Loading terrain for pads…", "info");
-        await streaming?.demand(keys);
-        try {
-          if (this.worldTerrains.get(landscapeId) !== document) continue;
-          const patches = createTerrainPadPatches(session.world, own);
-          if (patches.length === 0) continue;
-          this.executeTerrainPatchCommand("World Builder: Apply Pads", landscapeId, document, patches);
-          applied += own.length;
-          tiles += patches.length;
-        } finally {
-          streaming?.release(keys);
-        }
-      }
-      const rest = skipped > 0 ? `; ${skipped} off the terrain or on a locked one were skipped` : "";
-      this.onStatus?.(applied > 0 ? `Pads applied: ${applied} pads on ${tiles} tiles${rest}.` : `No pad changed the terrain${rest}.`, applied > 0 ? "success" : "warning");
-    } catch (error) {
-      this.onStatus?.(`Pads failed: ${error instanceof Error ? error.message : String(error)}`, "error");
-    } finally {
-      this.worldTerrainSplineBusy = false;
-    }
-  }
-
-  /** The level's loaded World Terrains as World Builder stages read them. */
-  private worldBuilderTerrains(): StageTerrain[] {
-    return (this.layout?.landscapes ?? []).flatMap((actor) => {
-      const def = this.worldTerrains.get(actor.id)?.def;
-      if (!def) return [];
-      const [width, depth] = worldTerrainExtent(def);
-      return [{
-        id: actor.id,
-        min: [def.origin[0], def.origin[2]],
-        max: [def.origin[0] + width, def.origin[2] + depth],
-        layers: def.layers.map((layer) => ({ id: layer.id, name: layer.name })),
-        splines: def.splines ?? [],
-        locked: actor.locked === true,
-      }];
-    });
-  }
-
-  /**
-   * Writes one side of a World Builder stage's spline changes: each touched
-   * terrain's whole spline list, then its spline meshes, overlay and rivers —
-   * the `applySelectedLandscapeSplines` path without touching the selection or
-   * the active tool. The definition is marked dirty, so Save writes it.
-   */
-  private applyWorldBuilderSplineChanges(changes: readonly TerrainSplineChange[], side: "before" | "after"): void {
-    let changed = false;
-    for (const change of changes) {
-      const index = this.layout?.landscapes?.findIndex((actor) => actor.id === change.landscapeId) ?? -1;
-      const data = this.landscapeSplineSource(change.landscapeId);
-      if (index < 0 || !data) continue;
-      // Both sides are copies of the definition's own list, frames included.
-      data.splines = structuredClone(change[side]);
-      this.markLandscapeSplineDirty(change.landscapeId);
-      void this.rebuildLandscapeSplineMeshes(index);
-      this.refreshLandscapeSplineOverlay(index);
-      changed = true;
-    }
-    if (!changed) return;
-    void this.buildRiverWaters();
-    this.emitSceneObjectsChanged();
-  }
-
-  /** World-space height of any World Terrain at X/Z, or null off-terrain / over a tile not loaded. */
-  private worldTerrainHeightAt(x: number, z: number): number | null {
-    for (const document of this.worldTerrains.values()) {
-      const height = terrainHeightAt(document.def, { tile: (tileX, tileZ) => document.tiles.get(tileKey(tileX, tileZ)) }, x, z);
-      if (height !== null) return height;
-    }
-    return null;
   }
 
   private removeInstancePlacement(assetId: string, placementIndex: number): LayoutPlacement | null {
@@ -14089,9 +13816,6 @@ export class SceneApp {
       endFoliageStroke: (event) => this.endFoliageStroke(event),
       updateFoliageBrushHover: (clientX, clientY) => this.updateFoliageBrushHover(clientX, clientY),
       clearFoliageBrushHover: () => this.clearFoliageBrushHover(),
-      beginOverlayHandleDrag: (event) => this.beginWorldBuilderPlanDrag(event),
-      updateOverlayHandleDrag: (event) => this.updateWorldBuilderPlanDrag(event),
-      endOverlayHandleDrag: (event) => this.endWorldBuilderPlanDrag(event),
       isCameraNavigationActive: () => this.cameraController.isNavigating,
       cameraNavigationPointerId: () => this.cameraController.navigationPointerId,
       updateCameraLook: (movementX, movementY) => this.cameraController.updateLook(movementX, movementY),
@@ -16196,10 +15920,6 @@ export class SceneApp {
   }
 
   private emitHistoryChanged(): void {
-    // A dry run preview was planned against the level before this step; the
-    // recipe layer follows the ground, which the step may have moved.
-    this.worldBuilder.clearPreview();
-    this.worldBuilder.refreshLayer();
     this.onHistoryChanged?.(this.getHistoryState());
   }
 

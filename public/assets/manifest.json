@@ -24419,29 +24419,6 @@
         "bytes": 434
       },
       "license": "Unknown"
-    },
-    {
-      "id": "randomworld-level",
-      "name": "Random World.Level",
-      "assetType": "level",
-      "category": "Worlds",
-      "path": "assets/Worlds/RandomWorld.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Worlds",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 5324
-      },
-      "license": "Unknown"
     }
   ]
 }

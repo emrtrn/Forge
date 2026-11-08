@@ -8,7 +8,7 @@
  */
 import { mkdir, readdir, readFile, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
-import { normalizeRegionProfile } from "../../engine/worldbuilder/regionProfile";
+import { normalizeRegionProfile, regionProfileAssetIds } from "../../engine/worldbuilder/regionProfile";
 import { normalizeGroundCover } from "../../engine/worldbuilder/groundCover";
 import { normalizeWorldBrief, worldBriefLevelPath } from "../../engine/worldbuilder/worldBrief";
 import { buildImportedAssetRecord } from "../saveValidator";
@@ -130,6 +130,14 @@ export async function runWorldBrief(options: WorldBriefRunOptions): Promise<Worl
   const manifest = await readJson(root, manifestPath, "asset manifest") as { assets?: Array<Record<string, unknown>> };
   if (!Array.isArray(manifest.assets)) throw new Error(`${manifestPath} has no assets list`);
   const idByPath = new Map(manifest.assets.map((asset) => [asset.path, asset.id]));
+  // A level naming an asset the manifest lacks does not start in Play: refuse to build one.
+  if (profile) {
+    const known = new Set(manifest.assets.map((asset) => asset.id));
+    const missing = regionProfileAssetIds(profile).filter(({ id }) => !known.has(id));
+    if (missing.length) {
+      throw new Error(`region profile ${brief.regionProfile} names asset(s) not in ${manifestPath}: ${missing.map(({ id, where }) => `${id} (${where})`).join(", ")}`);
+    }
+  }
   const assetIdForFile = (file: string): string | null => {
     const id = idByPath.get(file);
     return typeof id === "string" ? id : null;

@@ -158,6 +158,25 @@ export interface RegionProfile {
   streetFurniture: StreetFurnitureRule[];
 }
 
+/**
+ * Every manifest asset id the profile names, with where: road surface meshes,
+ * building role models and street furniture models. A level built from the
+ * profile references them, and the runtime refuses to start on a missing one.
+ */
+export function regionProfileAssetIds(profile: RegionProfile): Array<{ id: string; where: string }> {
+  const ids: Array<{ id: string; where: string }> = [];
+  for (const [roadClass, road] of Object.entries(profile.roads)) {
+    if (road?.meshAsset) ids.push({ id: road.meshAsset, where: `roads.${roadClass}.meshAsset` });
+  }
+  for (const [role, spec] of Object.entries(profile.roles)) {
+    for (const id of spec.assetIds ?? []) ids.push({ id, where: `roles.${role}.assetIds` });
+  }
+  profile.streetFurniture.forEach((rule, index) => {
+    for (const id of rule.assetIds ?? []) ids.push({ id, where: `streetFurniture[${index}].assetIds` });
+  });
+  return ids;
+}
+
 export interface RegionProfileNormalization {
   /** null when the document is not a profile at all (wrong schema, no id/label). */
   profile: RegionProfile | null;

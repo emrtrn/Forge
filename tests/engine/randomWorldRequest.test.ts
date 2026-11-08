@@ -90,3 +90,40 @@ export async function registerRandomWorldRunCleanupTests(checkAsync: AsyncCheck)
     }
   });
 }
+
+/** A profile naming an asset the manifest lacks would build a level Play cannot start: the build refuses (`runWorldBrief`). */
+export async function registerWorldBriefMissingAssetTests(checkAsync: AsyncCheck): Promise<void> {
+  await checkAsync("world brief run: a region profile naming an asset not in the manifest stops the build", async () => {
+    const { mkdtemp, mkdir, readFile, rm, writeFile, access } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const { randomWorldBrief, DEFAULT_REGION_PROFILE } = await import("../../engine/worldbuilder/randomWorld");
+    const { regionProfileAssetIds, normalizeRegionProfile } = await import("../../engine/worldbuilder/regionProfile");
+    const { runWorldBrief } = await import("../../tools/world/worldBriefRun");
+    const shipped = JSON.parse(await readFile(join("public", DEFAULT_REGION_PROFILE), "utf8"));
+    // The shipped profile only names assets the shipped manifest has.
+    const manifest = JSON.parse(await readFile("public/assets/manifest.json", "utf8")) as { assets: Array<{ id: string }> };
+    const known = new Set(manifest.assets.map((asset) => asset.id));
+    const named = regionProfileAssetIds(normalizeRegionProfile(shipped).profile!);
+    assert.ok(named.some(({ where }) => where === "roads.collector.meshAsset"));
+    assert.deepEqual(named.filter(({ id }) => !known.has(id)), []);
+
+    const root = await mkdtemp(join(tmpdir(), "forge-brief-assets-"));
+    try {
+      await mkdir(join(root, "assets/Worlds"), { recursive: true });
+      shipped.roads.collector.meshAsset = "mesh:not-there";
+      await writeFile(join(root, "assets/Worlds/p.regionprofile.json"), JSON.stringify(shipped));
+      await writeFile(join(root, "project.3dgame.json"), JSON.stringify({ editor: { assetManifest: "assets/manifest.json" } }));
+      await writeFile(join(root, "assets/manifest.json"), JSON.stringify({ assets: [] }));
+      const { brief } = randomWorldBrief({
+        id: "assets_test", name: "Assets Test", seed: 1, size: "small", landform: "plain", mountainHeight: "low",
+        settlements: [{ type: "hamlet" }], roads: "between", regionProfile: "assets/Worlds/p.regionprofile.json",
+      });
+      await writeFile(join(root, "assets/Worlds/A.worldbrief.json"), JSON.stringify(brief));
+      await assert.rejects(runWorldBrief({ root, brief: "assets/Worlds/A.worldbrief.json" }), /mesh:not-there \(roads\.collector\.meshAsset\)/);
+      await assert.rejects(access(join(root, "assets/Worlds/A.level.json")));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}

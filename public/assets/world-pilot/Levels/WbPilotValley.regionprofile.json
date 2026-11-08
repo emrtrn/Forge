@@ -13,7 +13,7 @@
       "minTurnRadius": 30,
       "sidewalk": 1.5,
       "surfaceLayer": "Asphalt",
-      "meshAsset": "mesh:road-asphalt"
+      "meshAsset": "sm-road-asphalt"
     },
     "local": {
       "width": 4,

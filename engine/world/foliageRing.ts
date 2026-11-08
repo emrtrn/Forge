@@ -140,3 +140,65 @@ export function planFoliageRing(options: {
     unload: [...built.keys()].filter((key) => !retained.has(key)),
   };
 }
+
+/** Far billboard block size, metres (a whole number of ring cells: every ring cell size divides it). */
+export const FOLIAGE_FAR_BLOCK_SIZE = 512;
+/** Far blocks are kept until this multiple past the far distance. */
+export const FOLIAGE_FAR_UNLOAD_FACTOR = 1.1;
+
+export interface FoliageFarBlock {
+  key: string;
+  blockX: number;
+  blockZ: number;
+  /** Nearest distance from the camera to the block, metres. */
+  distance: number;
+}
+
+/**
+ * Plans the far billboard blocks of one rule: every block with ground between
+ * `nearRadius` (where the models end) and `farRadius`, nearest first. Blocks
+ * that only hold ground inside the near radius are not needed; built blocks
+ * stay until past {@link FOLIAGE_FAR_UNLOAD_FACTOR} × `farRadius`, or until the
+ * whole block lies inside the near radius.
+ */
+export function planFarFoliage(options: {
+  center: readonly [number, number];
+  nearRadius: number;
+  farRadius: number;
+  bounds: FoliageRingBounds;
+  built: ReadonlySet<string>;
+  blockSize?: number;
+}): { build: FoliageFarBlock[]; unload: string[] } {
+  const { center, nearRadius, farRadius, bounds, built } = options;
+  const size = options.blockSize ?? FOLIAGE_FAR_BLOCK_SIZE;
+  if (!(farRadius > nearRadius) || !(nearRadius >= 0)) return { build: [], unload: [...built] };
+  const retain = farRadius * FOLIAGE_FAR_UNLOAD_FACTOR;
+  const minX = Math.max(bounds.minX, center[0] - retain), maxX = Math.min(bounds.maxX, center[0] + retain);
+  const minZ = Math.max(bounds.minZ, center[1] - retain), maxZ = Math.min(bounds.maxZ, center[1] + retain);
+  const kept = new Set<string>();
+  const build: FoliageFarBlock[] = [];
+  if (minX < maxX && minZ < maxZ) {
+    for (let blockZ = Math.floor(minZ / size); blockZ * size < maxZ; blockZ += 1) {
+      for (let blockX = Math.floor(minX / size); blockX * size < maxX; blockX += 1) {
+        const x0 = blockX * size, z0 = blockZ * size;
+        const dx = Math.max(x0 - center[0], 0, center[0] - (x0 + size));
+        const dz = Math.max(z0 - center[1], 0, center[1] - (z0 + size));
+        const distance = Math.hypot(dx, dz);
+        const farX = Math.max(Math.abs(center[0] - x0), Math.abs(center[0] - (x0 + size)));
+        const farZ = Math.max(Math.abs(center[1] - z0), Math.abs(center[1] - (z0 + size)));
+        const farthest = Math.hypot(farX, farZ);
+        const key = worldCellKey(blockX, blockZ);
+        if (farthest <= nearRadius) continue;
+        if (built.has(key)) {
+          if (distance <= retain) kept.add(key);
+          continue;
+        }
+        if (distance > farRadius) continue;
+        kept.add(key);
+        build.push({ key, blockX, blockZ, distance });
+      }
+    }
+  }
+  build.sort((a, b) => a.distance - b.distance);
+  return { build, unload: [...built].filter((key) => !kept.has(key)) };
+}

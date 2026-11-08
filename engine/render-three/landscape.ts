@@ -6,7 +6,7 @@ import { TERRAIN_RENDER_LAYERS } from "@engine/terrain/terrainRenderData";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import { worldTerrainRenderSource } from "@engine/terrain/terrainRenderSource";
 import { worldTerrainActorPosition, worldTerrainExtent } from "@engine/terrain/worldTerrainActor";
-import { TerrainRenderer, terrainRendererOf } from "./terrain/terrainRenderer";
+import { TerrainRenderer, terrainRendererOf, type FoliageTerrainTint } from "./terrain/terrainRenderer";
 import type { TerrainLayerInput } from "./terrain/terrainMaterial";
 
 export {
@@ -191,6 +191,11 @@ export function updateWorldTerrainAppearance(
   colors?: LandscapeLayerColors,
 ): void {
   landscapeTerrain(object)?.setAppearance(viewMode, terrainActiveLayer(layers, activeLayerId), terrainLayerColors(layers, colors));
+}
+
+/** Sets (or clears) the far foliage tint of a landscape's terrain (`TerrainRenderer.setFarTint`). */
+export function setWorldTerrainFarTint(object: LandscapeObject, tint: FoliageTerrainTint | null): void {
+  landscapeTerrain(object)?.setFarTint(tint);
 }
 
 /**

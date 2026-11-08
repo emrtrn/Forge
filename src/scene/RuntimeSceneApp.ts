@@ -287,6 +287,7 @@ import {
   landscapeSplineMeshAssetIds,
   LANDSCAPE_DEFAULT_LAYERS,
   resolveLandscape,
+  setWorldTerrainFarTint,
   updateLandscapeLod,
   type LandscapeLayerTexture,
   type LandscapeObject,
@@ -311,6 +312,7 @@ import { fetchFoliageCell, loadFoliageData, loadFoliageSidecar, loadFoliageTypes
 import { FoliageCellStreaming } from "./foliageCellStreaming";
 import { ProceduralFoliageRing, type ProceduralFoliageRuleSource, type ProceduralFoliageTerrain } from "./proceduralFoliageRing";
 import { createFoliageCellGenerator, type FoliageCellGenerator } from "./foliageCellGenerator";
+import { FoliageImpostorCache } from "./foliageImpostorCache";
 import { tileKey } from "@engine/terrain/terrainTypes";
 import {
   createEmptyMeshPaintData,
@@ -1008,6 +1010,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   /** Landscape foliage rules grown in a ring around the camera (OPEN_WORLD_PLAN Faz 6 F3). */
   private proceduralFoliageRing: ProceduralFoliageRing | null = null;
   private foliageCellGenerator: FoliageCellGenerator | null = null;
+  /** Far billboard atlases (baked once per mesh for the level). */
+  private foliageImpostors: FoliageImpostorCache | null = null;
   /** The World Terrain documents the renderer draws (live tiles when streamed), by actor id. */
   private readonly worldTerrainDocuments = new Map<string, WorldTerrainDocument>();
   /** Chunked terrain meshes built from `layout.landscapes`. */
@@ -3705,6 +3709,8 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.proceduralFoliageRing = null;
     this.foliageCellGenerator?.dispose();
     this.foliageCellGenerator = null;
+    this.foliageImpostors?.dispose();
+    this.foliageImpostors = null;
     this.worldTerrainDocuments.clear();
     if (this.foliageBinding) {
       this.foliageBinding.dispose();
@@ -6396,8 +6402,14 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.foliageBinding = binding;
     if (ringRules.length > 0) {
       this.foliageCellGenerator = createFoliageCellGenerator();
+      this.foliageImpostors = new FoliageImpostorCache(this.renderer, resolver);
       this.proceduralFoliageRing = new ProceduralFoliageRing({
-        rules: ringRules, binding, resolver, generator: this.foliageCellGenerator, debug: this.debug,
+        rules: ringRules, binding, resolver, generator: this.foliageCellGenerator, impostors: this.foliageImpostors, debug: this.debug,
+        farTint: (terrainId, tint) => {
+          const index = (this.layout?.landscapes ?? []).findIndex((actor) => actor.id === terrainId);
+          const object = index >= 0 ? this.landscapeObjects[index] : undefined;
+          if (object) setWorldTerrainFarTint(object, tint);
+        },
       });
     }
     if (streamCells) {
@@ -6425,6 +6437,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
           origin: [...def.origin], layers: def.layers.map((layer) => ({ id: layer.id })) },
         tiles: { tile: (x, z) => document.tiles.get(tileKey(x, z)) },
         existingTiles: new Set(def.tiles.map((tile) => tile.key)),
+        global: document.globalAttributes ?? null,
       };
     }
     return null;

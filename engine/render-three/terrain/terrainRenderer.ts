@@ -899,6 +899,23 @@ export class TerrainRenderer {
     }
   }
 
+  /**
+   * Far foliage tint: per global sample, how much ground the plants hide
+   * (0..1, kept in the global normal texture's spare alpha channel, so it costs
+   * no texture unit or memory), and their colour (linear); the ground blends
+   * toward it from `start` to `end` metres from the camera. Null clears it.
+   */
+  setFarTint(tint: FoliageTerrainTint | null): void {
+    const { width, height } = this.global.map;
+    if (tint && tint.coverage.length !== width * height) throw new Error("[terrain] far tint does not match the global map");
+    const halves = this.globalNormalTexture.image.data as Uint16Array;
+    for (let i = 0; i < width * height; i += 1) halves[i * 4 + 3] = DataUtils.toHalfFloat(tint ? tint.coverage[i]! : 0);
+    this.textureUpdates.add(this.globalNormalTexture, 0, { x0: 0, x1: width - 1, z0: 0, z1: height - 1 });
+    const uniforms = this.materials.uniforms;
+    (uniforms.uTerrainFarTint!.value as Vector2).set(tint?.start ?? 0, tint ? Math.max(tint.end, tint.start + 1) : 0);
+    (uniforms.uTerrainFarTintColor!.value as Vector3).set(...(tint?.color ?? [0, 0, 0]));
+  }
+
   private updateHeightRange(): void {
     const range = this.bounds.range();
     // A flat terrain still gets a visible gradient range in the height view.
@@ -997,6 +1014,16 @@ export class TerrainRenderer {
 }
 
 /** The terrain renderer behind an object, if it is a CDLOD terrain mesh. */
+/** A terrain's far foliage tint ({@link TerrainRenderer.setFarTint}). */
+export interface FoliageTerrainTint {
+  /** Per global map sample, 0..1. */
+  coverage: Float32Array;
+  /** Linear RGB. */
+  color: readonly [number, number, number];
+  start: number;
+  end: number;
+}
+
 export function terrainRendererOf(object: Object3D): TerrainRenderer | null {
   const renderer = object.userData.forgeTerrain;
   return renderer instanceof TerrainRenderer ? renderer : null;

@@ -64,7 +64,25 @@ export interface ForgeFoliageTypeDef {
   cullEnd: number;
   /** Wind sway (Faz 6). Absent: the type never sways. */
   sway?: WindSwaySettings;
+  /**
+   * Far billboards for Landscape rule foliage: past `cullEnd` the same plants
+   * are drawn as camera-facing impostors out to this distance (m, × the quality
+   * cull scale). Absent or not past `cullEnd`: off. Painted foliage ignores it.
+   */
+  farDistance?: number;
+  /**
+   * 0..1: how much the terrain under this type's rule foliage darkens toward
+   * the plants' colour with distance, past `cullEnd` (forests read as dark
+   * patches on far hills). Absent or 0: off.
+   */
+  farTint?: number;
 }
+
+/** Clamp ranges of the far billboard / tint fields; the editor's sliders read them. */
+export const FOLIAGE_FAR_RANGES = {
+  farDistance: { min: 0, max: 20000 },
+  farTint: { min: 0, max: 1 },
+} as const;
 
 export const FOLIAGE_TYPE_DEFAULTS: Omit<ForgeFoliageTypeDef, "name" | "meshAssetId"> = {
   schema: 1,
@@ -146,6 +164,8 @@ export function normalizeFoliageType(raw: unknown): ForgeFoliageTypeDef {
   const cullStart = clampMin(finiteNumber(source.cullStart, d.cullStart), 0);
   const cullEnd = clampMin(finiteNumber(source.cullEnd, d.cullEnd), 0);
   const sway = normalizeWindSwaySettings(source.sway);
+  const farDistance = clampRange(finiteNumber(source.farDistance, 0), FOLIAGE_FAR_RANGES.farDistance.min, FOLIAGE_FAR_RANGES.farDistance.max);
+  const farTint = clampRange(finiteNumber(source.farTint, 0), FOLIAGE_FAR_RANGES.farTint.min, FOLIAGE_FAR_RANGES.farTint.max);
   return {
     schema: 1,
     type: "foliageType",
@@ -169,7 +189,14 @@ export function normalizeFoliageType(raw: unknown): ForgeFoliageTypeDef {
     cullStart,
     cullEnd,
     ...(sway ? { sway } : {}),
+    ...(farDistance > 0 ? { farDistance } : {}),
+    ...(farTint > 0 ? { farTint } : {}),
   };
+}
+
+/** True when a type draws far billboards: a far distance past its cull distance. */
+export function foliageTypeHasFarBillboards(type: ForgeFoliageTypeDef): boolean {
+  return type.cullEnd > 0 && (type.farDistance ?? 0) > type.cullEnd;
 }
 
 /** A blank Foliage Type asset body for `name` + `meshAssetId` (Content Browser "new"). */

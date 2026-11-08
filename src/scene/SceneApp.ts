@@ -282,6 +282,7 @@ import {
   resolveLandscape,
   uniqueLandscapeId,
   uniqueLandscapeName,
+  setWorldTerrainFarTint,
   updateLandscapeLod,
   updateWorldTerrainAppearance,
   refreshWorldTerrainObjectTile,
@@ -342,6 +343,7 @@ import {
 import { loadFoliageDocument, loadFoliageTypeByPath, loadFoliageTypesForData } from "./foliageLoader";
 import { ProceduralFoliageRing, type ProceduralFoliageRuleSource, type ProceduralFoliageTerrain } from "./proceduralFoliageRing";
 import { createFoliageCellGenerator, type FoliageCellGenerator } from "./foliageCellGenerator";
+import { FoliageImpostorCache } from "./foliageImpostorCache";
 import {
   createEmptyMeshPaintData,
   fillMeshVertexColors,
@@ -1390,6 +1392,8 @@ export class SceneApp {
   /** Landscape foliage rules grown around the editor camera (OPEN_WORLD_PLAN Faz 6 F3). */
   private foliageRing: ProceduralFoliageRing | null = null;
   private foliageCellGenerator: FoliageCellGenerator | null = null;
+  /** Far billboard atlases (baked once per mesh while the level is open). */
+  private foliageImpostors: FoliageImpostorCache | null = null;
   private generatedFoliageRebuildTimer: number | null = null;
   /** Whether Foliage Mode is the active editor mode (its brush owns pointer input). */
   private foliageModeActive = false;
@@ -7260,6 +7264,8 @@ export class SceneApp {
     void this.rebuildLandscapeSplineMeshes(index);
     this.refreshLandscapeSplineOverlay(index);
     this.refreshRiverWaterFoamOverlay(index);
+    // The new renderer starts without the far foliage tint.
+    this.foliageRing?.refreshFarTint();
     if (this.selection?.kind === "landscape" && this.selection.index === index) {
       this.updateSelectionBox();
     }
@@ -8232,6 +8238,8 @@ export class SceneApp {
     this.foliageRing = null;
     this.foliageCellGenerator?.dispose();
     this.foliageCellGenerator = null;
+    this.foliageImpostors?.dispose();
+    this.foliageImpostors = null;
     if (this.foliageBinding) {
       this.foliageBinding.dispose();
       this.foliageBinding = null;
@@ -8283,6 +8291,7 @@ export class SceneApp {
           origin: [...def.origin], layers: def.layers.map((layer) => ({ id: layer.id })) },
         tiles: { tile: (x, z) => document.tiles.get(tileKey(x, z)) },
         existingTiles: new Set(def.tiles.map((tile) => tile.key)),
+        global: document.globalAttributes ?? null,
       };
     }
     return null;
@@ -8302,7 +8311,15 @@ export class SceneApp {
     }
     if (rules.length === 0) return;
     this.foliageCellGenerator ??= createFoliageCellGenerator();
-    this.foliageRing = new ProceduralFoliageRing({ rules, binding, resolver: this.foliageResolver(), generator: this.foliageCellGenerator });
+    this.foliageImpostors ??= new FoliageImpostorCache(this.renderer, this.foliageResolver());
+    this.foliageRing = new ProceduralFoliageRing({
+      rules, binding, resolver: this.foliageResolver(), generator: this.foliageCellGenerator, impostors: this.foliageImpostors,
+      farTint: (terrainId, tint) => {
+        const index = (this.layout?.landscapes ?? []).findIndex((actor) => actor.id === terrainId);
+        const object = index >= 0 ? this.landscapeObjects[index] : undefined;
+        if (object) setWorldTerrainFarTint(object, tint);
+      },
+    });
   }
 
   private foliageRenderData(): LayoutFoliageData {

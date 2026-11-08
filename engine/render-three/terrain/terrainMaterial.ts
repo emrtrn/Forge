@@ -318,6 +318,8 @@ const FRAGMENT_NORMAL = /* glsl */ `
 const fragmentColorPars = (textured: boolean, normalMapped = false, detailMapped = false): string => /* glsl */ `
 uniform highp sampler2DArray uTerrainWeights;
 uniform highp sampler2DArray uTerrainGlobalWeights;
+uniform vec2 uTerrainFarTint;
+uniform vec3 uTerrainFarTintColor;
 uniform float uTerrainView;
 uniform vec2 uTerrainHeightRange;
 uniform float uTerrainActiveLayer;
@@ -421,6 +423,21 @@ ${TERRAIN_DEFORMATION_COLOR}
 }
 `;
 
+/**
+ * Far foliage tint (`TerrainRenderer.setFarTint`): the global normal texture's
+ * spare alpha holds, per global sample, how much of the ground the plants hide;
+ * past `uTerrainFarTint.x` the ground blends toward their colour, fully by
+ * `.y`. Off while `.y` is 0, and in the debug views.
+ */
+const FAR_TINT = /* glsl */ `
+if (uTerrainView < 0.5 && uTerrainFarTint.y > 0.0) {
+  vec2 forgeTintUv = (vTerrainLocal / uTerrainGlobalSpacing + 0.5) / uTerrainGlobalSize;
+  float forgeTint = texture(uTerrainGlobalNormals, forgeTintUv).a;
+  float forgeTintFade = smoothstep(uTerrainFarTint.x, uTerrainFarTint.y, length(vViewPosition));
+  diffuseColor.rgb = mix(diffuseColor.rgb, uTerrainFarTintColor, clamp(forgeTint, 0.0, 1.0) * forgeTintFade);
+}
+`;
+
 const SAMPLER_DECLARATION = /^uniform\s+(?:\w+\s+)?sampler\w*\s/gm;
 
 /**
@@ -518,6 +535,8 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
     uTerrainView: { value: VIEW_MODE_INDEX[inputs.viewMode] },
     uTerrainActiveLayer: { value: inputs.activeLayer },
     uTerrainHeightRange: { value: inputs.heightRange },
+    uTerrainFarTint: { value: new Vector2(0, 0) },
+    uTerrainFarTintColor: { value: new Vector3(0, 0, 0) },
   };
   const layerArray = layerUniforms(uniforms, inputs.layers);
   const layers = inputs.layers.slice(0, TERRAIN_RENDER_LAYERS);
@@ -563,7 +582,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
       FRAGMENT_MAIN, `${fragmentColorPars(textured, normalMapped, detailMapped)}\n${TERRAIN_DEFORMATION_FRAGMENT_PARS}\n${TERRAIN_CAUSTICS_PARS}\n${TERRAIN_SHORE_WETNESS_PARS}\n${TERRAIN_PUDDLE_COVERAGE_PARS}\n${FRAGMENT_MAIN}`);
     injectNormal(shader);
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <color_fragment>", `forgeSampleDeformation();\n// Before the colour block: the track look reads it. Wet tyre prints wet the\n// ground the same way a Lake shore does (debug views show neither).\nforgeShoreWet = max(forgeShoreWetness(), uTerrainView < 0.5 ? forgeTrailWet : 0.0);\n${fragmentColor(textured, normalMapped, detailMapped)}\ndiffuseColor.rgb *= mix(1.,.62,forgeShoreWet);`)
+      .replace("#include <color_fragment>", `forgeSampleDeformation();\n// Before the colour block: the track look reads it. Wet tyre prints wet the\n// ground the same way a Lake shore does (debug views show neither).\nforgeShoreWet = max(forgeShoreWetness(), uTerrainView < 0.5 ? forgeTrailWet : 0.0);\n${fragmentColor(textured, normalMapped, detailMapped)}\n${FAR_TINT}\ndiffuseColor.rgb *= mix(1.,.62,forgeShoreWet);`)
       .replace("#include <roughnessmap_fragment>", `${TERRAIN_DEFORMATION_ROUGHNESS}\nroughnessFactor=mix(roughnessFactor,min(roughnessFactor,.32),forgeShoreWet);`)
       .replace("#include <lights_fragment_begin>", "forgePrepareCaustics();\n#include <lights_fragment_begin>")
       .replace("#include <opaque_fragment>", `${TERRAIN_DEFORMATION_WATER}\n#include <opaque_fragment>`)

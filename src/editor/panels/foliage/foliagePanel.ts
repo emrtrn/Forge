@@ -1,5 +1,6 @@
 import { WIND_SWAY_DEFAULTS, WIND_SWAY_LIMITS, type WindSwaySettings } from "@engine/environment/wind";
 import {
+  FOLIAGE_FAR_RANGES,
   LANDSCAPE_FOLIAGE_RULE_BAND_DEFAULTS as BAND_DEFAULTS,
   LANDSCAPE_FOLIAGE_RULE_RANGES as BAND_RANGES,
   type FoliageResourceUsage,
@@ -135,6 +136,25 @@ function renderSwayFields(type: ForgeFoliageTypeDef): string {
       ${row("frequency", "Sway Frequency", 0.05, "Titreşim sıklığı (Hz)")}` : ""}`;
 }
 
+/** Far billboards and terrain tint: past Cull End, for Landscape rule foliage only. */
+function renderFarFields(type: ForgeFoliageTypeDef): string {
+  const { farDistance, farTint } = FOLIAGE_FAR_RANGES;
+  const note = type.cullEnd > 0
+    ? `Cull End ${type.cullEnd} m. Far Distance bundan büyük olunca billboard'lar açılır.`
+    : "Cull End 0 iken (Advanced) uzak billboard ve zemin tonu çalışmaz.";
+  return `
+      <div class="detail-subsection-title">Far</div>
+      <label class="detail-row" title="Cull End'den bu mesafeye kadar aynı bitkiler kameraya dönük billboard olarak çizilir (m). 0 kapalı. Yalnız Landscape kurallarıyla üretilen foliage için.">
+        <span>Far Distance</span>
+        <input type="number" data-foliage-type-num="farDistance" min="${farDistance.min}" max="${farDistance.max}" step="50" data-slider-max="8000" value="${type.farDistance ?? 0}" />
+      </label>
+      <label class="detail-row" title="Uzakta, bu türün bitkileri olan zemini bitkinin rengine doğru koyulaştırır; ormanlar uzak tepelerde koyu leke olarak okunur. 0 kapalı.">
+        <span>Far Tint</span>
+        <input type="number" data-foliage-type-num="farTint" min="${farTint.min}" max="${farTint.max}" step="0.05" value="${type.farTint ?? 0}" />
+      </label>
+      <div class="detail-hint">${escapeHtml(note)}</div>`;
+}
+
 // Persisted across the panel's frequent innerHTML re-renders (a native <details>
 // would otherwise collapse every time an edit re-renders the panel).
 let foliageAdvancedOpen = false;
@@ -178,6 +198,7 @@ function renderTypeDetails(
       ${boolField("Receive Shadow", "data-foliage-type-bool=\"receiveShadow\"", type.receiveShadow)}
       ${boolField("Collision", "data-foliage-type-bool=\"collision\"", type.collision)}
       ${renderSwayFields(type)}
+      ${renderFarFields(type)}
       <details class="foliage-advanced" ${foliageAdvancedOpen ? "open" : ""}>
         <summary>Advanced — placement filters</summary>
         ${numField("Z Offset Min", "data-foliage-type-num=\"zOffsetMin\"", type.zOffsetMin, "0.05")}

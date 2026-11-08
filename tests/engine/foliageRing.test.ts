@@ -4,8 +4,10 @@ import {
   FOLIAGE_RING_CELL_SIZE,
   FOLIAGE_RING_MAX_CELL_SIZE,
   FOLIAGE_RING_MAX_RADIUS,
+  FOLIAGE_FAR_BLOCK_SIZE,
   foliageRingCellSize,
   foliageRingRadius,
+  planFarFoliage,
   planFoliageRing,
   type FoliageRingCell,
 } from "../../engine/world/foliageRing";
@@ -19,6 +21,29 @@ function built(cells: readonly FoliageRingCell[]): Map<string, number> {
 }
 
 export function registerFoliageRingTests(check: Check): void {
+  check("foliage far blocks: only blocks with ground between the near and far radius, nearest first", () => {
+    const B = FOLIAGE_FAR_BLOCK_SIZE;
+    const plan = planFarFoliage({ center: [0, 0], nearRadius: 900, farRadius: 3000, bounds: WIDE, built: new Set() });
+    assert.deepEqual(plan.unload, []);
+    assert.ok(plan.build.length > 0);
+    for (let i = 1; i < plan.build.length; i += 1) assert.ok(plan.build[i - 1]!.distance <= plan.build[i]!.distance);
+    for (const block of plan.build) {
+      assert.ok(block.distance <= 3000);
+      const x0 = block.blockX * B, z0 = block.blockZ * B;
+      const farthest = Math.hypot(Math.max(Math.abs(x0), Math.abs(x0 + B)), Math.max(Math.abs(z0), Math.abs(z0 + B)));
+      assert.ok(farthest > 900, "a block wholly inside the models' reach is not built");
+    }
+    // Built blocks stay to 1.1x the far radius, then go; a replan builds nothing new.
+    const built = new Set(plan.build.map((block) => block.key));
+    assert.deepEqual(planFarFoliage({ center: [0, 0], nearRadius: 900, farRadius: 3000, bounds: WIDE, built }).build, []);
+    const moved = planFarFoliage({ center: [3000, 0], nearRadius: 900, farRadius: 3000, bounds: WIDE, built });
+    assert.ok(moved.unload.length > 0 && moved.unload.every((key) => built.has(key)));
+    assert.deepEqual(planFarFoliage({ center: [0, 0], nearRadius: 900, farRadius: 800, bounds: WIDE, built }).unload.sort(), [...built].sort());
+    // Clamped to the surface.
+    const small = planFarFoliage({ center: [0, 0], nearRadius: 100, farRadius: 3000, bounds: { minX: 0, maxX: 1024, minZ: 0, maxZ: 512 }, built: new Set() });
+    assert.deepEqual(small.build.map((block) => block.key).sort(), ["0_0", "1_0"]);
+  });
+
   check("foliage ring: cell size grows with the cull distance, capped by candidates per cell", () => {
     assert.equal(foliageRingCellSize(80, 1), FOLIAGE_RING_CELL_SIZE, "grass keeps 32 m cells");
     assert.equal(foliageRingCellSize(0, 0.01), FOLIAGE_RING_CELL_SIZE, "a type that never culls keeps 32 m cells");

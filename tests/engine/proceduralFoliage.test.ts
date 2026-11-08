@@ -5,8 +5,8 @@ import {
 } from "../../engine/scene/foliage";
 import { makeFoliageRng } from "../../engine/scene/foliagePaint";
 import {
-  foliageCellSeed, generateFoliageCell, MAX_FOLIAGE_CELL_INSTANCES,
-  worldTerrainFoliageSurface, type FoliageCellRequest, type FoliageSurface, type GeneratedFoliageCell,
+  foliageCellSeed, foliageFarTintMap, generateFoliageBlock, generateFoliageCell, globalFoliageSurface, MAX_FOLIAGE_CELL_INSTANCES,
+  worldTerrainFoliageSurface, type FoliageCellRequest, type FoliageGlobalMap, type FoliageSurface, type GeneratedFoliageCell,
 } from "../../engine/scene/proceduralFoliage";
 import { TerrainTileMap, terrainHeightAt, terrainSmoothNormalAt } from "../../engine/terrain/terrainHeightQuery";
 import type { TerrainTileData } from "../../engine/terrain/terrainTypes";
@@ -259,5 +259,78 @@ export function registerProceduralFoliageTests(check: Check): void {
     assert.deepEqual(normalizeLandscapeFoliageRule({ ...RULE, heightMax: 1e9, heightFalloff: -3, slopeMax: 200,
       slopeFalloff: 99, noiseAmount: 4, noiseScale: 0, edgeScale: -1, slopeMin: "steep" }, []),
     { ...RULE, heightMax: 10000, slopeFalloff: 45, noiseAmount: 1, noiseScale: 1, edgeScale: 0 });
+  });
+
+  check("far foliage surface: exact tiles where resident, the global map elsewhere", () => {
+    const def = { tileQuads: 4, spacing: 2, tilesX: 2, tilesZ: 1,
+      origin: [0, 10, 0] as [number, number, number], layers: [{ id: "a" }, { id: "b" }] };
+    // Global map: stride 2 vertices (4 m); height = 0.5 * x (datum-relative), layer b weight 255.
+    const width = 5, height = 3;
+    const global: FoliageGlobalMap = {
+      map: { width, height, stride: 2, heights: Float32Array.from({ length: width * height }, (_, i) => (i % width) * 4 * 0.5) },
+      normals: new Float32Array(width * height * 3),
+      weights: Uint8Array.from({ length: width * height * 4 * 2 }, (_, i) => (i % 4 === 1 && i < width * height * 4 ? 255 : 0)),
+    };
+    const tiles = new TerrainTileMap();
+    const surface = globalFoliageSurface(def, global, tiles);
+    near(surface.heightAt(6, 3), 10 + 3);
+    near(surface.layerWeightAt("b", 6, 3), 1);
+    near(surface.layerWeightAt("a", 6, 3), 0);
+    assert.deepEqual(surface.normalAt(6, 3), [0, 1, 0]);
+    assert.equal(surface.exact, false);
+    assert.equal(surface.heightAt(20, 3), null, "off the map");
+    assert.equal(surface.layerWeightAt("missing", 6, 3), null);
+    const tile: TerrainTileData = { x: 0, z: 0, size: 5, layerCount: 2,
+      heights: new Float32Array(25).fill(7), weights: new Uint8Array(25 * 4) };
+    tiles.set(tile);
+    const mixed = globalFoliageSurface(def, global, tiles);
+    assert.equal(mixed.heightAt(3, 3), terrainHeightAt(def, tiles, 3, 3));
+    assert.equal(mixed.exact, true);
+    near(mixed.heightAt(12, 3), 16);
+    assert.equal(mixed.exact, false);
+  });
+
+  check("far foliage block: the ring cells of a block, packed, at the same positions", () => {
+    const block = generateFoliageBlock(RULE, TYPE, RAMP, { blockX: -1, blockZ: 1, cellSize: 8, cellsPerSide: 2, keepFraction: 0.5 });
+    const cells = [[-2, 2], [-1, 2], [-2, 3], [-1, 3]].map(([cellX, cellZ]) =>
+      generateFoliageCell(RULE, TYPE, RAMP, { cellX: cellX!, cellZ: cellZ!, cellSize: 8, keepFraction: 0.5 }));
+    assert.equal(block.count, cells.reduce((sum, cell) => sum + cell.count, 0));
+    assert.deepEqual(translations(block).sort(), cells.flatMap(translations).sort());
+  });
+
+  check("foliage type far fields: round-trip, clamp, and stay out of the file when off", () => {
+    const type = normalizeFoliageType({ name: "Tree", meshAssetId: "tree", cullEnd: 900, farDistance: 4000, farTint: 0.6 });
+    assert.equal(type.farDistance, 4000);
+    assert.equal(type.farTint, 0.6);
+    assert.deepEqual(normalizeFoliageType(type), type);
+    const off = normalizeFoliageType({ name: "Tree", meshAssetId: "tree", farDistance: 0, farTint: 0 });
+    assert.ok(!("farDistance" in off) && !("farTint" in off));
+    const clamped = normalizeFoliageType({ name: "Tree", meshAssetId: "tree", farDistance: 1e9, farTint: 3 });
+    assert.equal(clamped.farDistance, 20000);
+    assert.equal(clamped.farTint, 1);
+  });
+
+  check("far foliage tint: coverage where the rule grows, nothing elsewhere, and the plants' colour", () => {
+    const def = { tileQuads: 4, spacing: 2, tilesX: 1, tilesZ: 1, origin: [0, 0, 0] as [number, number, number], layers: [{ id: "grass" }] };
+    const width = 3, height = 3;
+    // Heights 0, 10, 20 along X; grass weight 255 except the last column (0).
+    const global: FoliageGlobalMap = {
+      map: { width, height, stride: 2, heights: Float32Array.from({ length: 9 }, (_, i) => (i % 3) * 10) },
+      normals: new Float32Array(27),
+      weights: Uint8Array.from({ length: 9 * 4 * 2 }, (_, i) => (i < 36 && i % 4 === 0 && Math.floor(i / 4) % 3 !== 2 ? 255 : 0)),
+    };
+    const type = normalizeFoliageType({ name: "Tree", meshAssetId: "tree", farTint: 0.5 });
+    const rule = { ...RULE, layerId: "grass", density: 0.01, minWeight: 0.5 };
+    const source = { rule, type, color: [0.02, 0.05, 0.02] as const, footprint: 30 };
+    const tint = foliageFarTintMap(def, global, [source])!;
+    const cover = 0.5 * (1 - Math.exp(-4 * 0.01 * 30));
+    near(tint.coverage[0]!, cover);
+    near(tint.coverage[1]!, cover);
+    assert.equal(tint.coverage[2], 0, "no grass, no tint");
+    tint.color.forEach((channel, i) => near(channel, [0.02, 0.05, 0.02][i]!));
+    const capped = foliageFarTintMap(def, global, [{ ...source, rule: { ...rule, heightMax: 5 } }])!;
+    near(capped.coverage[0]!, cover);
+    assert.equal(capped.coverage[1], 0, "above the rule's Height Max");
+    assert.equal(foliageFarTintMap(def, global, [{ ...source, type: { ...type, farTint: 0 } }]), null);
   });
 }

@@ -44,6 +44,79 @@ export function worldTerrainFoliageSurface(
   };
 }
 
+/** The global map shape a far surface reads (`TerrainGlobalAttributes` without the render import). */
+export interface FoliageGlobalMap {
+  map: { width: number; height: number; stride: number; heights: Float32Array };
+  /** Per sample: normal X, normal Z, hole flag. */
+  normals: Float32Array;
+  /** RGBA8 blocks of `width × height` texels, block-major (layer `b*4+c`). */
+  weights: Uint8Array;
+}
+
+/**
+ * A surface over the terrain's global map (one sample per `stride` vertices,
+ * always resident), preferring the exact resident tiles where they exist. Far
+ * foliage grows on it: away from the camera the tiles are streamed out, near
+ * it the plants match the exact ring. `exact` reports whether every query so
+ * far was answered from tiles.
+ */
+export function globalFoliageSurface(
+  def: TerrainQueryDef & { layers: readonly { id: string }[] },
+  global: FoliageGlobalMap,
+  tiles: TerrainTileLookup,
+): FoliageSurface & { exact: boolean } {
+  const exactSurface = worldTerrainFoliageSurface(def, tiles);
+  const { width, height, stride, heights } = global.map;
+  const step = stride * def.spacing;
+  const texels = width * height;
+  const sample = (x: number, z: number): { i: number; fx: number; fz: number } | null => {
+    const gx = (x - def.origin[0]) / step, gz = (z - def.origin[2]) / step;
+    if (!(gx >= 0 && gz >= 0 && gx <= width - 1 && gz <= height - 1)) return null;
+    const ix = Math.min(Math.floor(gx), width - 2), iz = Math.min(Math.floor(gz), height - 2);
+    return { i: iz * width + ix, fx: gx - ix, fz: gz - iz };
+  };
+  const bilinear = (read: (i: number) => number, at: { i: number; fx: number; fz: number }): number | null => {
+    const a = read(at.i), b = read(at.i + 1), c = read(at.i + width), d = read(at.i + width + 1);
+    if (![a, b, c, d].every(Number.isFinite)) return null;
+    return (a + (b - a) * at.fx) * (1 - at.fz) + (c + (d - c) * at.fx) * at.fz;
+  };
+  const surface: FoliageSurface & { exact: boolean } = {
+    exact: true,
+    heightAt: (x, z) => {
+      const exact = exactSurface.heightAt(x, z);
+      if (exact !== null) return exact;
+      surface.exact = false;
+      const at = sample(x, z);
+      const local = at ? bilinear((i) => heights[i]!, at) : null;
+      return local === null ? null : def.origin[1] + local;
+    },
+    normalAt: (x, z) => {
+      const exact = exactSurface.normalAt(x, z);
+      if (exact !== null) return exact;
+      surface.exact = false;
+      const at = sample(x, z);
+      if (!at) return null;
+      const nx = bilinear((i) => global.normals[i * 3]!, at), nz = bilinear((i) => global.normals[i * 3 + 1]!, at);
+      if (nx === null || nz === null) return null;
+      return [nx, Math.sqrt(Math.max(0, 1 - nx * nx - nz * nz)), nz];
+    },
+    layerWeightAt: (layerId, x, z) => {
+      const exact = exactSurface.layerWeightAt(layerId, x, z);
+      if (exact !== null) return exact;
+      const layer = def.layers.findIndex((entry) => entry.id === layerId);
+      if (layer < 0) return null;
+      surface.exact = false;
+      const at = sample(x, z);
+      if (!at) return null;
+      const base = Math.floor(layer / 4) * texels * 4, channel = layer % 4;
+      const weight = bilinear((i) => global.weights[base + i * 4 + channel]! / 255, at);
+      return weight;
+    },
+    bounds: exactSurface.bounds,
+  };
+  return surface;
+}
+
 export const MAX_FOLIAGE_CELL_INSTANCES = 4096;
 
 function mix(value: number): number {
@@ -199,4 +272,118 @@ export function generateFoliageCell(
     }
   }
   return { count, matrices: matrices.slice(0, count * 16) };
+}
+
+export interface FoliageBlockRequest {
+  /** Block grid coordinates; a block covers `cellsPerSide²` ring cells. */
+  blockX: number;
+  blockZ: number;
+  /** The rule's ring cell size: the block is generated cell by cell, so a plant sits where the ring puts it. */
+  cellSize: number;
+  cellsPerSide: number;
+  keepFraction: number;
+}
+
+/**
+ * The ring cells of one block generated and packed together (far billboards draw
+ * a block as one batch). Same seeds and cells as the ring, so at the hand-off a
+ * billboard stands exactly where its model stood.
+ */
+export function generateFoliageBlock(
+  rule: LandscapeFoliageRule,
+  type: ForgeFoliageTypeDef,
+  surface: FoliageSurface,
+  request: FoliageBlockRequest,
+): GeneratedFoliageCell {
+  const { blockX, blockZ, cellSize, cellsPerSide, keepFraction } = request;
+  const parts: GeneratedFoliageCell[] = [];
+  let count = 0;
+  for (let z = 0; z < cellsPerSide; z += 1) {
+    for (let x = 0; x < cellsPerSide; x += 1) {
+      const cell = generateFoliageCell(rule, type, surface, {
+        cellX: blockX * cellsPerSide + x, cellZ: blockZ * cellsPerSide + z, cellSize, keepFraction,
+      });
+      if (cell.count === 0) continue;
+      parts.push(cell);
+      count += cell.count;
+    }
+  }
+  const matrices = new Float32Array(count * 16);
+  let at = 0;
+  for (const part of parts) { matrices.set(part.matrices, at); at += part.matrices.length; }
+  return { count, matrices };
+}
+
+export interface FoliageFarTintSource {
+  rule: LandscapeFoliageRule;
+  type: ForgeFoliageTypeDef;
+  /** The plants' mean colour, linear RGB 0..1. */
+  color: readonly [number, number, number];
+  /** Ground one plant's crown covers at scale 1, m². */
+  footprint: number;
+}
+
+/** Seen low and from far, crowns hide far more ground than they cover from above. */
+const FAR_TINT_OVERLAP = 4;
+
+export interface FoliageFarTintMap {
+  /** Per global map sample, 0..1: how much ground the plants hide. */
+  coverage: Float32Array;
+  /** The plants' colour, coverage-weighted over the map (linear RGB). */
+  color: [number, number, number];
+}
+
+/**
+ * Far foliage tint over a terrain's global map: per sample, how much ground
+ * the rules' plants hide — `farTint × (1 − e^(−4 · density · footprint · scale²))`
+ * where the rule's layer, bands and the type's own limits hold, rules combined
+ * as layers over each other — and their mean colour. Null when no rule's type
+ * has a far tint.
+ */
+export function foliageFarTintMap(
+  def: TerrainQueryDef & { layers: readonly { id: string }[] },
+  global: FoliageGlobalMap,
+  sources: readonly FoliageFarTintSource[],
+): FoliageFarTintMap | null {
+  const active = sources
+    .map((source) => ({
+      ...source,
+      layer: def.layers.findIndex((layer) => layer.id === source.rule.layerId),
+      strength: Math.min(1, Math.max(0, source.type.farTint ?? 0)),
+      bands: landscapeFoliageRuleIsUnbanded(source.rule) ? null : landscapeFoliageRuleBands(source.rule),
+      scale: (source.type.scaleMin[0] + source.type.scaleMax[0]) / 2,
+    }))
+    .filter((source) => source.strength > 0 && source.layer >= 0);
+  if (active.length === 0) return null;
+  const { width, height, stride, heights } = global.map;
+  const step = stride * def.spacing;
+  const texels = width * height;
+  const coverage = new Float32Array(texels);
+  let r = 0, g = 0, b = 0, sum = 0;
+  for (let iz = 0; iz < height; iz += 1) {
+    for (let ix = 0; ix < width; ix += 1) {
+      const i = iz * width + ix;
+      const local = heights[i]!;
+      if (!Number.isFinite(local)) continue;
+      const x = def.origin[0] + ix * step, z = def.origin[2] + iz * step, y = def.origin[1] + local;
+      const nx = global.normals[i * 3]!, nz = global.normals[i * 3 + 1]!;
+      const normal: Vec3 = [nx, Math.sqrt(Math.max(0, 1 - nx * nx - nz * nz)), nz];
+      const slope = surfaceSlopeDegrees(normal);
+      let clear = 1;
+      for (const source of active) {
+        const weight = global.weights[(Math.floor(source.layer / 4) * texels + i) * 4 + source.layer % 4]! / 255;
+        if (weight + 1e-6 < source.rule.minWeight) continue;
+        if (!passesFoliageFilters(source.type, { position: [x, y, z], normal })) continue;
+        const mask = source.bands ? terrainMaskAt(source.bands, y, slope, x, z, source.rule.seed | 0) : 1;
+        const cover = 1 - Math.exp(-FAR_TINT_OVERLAP * source.rule.density * source.footprint * source.scale * source.scale);
+        const alpha = source.strength * cover * mask;
+        if (!(alpha > 0)) continue;
+        clear *= 1 - alpha;
+        r += source.color[0] * alpha; g += source.color[1] * alpha; b += source.color[2] * alpha; sum += alpha;
+      }
+      coverage[i] = 1 - clear;
+    }
+  }
+  const first = active[0]!.color;
+  return { coverage, color: sum > 0 ? [r / sum, g / sum, b / sum] : [first[0], first[1], first[2]] };
 }

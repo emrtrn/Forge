@@ -194,7 +194,7 @@ async function readJsonBody(
   for await (const chunk of req) {
     const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
     size += buffer.length;
-    if (size > maxBytes) throw new Error("request body too large");
+    if (size > maxBytes) throw new Error(`request body too large (over ${Math.round(maxBytes / 1024)} KB)`);
     chunks.push(buffer);
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
@@ -218,6 +218,12 @@ function reportDroppedFields(input: unknown, output: unknown, subject: string): 
 // right at the 256 KB default. Give landscape saves generous headroom so imported
 // terrain always persists instead of silently failing to save.
 const LANDSCAPE_BODY_MAX_BYTES = 32 * 1024 * 1024;
+
+// A level and its World Partition cells grow with the world: a World Builder
+// world with towns sends ~250 KB of layout, or ~1 MB of cells on the first
+// save of a session (every cell counts as changed). The 256 KB default made
+// both saves — and so Play, which saves first — fail.
+const LEVEL_BODY_MAX_BYTES = 32 * 1024 * 1024;
 
 // Collects a raw request body (binary uploads) into a Buffer, capped at maxBytes.
 async function readRawBody(req: IncomingMessage, maxBytes: number): Promise<Buffer> {
@@ -1254,7 +1260,7 @@ function isLocalRequest(req: IncomingMessage): boolean {
             return;
           }
           try {
-            const submitted = await readJsonBody(req);
+            const submitted = await readJsonBody(req, LEVEL_BODY_MAX_BYTES);
             const payload = validateSaveWorldCellsPayload(submitted);
             // Like /__save-layout, only the level the editor has open.
             const manifest = await readProjectManifest();
@@ -2478,7 +2484,7 @@ function isLocalRequest(req: IncomingMessage): boolean {
         }
 
         try {
-          const body = await readJsonBody(req);
+          const body = await readJsonBody(req, LEVEL_BODY_MAX_BYTES);
           const payload = validateSavePayload(body);
           const submitted =
             body && typeof body === "object" && "layout" in body

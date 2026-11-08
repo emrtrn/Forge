@@ -7069,3 +7069,40 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+/* Landscape Paint → Auto Paint: one card per rule. */
+.landscape-auto-rule {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+  padding: 6px;
+  border: 1px solid #303640;
+  border-radius: 4px;
+  background: #171b22;
+}
+
+.landscape-auto-rule-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.landscape-auto-rule-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.landscape-auto-rule-actions button {
+  width: 24px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #303640;
+  background: #1d222b;
+  color: #cbd2dc;
+  font-size: 11px;
+}
+
+.landscape-auto-rule-actions button:hover:not(:disabled) {
+  background: #29303a;
+}

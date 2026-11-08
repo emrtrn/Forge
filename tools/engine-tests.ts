@@ -13,6 +13,7 @@ import type { TerrainSplineMeshSource } from "../engine/terrain/terrainSplineMes
 import { registerTerrainErosionTests } from "../tests/engine/terrainErosion.test";
 import { registerTerrainSplineTests } from "../tests/engine/terrainSplines.test";
 import { registerTerrainPadTests } from "../tests/engine/terrainPads.test";
+import { registerTerrainAutoPaintTests } from "../tests/engine/terrainAutoPaint.test";
 import { registerTerrainSplineDataTests, registerTerrainSplineDataAsyncTests } from "../tests/engine/terrainSplineData.test";
 import { registerTerrainSplineEditingTests } from "../tests/engine/terrainSplineEditing.test";
 import { registerTerrainSplineMeshTests } from "../tests/engine/terrainSplineMeshes.test";
@@ -1360,6 +1361,7 @@ await registerRoadProfileTests(checkAsync);
 registerTerrainErosionTests(check);
 registerTerrainSplineTests(check);
 registerTerrainPadTests(check);
+registerTerrainAutoPaintTests(check);
 registerTerrainSplineDataTests(check);
 await registerTerrainSplineDataAsyncTests(checkAsync);
 await registerTerrainSplineEditingTests(check, checkAsync);

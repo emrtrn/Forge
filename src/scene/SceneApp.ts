@@ -52,6 +52,7 @@ import { prepareTerrainSplineMeshSource } from "@engine/terrain/terrainSplineMes
 import { prepareTerrainRiverWaterSource } from "@engine/terrain/terrainRiverWater";
 import { createTerrainSplinePatches, terrainSplineTileKeys, type WorldTerrainSpline, type TerrainSplineEffect } from "@engine/terrain/terrainSplines";
 import { createTerrainPadPatches, terrainPadTileKeys, type TerrainPad } from "@engine/terrain/terrainPads";
+import { createTerrainAutoPaintPatches, type TerrainAutoPaintSettings } from "@engine/terrain/terrainAutoPaint";
 import { terrainHeightAt, raycastTerrain } from "@engine/terrain/terrainHeightQuery";
 import { createFlatWorldTerrain, createWorldTerrainFromHeightmap, type WorldTerrainCreateOptions, type WorldTerrainHeightmapSource } from "@engine/terrain/worldTerrainCreate";
 import { openWorldFogPatch, openWorldPartitionSettings, type OpenWorldSetup } from "@engine/world/openWorldSetup";
@@ -769,6 +770,7 @@ export interface SplineReference {
 export type LandscapeSculptTool = TerrainSculptTool;
 export type LandscapeEditMode = "sculpt" | "paint" | "splines" | "water";
 export type LandscapePaintTool = "paint" | "erase" | "smoothWeights";
+export type LandscapePaintPanel = "brush" | "auto";
 /**
  * Splines sub-mode (Faz 6.1). "draw" authors the spline (click terrain to add a
  * connected point; click an existing marker to weld / close / branch), while
@@ -782,6 +784,8 @@ export interface LandscapeSculptSettings extends TerrainSculptSettings {
   editMode: LandscapeEditMode;
   tool: LandscapeSculptTool;
   paintTool: LandscapePaintTool;
+  /** Paint mode's Details tab: the brush, or the one-shot Auto Paint rules (no brush in the viewport). */
+  paintPanel: LandscapePaintPanel;
   splineTool: LandscapeSplineTool;
   activeLayerId: string;
   viewMode: LandscapeViewMode;
@@ -1102,6 +1106,8 @@ export interface WorldTerrainDetailsView {
   spacing: number;
   /** World X/Z size of the whole tile grid. */
   extent: [number, number];
+  /** World-space lowest and highest ground, from the tile summaries. */
+  groundRange: [number, number];
 }
 
 export interface WorldTerrainResidencyView {
@@ -1501,6 +1507,7 @@ export class SceneApp {
     editMode: "sculpt",
     tool: "raise",
     paintTool: "paint",
+    paintPanel: "brush",
     splineTool: "draw",
     activeLayerId: LANDSCAPE_DEFAULT_LAYERS[0]!.id,
     viewMode: "lit",
@@ -2548,6 +2555,7 @@ export class SceneApp {
       paintTool: ["paint", "erase", "smoothWeights"].includes(next.paintTool)
         ? next.paintTool
         : "paint",
+      paintPanel: next.paintPanel === "auto" ? "auto" : "brush",
       splineTool: next.splineTool === "edit" ? "edit" : "draw",
       activeLayerId: layerIds.has(next.activeLayerId)
         ? next.activeLayerId
@@ -10238,7 +10246,8 @@ export class SceneApp {
 
   private updateLandscapeBrushHover(clientX: number, clientY: number): void {
     // Foliage mode owns the brush cursor; never show the landscape sculpt ring too.
-    if (this.foliageModeActive || this.meshPaintModeActive || this.landscapeSculptSettings.editMode === "splines" || this.landscapeSculptSettings.editMode === "water") {
+    if (this.foliageModeActive || this.meshPaintModeActive || this.landscapeSculptSettings.editMode === "splines" || this.landscapeSculptSettings.editMode === "water"
+      || this.landscapeAutoPaintPanelOpen()) {
       this.clearLandscapeBrushHover();
       return;
     }
@@ -10659,8 +10668,13 @@ export class SceneApp {
    * starts, and every dab writes its rectangles back into that grid, which the
    * renderer, splines, foliage and Save still read.
    */
+  /** Paint mode on its Auto Paint tab: the viewport brush is off. */
+  private landscapeAutoPaintPanelOpen(): boolean {
+    return this.landscapeSculptSettings.editMode === "paint" && this.landscapeSculptSettings.paintPanel === "auto";
+  }
+
   private beginTerrainStroke(event: PointerEvent): boolean {
-    if (this.landscapeSculptSettings.editMode === "water") return false;
+    if (this.landscapeSculptSettings.editMode === "water" || this.landscapeAutoPaintPanelOpen()) return false;
     if (this.terrainStrokePending) {
       this.onStatus?.("Loading terrain for the previous sculpt operation…", "info");
       return true;
@@ -12048,6 +12062,38 @@ export class SceneApp {
   }
 
   /**
+   * Undoable Auto Paint: repaints every vertex from height/slope rules
+   * (`engine/terrain/terrainAutoPaint.ts`), overwriting earlier paint. A
+   * multi-tile Landscape loads all its tiles first.
+   */
+  async autoPaintSelectedLandscape(settings: TerrainAutoPaintSettings): Promise<boolean> {
+    if (this.selection?.kind !== "landscape" || this.isSelectionLocked(this.selection)) return false;
+    const actor = this.layout?.landscapes?.[this.selection.index];
+    if (!actor) return false;
+    const document = this.worldTerrains.get(actor.id);
+    const session = document ? this.worldTerrainSessions.get(document) : undefined;
+    if (!document || !session) return false;
+    try {
+      await this.loadWholeWorldTerrain(document, "auto paint it");
+      if (this.selection?.kind !== "landscape" || this.layout?.landscapes?.[this.selection.index]?.id !== actor.id
+        || this.isSelectionLocked(this.selection) || this.worldTerrains.get(actor.id) !== document) return false;
+      const patches = createTerrainAutoPaintPatches(session.world, settings);
+      if (patches.length === 0) {
+        this.onStatus?.("Auto Paint: the terrain already matches the rules.", "info");
+        return true;
+      }
+      this.executeTerrainPatchCommand("Landscape Auto Paint", actor.id, document, patches);
+      this.onStatus?.(`Auto Paint applied to ${patches.length} tile${patches.length === 1 ? "" : "s"}.`, "info");
+      return true;
+    } catch (error) {
+      this.onStatus?.(`Auto Paint failed: ${error instanceof Error ? error.message : String(error)}`, "error");
+      return false;
+    } finally {
+      this.worldTerrainStreams.get(document)?.release();
+    }
+  }
+
+  /**
    * Imports decoded PNG pixels into the selected landscape without changing its
    * grid resolution. The PNG's luminance is scaled by `heightRange` and baked
    * straight into the sidecar heights — the source image is not stored, so the
@@ -12203,6 +12249,7 @@ export class SceneApp {
       tileSize: terrainTileWorldSize(def),
       spacing: def.spacing,
       extent: worldTerrainExtent(def),
+      groundRange: worldTerrainGroundRange(this.worldTerrainSessions.get(world)?.world.def ?? def),
     };
   }
 
@@ -16396,6 +16443,14 @@ function createMeshPaintColorViewMaterial(view: Exclude<MeshPaintColorView, "off
   };
   material.customProgramCacheKey = () => `forge-mesh-paint-color-view:${view}`;
   return material;
+}
+
+/** World Y of a terrain's lowest and highest ground; the datum alone with no tiles. */
+function worldTerrainGroundRange(def: WorldTerrainDef): [number, number] {
+  if (def.tiles.length === 0) return [def.origin[1], def.origin[1]];
+  let min = Infinity, max = -Infinity;
+  for (const tile of def.tiles) { min = Math.min(min, tile.minHeight); max = Math.max(max, tile.maxHeight); }
+  return [def.origin[1] + min, def.origin[1] + max];
 }
 
 function splineGeneratedTriangleCount(group: Group | null | undefined, generatorId?: string): number {

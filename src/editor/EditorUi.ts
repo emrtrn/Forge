@@ -4578,6 +4578,7 @@ export class EditorUi {
       getLandscapeSculptSettings: () => this.app.getLandscapeSculptSettings(),
       setLandscapeSculptSettings: (patch) => this.app.setLandscapeSculptSettings(patch),
       fillSelectedLandscapeLayer: (layerId) => this.app.fillSelectedLandscapeLayer(layerId),
+      autoPaintSelectedLandscape: (settings) => this.app.autoPaintSelectedLandscape(settings),
       getSelectedLandscapeLayers: () => this.app.getSelectedLandscapeLayers(),
       getSelectedLandscapeSplines: () => this.app.getSelectedLandscapeSplines(),
       createSelectedLandscapeSpline: () => this.app.createSelectedLandscapeSpline(),

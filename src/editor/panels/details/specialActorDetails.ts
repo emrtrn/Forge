@@ -30,6 +30,8 @@ import type {
 import { type LandscapeViewMode } from "@engine/render-three/landscape";
 import { axisField, scaleRow, vectorRow } from "./transformRows";
 import { landscapeSplineSelection, syncSplineSelection, clickSplineSelection, showMixedSplineValues } from "./landscapeSplineSelection";
+import { bindLandscapeAutoPaint, landscapeAutoPaintSection, landscapePaintPanelTabs } from "./landscapeAutoPaintDetails";
+import type { TerrainAutoPaintSettings } from "@engine/terrain/terrainAutoPaint";
 
 type CaptureNumericKey = "radius" | "intensity" | "resolution" | "near" | "far" | "priority";
 type SurfaceNumericKey =
@@ -138,6 +140,7 @@ export interface SpecialActorDetailsOptions extends TransformBindOptions {
     patch: Partial<LandscapeSculptSettings>,
   ) => LandscapeSculptSettings;
   fillSelectedLandscapeLayer: (layerId?: string) => Promise<void>;
+  autoPaintSelectedLandscape: (settings: TerrainAutoPaintSettings) => Promise<boolean>;
   getSelectedLandscapeLayers: () => LandscapeLayerView[];
   addSelectedLandscapeLayer: () => Promise<void>;
   removeSelectedLandscapeLayer: (layerId: string) => Promise<void>;
@@ -852,6 +855,11 @@ function bindLandscapeBrushControls(options: SpecialActorDetailsOptions): void {
       if (tool && WORLD_TERRAIN_SCULPT_TOOLS.includes(tool)) update({ tool });
     });
   });
+  body.querySelectorAll<HTMLButtonElement>("[data-landscape-paint-panel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      update({ paintPanel: button.dataset.landscapePaintPanel === "auto" ? "auto" : "brush" });
+    });
+  });
   body.querySelectorAll<HTMLButtonElement>("[data-landscape-paint-tool]").forEach((button) => {
     button.addEventListener("click", () => {
       const paintTool = button.dataset.landscapePaintTool as LandscapePaintTool | undefined;
@@ -983,12 +991,14 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
     .join("");
   const metres = (value: number) => `${Number(value.toFixed(2))} m`;
   const holes = terrain.tilesX * terrain.tilesZ - terrain.tileCount;
+  const autoPaint = settings.editMode === "paint" && settings.paintPanel === "auto";
   const toolsMarkup = settings.editMode === "paint"
-    ? `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
+    ? `${landscapePaintPanelTabs(settings.paintPanel)}
+      ${autoPaint ? "" : `<div class="landscape-tool-segment" role="group" aria-label="Landscape paint tool">
         ${LANDSCAPE_PAINT_TOOLS.map((tool) => `<button type="button" data-landscape-paint-tool="${tool}" class="${
           settings.paintTool === tool ? "active" : ""
         }" ${lockedAttr}>${formatLandscapePaintTool(tool)}</button>`).join("")}
-      </div>
+      </div>`}
       <div class="detail-subsection-title">Layer</div>
       <div class="landscape-layer-list">
         ${layers.map((layer) => `<button type="button" data-landscape-layer="${escapeHtml(layer.id)}" class="${
@@ -1004,7 +1014,8 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <select data-landscape-layer-material ${lockedAttr}>${layerMaterialOptions}</select>
       </label>
       ${layerPhysicalMaterialRow(activeLayer, lockedAttr, body.dataset.landscapePhysicsAdvanced === "true")}
-      <button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`
+      ${autoPaint ? landscapeAutoPaintSection(terrain, layers, layerDisplayName, lockedAttr)
+        : `<button type="button" class="detail-action-button" data-landscape-fill ${lockedAttr}>Fill Layer</button>`}`
     : settings.editMode === "sculpt"
     ? terrainSculptControls(settings, lockedAttr)
     : "";
@@ -1024,12 +1035,12 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
         <div class="detail-section-title">Landscape Mode</div>
         ${landscapeModeSelect(settings, lockedAttr, LANDSCAPE_EDIT_MODES)}
         ${toolsMarkup}
-        ${settings.editMode === "sculpt" || settings.editMode === "paint" ? `${terrainBrushSizeAndStrength(settings, lockedAttr)}
+        ${settings.editMode === "sculpt" || settings.editMode === "paint" ? `${autoPaint ? "" : `${terrainBrushSizeAndStrength(settings, lockedAttr)}
         <label class="detail-row">
           <span>Falloff</span>
           <input data-landscape-number="falloff" type="number" min="0.25" max="8" step="0.25"
             value="${settings.falloff}" ${lockedAttr} />
-        </label>
+        </label>`}
         <label class="detail-row">
           <span>View</span>
           <select data-landscape-view>
@@ -1100,6 +1111,12 @@ function renderWorldTerrainDetails(options: SpecialActorDetailsOptions, terrain:
       options.refreshDetails();
     });
   bindLayerPhysicalMaterial(options);
+  if (autoPaint) {
+    bindLandscapeAutoPaint({
+      body, terrain, layers, activeLayerId: settings.activeLayerId, refresh: options.refreshDetails,
+      apply: (paint) => options.autoPaintSelectedLandscape(paint),
+    });
+  }
   bindSingleTileGridControls(options);
   bindHeightmapFileControls(options);
   body.querySelector<HTMLInputElement>("[data-landscape-collision]")?.addEventListener("change", (event) => {

@@ -1,0 +1,2239 @@
+{
+  "schema": 1,
+  "type": "worldCell",
+  "grid": "main",
+  "key": "-9_1",
+  "instances": [
+    {
+      "assetId": "shape:cube",
+      "placements": [
+        {
+          "id": "wb-building-settlement-7.p10-wall-3",
+          "role": "structure.retainingWall",
+          "position": [
+            -1034.567,
+            -3.5,
+            129.976
+          ],
+          "name": "building.residential.detached settlement-7.p10 wall",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            14.711,
+            3.52,
+            4
+          ],
+          "color": "#9a978e"
+        },
+        {
+          "id": "wb-building-settlement-7.p11",
+          "role": "building.residential.detached",
+          "position": [
+            -1064.66,
+            -1.31,
+            132.932
+          ],
+          "name": "building.residential.detached settlement-7.p11",
+          "rotation": [
+            0,
+            104.2,
+            0
+          ],
+          "scale": [
+            19.56,
+            7,
+            16.86
+          ],
+          "color": "#f2a65a"
+        },
+        {
+          "id": "wb-building-settlement-7.p11-wall-0",
+          "role": "structure.retainingWall",
+          "position": [
+            -1060.303,
+            -3.005,
+            139.45
+          ],
+          "name": "building.residential.detached settlement-7.p11 wall",
+          "rotation": [
+            0,
+            -165.8,
+            0
+          ],
+          "scale": [
+            12.382,
+            3.38,
+            4
+          ],
+          "color": "#9a978e"
+        },
+        {
+          "id": "wb-building-settlement-7.p12",
+          "role": "building.industrial.workshop",
+          "position": [
+            -1067.194,
+            -1.28,
+            154.546
+          ],
+          "name": "building.industrial.workshop settlement-7.p12",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            31.46,
+            11,
+            35.98
+          ],
+          "color": "#8a8f96"
+        },
+        {
+          "id": "wb-building-settlement-7.p12-wall-0",
+          "role": "structure.retainingWall",
+          "position": [
+            -1074.085,
+            -3.26,
+            166.993
+          ],
+          "name": "building.industrial.workshop settlement-7.p12 wall",
+          "rotation": [
+            0,
+            -165.8,
+            0
+          ],
+          "scale": [
+            2.998,
+            2.68,
+            4
+          ],
+          "color": "#9a978e"
+        },
+        {
+          "id": "wb-building-settlement-7.p12-wall-1",
+          "role": "structure.retainingWall",
+          "position": [
+            -1078.335,
+            -3.03,
+            157.378
+          ],
+          "name": "building.industrial.workshop settlement-7.p12 wall",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            37.459,
+            3.6,
+            4
+          ],
+          "color": "#9a978e"
+        },
+        {
+          "id": "wb-building-settlement-7.p12-wall-2",
+          "role": "structure.retainingWall",
+          "position": [
+            -1076.287,
+            -3.065,
+            146.163
+          ],
+          "name": "building.industrial.workshop settlement-7.p12 wall",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            14.993,
+            3.46,
+            4
+          ],
+          "color": "#9a978e"
+        },
+        {
+          "id": "wb-building-settlement-7.p13",
+          "role": "building.residential.detached",
+          "position": [
+            -1054.633,
+            -1.06,
+            171.899
+          ],
+          "name": "building.residential.detached settlement-7.p13",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            19.84,
+            13,
+            16.38
+          ],
+          "color": "#f2a65a"
+        },
+        {
+          "id": "wb-building-settlement-7.p14",
+          "role": "building.residential.detached",
+          "position": [
+            -1039.903,
+            -2.51,
+            146.954
+          ],
+          "name": "building.residential.detached settlement-7.p14",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            23,
+            7,
+            21.3
+          ],
+          "color": "#f2a65a"
+        },
+        {
+          "id": "wb-building-settlement-7.p15",
+          "role": "building.residential.detached",
+          "position": [
+            -1036.68,
+            -0.97,
+            163.925
+          ],
+          "name": "building.residential.detached settlement-7.p15",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            18.4,
+            13,
+            17.08
+          ],
+          "color": "#f2a65a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p4-25",
+          "role": "prop.fence.picket",
+          "position": [
+            -1096.188,
+            -0.688,
+            130.755
+          ],
+          "name": "prop.fence.picket settlement-7.p4",
+          "rotation": [
+            0,
+            -61.9,
+            0
+          ],
+          "scale": [
+            7.706,
+            2.782,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p4-26",
+          "role": "prop.fence.picket",
+          "position": [
+            -1093.544,
+            -0.724,
+            131.526
+          ],
+          "name": "prop.fence.picket settlement-7.p4",
+          "rotation": [
+            0,
+            28.1,
+            0
+          ],
+          "scale": [
+            7.878,
+            2.637,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p4-27",
+          "role": "prop.fence.picket",
+          "position": [
+            -1090.069,
+            -0.715,
+            129.671
+          ],
+          "name": "prop.fence.picket settlement-7.p4",
+          "rotation": [
+            0,
+            28.1,
+            0
+          ],
+          "scale": [
+            7.878,
+            2.624,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-9",
+          "role": "prop.fence.picket",
+          "position": [
+            -1050.355,
+            -2.624,
+            129.581
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            -89.4,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.827,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-10",
+          "role": "prop.fence.picket",
+          "position": [
+            -1050.319,
+            -2.795,
+            133.247
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            -89.4,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.752,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-11",
+          "role": "prop.fence.picket",
+          "position": [
+            -1050.282,
+            -2.941,
+            136.914
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            -89.4,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.744,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-12",
+          "role": "prop.fence.picket",
+          "position": [
+            -1048.794,
+            -3.134,
+            138.663
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            3.3,
+            0
+          ],
+          "scale": [
+            5.889,
+            2.808,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-13",
+          "role": "prop.fence.picket",
+          "position": [
+            -1045.855,
+            -3.248,
+            138.494
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            3.3,
+            0
+          ],
+          "scale": [
+            5.889,
+            2.682,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-14",
+          "role": "prop.fence.picket",
+          "position": [
+            -1043.138,
+            -3.298,
+            138.226
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            8.4,
+            0
+          ],
+          "scale": [
+            5.042,
+            2.64,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-15",
+          "role": "prop.fence.picket",
+          "position": [
+            -1040.644,
+            -3.334,
+            137.859
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            8.4,
+            0
+          ],
+          "scale": [
+            5.042,
+            2.634,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-16",
+          "role": "prop.fence.picket",
+          "position": [
+            -1037.884,
+            -3.374,
+            137.296
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            14.1,
+            0
+          ],
+          "scale": [
+            6.24,
+            2.642,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-17",
+          "role": "prop.fence.picket",
+          "position": [
+            -1034.857,
+            -3.495,
+            136.539
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            14.1,
+            0
+          ],
+          "scale": [
+            6.24,
+            2.746,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-18",
+          "role": "prop.fence.picket",
+          "position": [
+            -1031.658,
+            -3.65,
+            135.483
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            21.9,
+            0
+          ],
+          "scale": [
+            7.269,
+            2.758,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-19",
+          "role": "prop.fence.picket",
+          "position": [
+            -1028.284,
+            -3.714,
+            134.13
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            21.9,
+            0
+          ],
+          "scale": [
+            7.269,
+            2.632,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p10-20",
+          "role": "prop.fence.picket",
+          "position": [
+            -1025.571,
+            -3.714,
+            132.909
+          ],
+          "name": "prop.fence.picket settlement-7.p10",
+          "rotation": [
+            0,
+            27.9,
+            0
+          ],
+          "scale": [
+            4.649,
+            2.633,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-4",
+          "role": "prop.fence.picket",
+          "position": [
+            -1056.772,
+            -2.279,
+            134.679
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            7.268,
+            2.765,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-5",
+          "role": "prop.fence.picket",
+          "position": [
+            -1056.1,
+            -2.383,
+            137.32
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            3.634,
+            2.684,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-6",
+          "role": "prop.fence.picket",
+          "position": [
+            -1055.653,
+            -2.682,
+            139.082
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            3.634,
+            2.972,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-7",
+          "role": "prop.fence.picket",
+          "position": [
+            -1057.149,
+            -2.778,
+            140.399
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.1,
+            2.603,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-8",
+          "role": "prop.fence.picket",
+          "position": [
+            -1060.59,
+            -2.834,
+            141.274
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.1,
+            2.674,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-9",
+          "role": "prop.fence.picket",
+          "position": [
+            -1064.03,
+            -2.825,
+            142.148
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.1,
+            2.709,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-10",
+          "role": "prop.fence.picket",
+          "position": [
+            -1067.471,
+            -2.763,
+            143.023
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.1,
+            2.627,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-11",
+          "role": "prop.fence.picket",
+          "position": [
+            -1070.912,
+            -2.766,
+            143.898
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.1,
+            2.614,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-12",
+          "role": "prop.fence.picket",
+          "position": [
+            -1077.064,
+            -2.326,
+            144.149
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            3.15,
+            3.08,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-13",
+          "role": "prop.fence.picket",
+          "position": [
+            -1077.452,
+            -1.927,
+            142.622
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            3.15,
+            2.755,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-14",
+          "role": "prop.fence.picket",
+          "position": [
+            -1077.87,
+            -1.776,
+            140.978
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            3.635,
+            2.737,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-15",
+          "role": "prop.fence.picket",
+          "position": [
+            -1078.318,
+            -1.64,
+            139.217
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            3.635,
+            2.733,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-16",
+          "role": "prop.fence.picket",
+          "position": [
+            -1078.989,
+            -1.481,
+            136.574
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            7.272,
+            2.838,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-17",
+          "role": "prop.fence.picket",
+          "position": [
+            -1079.885,
+            -1.256,
+            133.051
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            7.268,
+            2.789,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p11-18",
+          "role": "prop.fence.picket",
+          "position": [
+            -1080.779,
+            -1.079,
+            129.531
+          ],
+          "name": "prop.fence.picket settlement-7.p11",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            7.26,
+            2.742,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-1",
+          "role": "prop.fence.picket",
+          "position": [
+            -1049.467,
+            -3.315,
+            163.422
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            6.946,
+            2.626,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-2",
+          "role": "prop.fence.picket",
+          "position": [
+            -1048.612,
+            -3.323,
+            166.787
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            6.944,
+            2.602,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-3",
+          "role": "prop.fence.picket",
+          "position": [
+            -1046.901,
+            -3.333,
+            173.517
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            6.944,
+            2.604,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-4",
+          "role": "prop.fence.picket",
+          "position": [
+            -1046.046,
+            -3.345,
+            176.882
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            6.944,
+            2.614,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-5",
+          "role": "prop.fence.picket",
+          "position": [
+            -1047.552,
+            -3.394,
+            179.057
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.982,
+            2.661,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-6",
+          "role": "prop.fence.picket",
+          "position": [
+            -1051.42,
+            -3.397,
+            180.04
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.982,
+            2.649,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-7",
+          "role": "prop.fence.picket",
+          "position": [
+            -1055.288,
+            -3.324,
+            181.023
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.982,
+            2.743,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-8",
+          "role": "prop.fence.picket",
+          "position": [
+            -1058.189,
+            -3.177,
+            181.76
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.759,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-9",
+          "role": "prop.fence.picket",
+          "position": [
+            -1060.123,
+            -2.998,
+            182.252
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.841,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-10",
+          "role": "prop.fence.picket",
+          "position": [
+            -1062.057,
+            -2.754,
+            182.743
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.852,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-11",
+          "role": "prop.fence.picket",
+          "position": [
+            -1063.992,
+            -2.508,
+            183.235
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.825,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-12",
+          "role": "prop.fence.picket",
+          "position": [
+            -1065.926,
+            -2.281,
+            183.726
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.833,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-13",
+          "role": "prop.fence.picket",
+          "position": [
+            -1067.86,
+            -2.048,
+            184.218
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.834,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-14",
+          "role": "prop.fence.picket",
+          "position": [
+            -1069.794,
+            -1.813,
+            184.709
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.837,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-15",
+          "role": "prop.fence.picket",
+          "position": [
+            -1071.728,
+            -1.574,
+            185.201
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.845,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-16",
+          "role": "prop.fence.picket",
+          "position": [
+            -1073.662,
+            -1.325,
+            185.693
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.859,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-17",
+          "role": "prop.fence.picket",
+          "position": [
+            -1075.596,
+            -1.063,
+            186.184
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.871,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-18",
+          "role": "prop.fence.picket",
+          "position": [
+            -1077.53,
+            -0.79,
+            186.676
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.881,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-19",
+          "role": "prop.fence.picket",
+          "position": [
+            -1079.464,
+            -0.507,
+            187.167
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            3.991,
+            2.887,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-20",
+          "role": "prop.fence.picket",
+          "position": [
+            -1080.859,
+            -0.286,
+            185.731
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            6.942,
+            2.621,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-21",
+          "role": "prop.fence.picket",
+          "position": [
+            -1081.715,
+            -0.296,
+            182.367
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            6.944,
+            2.634,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-22",
+          "role": "prop.fence.picket",
+          "position": [
+            -1082.57,
+            -0.364,
+            179.001
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            6.944,
+            2.679,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-23",
+          "role": "prop.fence.picket",
+          "position": [
+            -1083.425,
+            -0.468,
+            175.636
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            6.946,
+            2.712,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-24",
+          "role": "prop.fence.picket",
+          "position": [
+            -1084.281,
+            -0.597,
+            172.269
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            6.948,
+            2.735,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-25",
+          "role": "prop.fence.picket",
+          "position": [
+            -1083.883,
+            -0.832,
+            170.376
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            3.409,
+            2.868,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-26",
+          "role": "prop.fence.picket",
+          "position": [
+            -1082.231,
+            -1.099,
+            169.956
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            3.409,
+            2.866,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-27",
+          "role": "prop.fence.picket",
+          "position": [
+            -1080.579,
+            -1.368,
+            169.536
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            3.409,
+            2.87,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-28",
+          "role": "prop.fence.picket",
+          "position": [
+            -1078.927,
+            -1.648,
+            169.117
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            3.409,
+            2.883,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-29",
+          "role": "prop.fence.picket",
+          "position": [
+            -1077.275,
+            -2.167,
+            168.697
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            3.409,
+            3.199,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-30",
+          "role": "prop.fence.picket",
+          "position": [
+            -1075.623,
+            -2.522,
+            168.277
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            3.409,
+            2.873,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-31",
+          "role": "prop.fence.picket",
+          "position": [
+            -1070.949,
+            -2.894,
+            167.089
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.899,
+            2.799,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-32",
+          "role": "prop.fence.picket",
+          "position": [
+            -1067.121,
+            -3.079,
+            166.116
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.899,
+            2.781,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-33",
+          "role": "prop.fence.picket",
+          "position": [
+            -1063.293,
+            -3.208,
+            165.144
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.899,
+            2.712,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-34",
+          "role": "prop.fence.picket",
+          "position": [
+            -1059.465,
+            -3.27,
+            164.171
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.899,
+            2.644,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-35",
+          "role": "prop.fence.picket",
+          "position": [
+            -1055.637,
+            -3.276,
+            163.198
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.899,
+            2.62,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p13-36",
+          "role": "prop.fence.picket",
+          "position": [
+            -1051.809,
+            -3.287,
+            162.225
+          ],
+          "name": "prop.fence.picket settlement-7.p13",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.899,
+            2.635,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-1",
+          "role": "prop.fence.picket",
+          "position": [
+            -1049.7,
+            -3.223,
+            142.204
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            7.016,
+            2.716,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-2",
+          "role": "prop.fence.picket",
+          "position": [
+            -1048.836,
+            -3.275,
+            145.604
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            7.016,
+            2.631,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-3",
+          "role": "prop.fence.picket",
+          "position": [
+            -1047.108,
+            -3.298,
+            152.404
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            7.016,
+            2.606,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-4",
+          "role": "prop.fence.picket",
+          "position": [
+            -1046.244,
+            -3.296,
+            155.804
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            7.016,
+            2.617,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-5",
+          "role": "prop.fence.picket",
+          "position": [
+            -1044.035,
+            -3.285,
+            157.053
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.603,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-6",
+          "role": "prop.fence.picket",
+          "position": [
+            -1040.481,
+            -3.291,
+            156.149
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.607,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-7",
+          "role": "prop.fence.picket",
+          "position": [
+            -1036.928,
+            -3.31,
+            155.247
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.623,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-8",
+          "role": "prop.fence.picket",
+          "position": [
+            -1033.374,
+            -3.376,
+            154.344
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.681,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-9",
+          "role": "prop.fence.picket",
+          "position": [
+            -1030.709,
+            -3.479,
+            153.666
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            3.667,
+            2.709,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-10",
+          "role": "prop.fence.picket",
+          "position": [
+            -1028.932,
+            -3.657,
+            153.215
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            3.667,
+            2.801,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-11",
+          "role": "prop.fence.picket",
+          "position": [
+            -1026.267,
+            -3.795,
+            152.538
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.718,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-12",
+          "role": "prop.fence.picket",
+          "position": [
+            -1024.921,
+            -3.82,
+            150.386
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            104.2,
+            0
+          ],
+          "scale": [
+            7.016,
+            2.621,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-13",
+          "role": "prop.fence.picket",
+          "position": [
+            -1025.785,
+            -3.803,
+            146.986
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            7.019,
+            2.605,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-14",
+          "role": "prop.fence.picket",
+          "position": [
+            -1026.65,
+            -3.8,
+            143.584
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            7.018,
+            2.602,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-15",
+          "role": "prop.fence.picket",
+          "position": [
+            -1027.514,
+            -3.798,
+            140.184
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            7.016,
+            2.612,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-16",
+          "role": "prop.fence.picket",
+          "position": [
+            -1028.378,
+            -3.773,
+            136.784
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            104.3,
+            0
+          ],
+          "scale": [
+            7.016,
+            2.664,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-17",
+          "role": "prop.fence.picket",
+          "position": [
+            -1029.9,
+            -3.712,
+            135.361
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            4.5,
+            2.653,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-18",
+          "role": "prop.fence.picket",
+          "position": [
+            -1032.081,
+            -3.639,
+            135.915
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            4.5,
+            2.729,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-19",
+          "role": "prop.fence.picket",
+          "position": [
+            -1041.248,
+            -3.328,
+            138.246
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.638,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-20",
+          "role": "prop.fence.picket",
+          "position": [
+            -1044.802,
+            -3.291,
+            139.149
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.636,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p14-21",
+          "role": "prop.fence.picket",
+          "position": [
+            -1048.355,
+            -3.232,
+            140.052
+          ],
+          "name": "prop.fence.picket settlement-7.p14",
+          "rotation": [
+            0,
+            -165.7,
+            0
+          ],
+          "scale": [
+            7.333,
+            2.728,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-1",
+          "role": "prop.fence.picket",
+          "position": [
+            -1045.395,
+            -3.279,
+            159.147
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            -75.8,
+            0
+          ],
+          "scale": [
+            6.778,
+            2.618,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-2",
+          "role": "prop.fence.picket",
+          "position": [
+            -1044.561,
+            -3.265,
+            162.432
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            6.781,
+            2.601,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-3",
+          "role": "prop.fence.picket",
+          "position": [
+            -1042.889,
+            -3.267,
+            169.003
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            6.781,
+            2.603,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-4",
+          "role": "prop.fence.picket",
+          "position": [
+            -1042.054,
+            -3.278,
+            172.288
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            -75.7,
+            0
+          ],
+          "scale": [
+            6.779,
+            2.614,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-5",
+          "role": "prop.fence.picket",
+          "position": [
+            -1039.707,
+            -3.264,
+            173.44
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.965,
+            2.669,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-6",
+          "role": "prop.fence.picket",
+          "position": [
+            -1035.847,
+            -3.215,
+            172.459
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.965,
+            2.604,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-7",
+          "role": "prop.fence.picket",
+          "position": [
+            -1031.988,
+            -3.242,
+            171.478
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.965,
+            2.635,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-8",
+          "role": "prop.fence.picket",
+          "position": [
+            -1028.128,
+            -3.318,
+            170.497
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.965,
+            2.689,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        },
+        {
+          "id": "wb-fence-settlement-7.p15-9",
+          "role": "prop.fence.picket",
+          "position": [
+            -1024.268,
+            -3.401,
+            169.516
+          ],
+          "name": "prop.fence.picket settlement-7.p15",
+          "rotation": [
+            0,
+            14.3,
+            0
+          ],
+          "scale": [
+            7.965,
+            2.681,
+            0.2
+          ],
+          "color": "#f5cf3a"
+        }
+      ]
+    }
+  ]
+}

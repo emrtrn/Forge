@@ -24465,29 +24465,6 @@
         "bytes": 5324
       },
       "license": "Unknown"
-    },
-    {
-      "id": "worldbuilder-level",
-      "name": "World Builder.Level",
-      "assetType": "level",
-      "category": "Levels",
-      "path": "assets/starter-content/Levels/WorldBuilder.level.json",
-      "tags": [],
-      "placeable": false,
-      "placement": {
-        "surface": "floor",
-        "snapToWall": false,
-        "allowRotation": false,
-        "allowScale": false
-      },
-      "runtime": {
-        "loadGroup": "Levels",
-        "castShadow": false,
-        "receiveShadow": false,
-        "collision": false,
-        "bytes": 489568
-      },
-      "license": "Unknown"
     }
   ]
 }

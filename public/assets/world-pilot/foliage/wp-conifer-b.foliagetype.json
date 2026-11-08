@@ -27,8 +27,8 @@
   "cullStart": 0,
   "cullEnd": 900,
   "sway": {
-    "amplitude": 0.04,
-    "height": 1,
+    "amplitude": 0.5,
+    "height": 8,
     "frequency": 0.45
   },
   "farDistance": 2050,

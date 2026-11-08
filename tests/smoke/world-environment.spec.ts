@@ -18,7 +18,7 @@ const LEVEL = "layouts/__playwright-wes.level.json";
 test.setTimeout(180_000);
 
 interface SavedLayout {
-  worldEnvironment?: { time?: { hour?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number; moonBrightness?: number; moonAngularDiameterDeg?: number; moonShadowStrength?: number } };
+  worldEnvironment?: { time?: { hour?: number; dayLengthMinutes?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number; moonBrightness?: number; moonAngularDiameterDeg?: number; moonShadowStrength?: number; starBrightness?: number; starDensity?: number; starSize?: number } };
 }
 
 test("World Environment: preview stays out of the level, Make Default is one undo step, Play starts from it", async ({ page, context }) => {
@@ -60,26 +60,40 @@ test("World Environment: preview stays out of the level, Make Default is one und
   const derivedHour = saves.at(-1)!.worldEnvironment!.time!.hour!;
   const details = page.locator('[data-inspector-pane="details"]');
   await expect(details.locator("[data-wes-preview]")).toBeVisible();
+  // The creation preset now runs a one-minute day. Freeze it so this test
+  // checks the initial Play hour independently of loading/warmup duration.
+  const dayLength = details.locator('[data-wes-number="time.dayLengthMinutes"]');
+  await dayLength.fill("0");
+  await dayLength.press("Tab");
+  await expect.poll(() => saves.at(-1)?.worldEnvironment?.time?.dayLengthMinutes, { timeout: 15_000 }).toBe(0);
   const nightFill = details.locator('[data-wes-number="night.ambientIntensity"]');
   const moonShadow = details.locator('[data-wes-number="night.moonShadowStrength"]');
-  await expect(moonShadow).toHaveValue("0.45");
+  await expect(moonShadow).toHaveValue("0.5");
   await moonShadow.fill("0.65");
   await moonShadow.press("Tab");
   await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.moonShadowStrength, { timeout: 15_000 }).toBe(0.65);
-  await expect(nightFill).toHaveValue("1.5");
+  await expect(nightFill).toHaveValue("0.3");
   await nightFill.fill("1.2");
   await nightFill.press("Tab");
   await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.ambientIntensity, { timeout: 15_000 }).toBe(1.2);
   const moonSize = details.locator('[data-wes-number="night.moonAngularDiameterDeg"]');
   const moonBrightness = details.locator('[data-wes-number="night.moonBrightness"]');
-  await expect(moonSize).toHaveValue("1.2");
-  await expect(moonBrightness).toHaveValue("1");
-  await moonSize.fill("2");
+  await expect(moonSize).toHaveValue("2");
+  await expect(moonBrightness).toHaveValue("2");
+  await moonSize.fill("2.5");
   await moonSize.press("Tab");
-  await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.moonAngularDiameterDeg, { timeout: 15_000 }).toBe(2);
+  await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.moonAngularDiameterDeg, { timeout: 15_000 }).toBe(2.5);
   await moonBrightness.fill("0.7");
   await moonBrightness.press("Tab");
   await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.moonBrightness, { timeout: 15_000 }).toBe(0.7);
+
+  for (const [key, initial, value] of [["starBrightness", "1", "1.4"], ["starDensity", "0.5", "0.7"], ["starSize", "1", "1.3"]] as const) {
+    const input = details.locator(`[data-wes-number="night.${key}"]`);
+    await expect(input).toHaveValue(initial);
+    await input.fill(value);
+    await input.press("Tab");
+    await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.[key], { timeout: 15_000 }).toBe(Number(value));
+  }
 
   // 2. Scrub + weather + season preview: nothing is saved, the level is not dirty.
   const saveCount = saves.length;
@@ -98,7 +112,7 @@ test("World Environment: preview stays out of the level, Make Default is one und
   expect(saves.at(-1)?.worldEnvironment?.season).toBe("winter");
   await page.getByTestId("editor-undo").click();
   await expect.poll(() => saves.at(-1)?.worldEnvironment?.time?.hour, { timeout: 15_000 }).toBe(derivedHour);
-  expect(saves.at(-1)?.worldEnvironment?.season).toBeUndefined();
+  expect(saves.at(-1)?.worldEnvironment?.season).toBe("summer");
   await page.getByTestId("editor-redo").click();
   await expect.poll(() => saves.at(-1)?.worldEnvironment?.time?.hour, { timeout: 15_000 }).toBe(18);
 
@@ -112,8 +126,14 @@ test("World Environment: preview stays out of the level, Make Default is one und
   await expect(details.locator("[data-wes-preview-default]")).toBeDisabled();
   await expect(nightFill).toHaveValue("1.2");
   await expect(moonShadow).toHaveValue("0.65");
-  await expect(moonSize).toHaveValue("2");
+  await expect(moonSize).toHaveValue("2.5");
   await expect(moonBrightness).toHaveValue("0.7");
+
+  for (const [key, value] of [["starBrightness", "1.4"], ["starDensity", "0.7"], ["starSize", "1.3"]] as const) {
+    await expect(details.locator(`[data-wes-number="night.${key}"]`)).toHaveValue(value);
+  }
+  await details.locator('[data-wes-number="night.starBrightness"]').scrollIntoViewIfNeeded();
+  await test.info().attach("wes-star-controls", { body: await details.screenshot(), contentType: "image/png" });
 
   // The Sun's rotation is read-only while the World Environment drives it.
   await page.getByTestId("outliner-row").getByText("sun", { exact: true }).click();

@@ -21040,7 +21040,7 @@ check("default level preserves the starter scene and independent environment cre
   assert.deepEqual(level.worldEnvironment?.sunPath, { azimuthDeg: 96.056, noonElevationDeg: 60, sunriseHour: 6, sunsetHour: 18 });
   assert.deepEqual(level.worldEnvironment?.night, {
     moonIntensity: 0.1, moonShadowStrength: 0.5, moonColor: "#9fb4ff",
-    moonAngularDiameterDeg: 2, moonBrightness: 2, ambientFloor: 0.2, ambientIntensity: 0.3,
+    moonAngularDiameterDeg: 2, moonBrightness: 2, starBrightness: 1, starDensity: 0.5, starSize: 1, ambientFloor: 0.2, ambientIntensity: 0.3,
   });
   assert.equal(level.skyAtmosphere?.rayleigh, 1);
   assert.equal(level.skyAtmosphere?.turbidity, 2);

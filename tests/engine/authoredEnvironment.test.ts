@@ -59,6 +59,36 @@ function at(hour: number, layout: RoomLayout): WorldEnvironmentState {
 }
 
 export function registerAuthoredEnvironmentTests(check: Check): void {
+  check("world environment binding: stars update on edit and clear on disable, removal and sky rebuild", () => {
+    const { env, sun, ambient } = rig();
+    const layout = layoutWith({ night: { starBrightness: 1.4, starDensity: 0.6, starSize: 1.2 } });
+    layout.skyAtmosphere = { hidden: true };
+    env.applySky(layout);
+    const snapshot = structuredClone(layout);
+    const u = env.sky!.material.uniforms;
+    const apply = (hour: number) => env.applyWorldEnvironment(layout, { state: at(hour, layout), sun, ambient });
+    apply(0);
+    assert.equal(u.forgeStarBrightness!.value, 1.4);
+    assert.equal(u.forgeStarDensity!.value, 0.6);
+    assert.equal(u.forgeStarSize!.value, 1.2);
+    assert.equal(env.sky!.visible, false);
+    apply(12);
+    assert.equal(u.forgeStarBrightness!.value, 0);
+    apply(0);
+    env.applySky(null);
+    env.applySky(layout);
+    assert.equal(env.sky!.material.uniforms.forgeStarBrightness!.value, 1.4);
+    layout.worldEnvironment!.hidden = true;
+    apply(0);
+    assert.equal(env.sky!.material.uniforms.forgeStarBrightness!.value, 0);
+    delete layout.worldEnvironment!.hidden;
+    apply(0);
+    env.applyWorldEnvironment(layout, { state: null, sun, ambient });
+    assert.equal(env.sky!.material.uniforms.forgeStarBrightness!.value, 0);
+    assert.deepEqual(layout, snapshot);
+    env.teardown();
+  });
+
   check("world environment binding: moon shadow strength preserves daylight, cascades and owner edits", () => {
     const { env, sun, ambient, scene } = rig();
     const layout = layoutWith({ night: { moonShadowStrength: 0.45 } });

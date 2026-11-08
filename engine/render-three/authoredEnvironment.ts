@@ -73,6 +73,7 @@ import {
 } from "../environment/environmentResolve";
 import { shouldRecapture, skyLightCompensation, type CaptureRecord } from "../environment/recapturePolicy";
 import { applyMoonDisc } from "./moonDisc";
+import { applyStarField } from "./starField";
 
 /**
  * Requested Sky Light capture size while the clock runs. Since r187 three floors a
@@ -196,6 +197,7 @@ export class AuthoredEnvironment {
     }
     applySkyUniforms(this.skyObject, this.withSkyOverride(resolved));
     applyMoonDisc(this.skyObject, this.override?.moon ?? null);
+    applyStarField(this.skyObject, this.override);
     this.applySunDirection();
     followCameraWithSky(this.skyObject, this.camera());
     applySkyToneMapping(this.renderer, resolved);
@@ -334,7 +336,10 @@ export class AuthoredEnvironment {
     if (!env || env.hidden || !frame.state) {
       if (!wasActive) return { active: false, sunMoved: false };
       this.override = null;
-      if (this.skyObject) applyMoonDisc(this.skyObject, null);
+      if (this.skyObject) {
+        applyMoonDisc(this.skyObject, null);
+        applyStarField(this.skyObject, null);
+      }
       this.lastCapture = null;
       const sunMoved = frame.sun ? this.sunSlot.restore(frame.sun) : false;
       this.restoreAmbient();
@@ -363,7 +368,10 @@ export class AuthoredEnvironment {
     }, env, frame.state);
 
     if (this.skyObject && sky) applySkyUniforms(this.skyObject, this.withSkyOverride(sky));
-    if (this.skyObject) applyMoonDisc(this.skyObject, this.override.moon);
+    if (this.skyObject) {
+      applyMoonDisc(this.skyObject, this.override.moon);
+      applyStarField(this.skyObject, this.override);
+    }
     this.applySunDirection();
     this.applyFog(layout);
     if (this.cloudObject && this.override.cloud) applyCloudUniforms(this.cloudObject, this.override.cloud);

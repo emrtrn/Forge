@@ -49,7 +49,7 @@ export function maximalWorldEnvironment(): LayoutWorldEnvironment {
     hidden: true,
     time: { hour: 7.5, dayLengthMinutes: 24 },
     sunPath: { azimuthDeg: 135, noonElevationDeg: 48, sunriseHour: 5.5, sunsetHour: 19.25 },
-    night: { moonIntensity: 0.12, moonShadowStrength: 0.4, moonColor: "#8899ff", moonAngularDiameterDeg: 2, moonBrightness: 0.7, ambientFloor: 0.2, ambientIntensity: 1.2 },
+    night: { moonIntensity: 0.12, moonShadowStrength: 0.4, moonColor: "#8899ff", moonAngularDiameterDeg: 2, moonBrightness: 0.7, starBrightness: 1.4, starDensity: 0.6, starSize: 1.2, ambientFloor: 0.2, ambientIntensity: 1.2 },
     season: "winter",
     weather: { preset: "snow", intensity: 0.75 },
     surface: {
@@ -80,6 +80,40 @@ function levelWith(worldEnvironment?: unknown): Record<string, unknown> {
 }
 
 export function registerWorldEnvironmentTests(check: Check): void {
+  check("world environment: star controls clamp, reject invalid data and survive save", () => {
+    assert.equal(resolveWorldEnvironment({}).night.starBrightness, 1);
+    assert.equal(resolveWorldEnvironment({}).night.starDensity, 0.5);
+    assert.equal(resolveWorldEnvironment({}).night.starSize, 1);
+    assert.deepEqual(normalizeWorldEnvironment({ night: { starBrightness: -1, starDensity: 2, starSize: 10 } }).environment,
+      { night: { starBrightness: 0, starDensity: 1, starSize: 3 } });
+    for (const input of [null, true, "bad", Infinity]) {
+      const repaired = normalizeWorldEnvironment({ night: { starBrightness: input, starDensity: input, starSize: input } });
+      assert.equal(repaired.environment?.night, undefined);
+      assert.equal(repaired.warnings.length, 3);
+    }
+    assert.deepEqual(validateLayout(levelWith({ night: { starBrightness: 0, starDensity: 0, starSize: 0.5 } })).worldEnvironment?.night,
+      { starBrightness: 0, starDensity: 0, starSize: 0.5 });
+  });
+
+  check("world environment resolve: stars fade continuously at twilight and in fog independently of moonlight", () => {
+    const authored = { sun: null, sky: null, fog: null, cloud: null };
+    const env = resolveWorldEnvironment({ night: { moonBrightness: 0, moonIntensity: 0 } });
+    const at = (hour: number) => resolveEnvironment(authored, env, { ...stateFromDefaults(env), hour }).stars;
+    assert.deepEqual(at(0), { brightness: 1, density: 0.5, size: 1 });
+    assert.equal(at(12).brightness, 0);
+    for (const hour of [6, 18]) {
+      assert.ok(Math.abs(at(hour - 1e-6).brightness - at(hour + 1e-6).brightness) < 1e-8);
+    }
+    assert.ok(at(18.1).brightness > 0 && at(18.1).brightness < at(18.5).brightness);
+    assert.ok(at(5.9).brightness > 0 && at(5.9).brightness < at(5.5).brightness);
+    const fog = (intensity: number) => resolveEnvironment(authored, env,
+      { ...stateFromDefaults(env), hour: 0, weather: { preset: "fog", intensity } }).stars.brightness;
+    assert.equal(fog(0), 1);
+    assert.ok(fog(1) < fog(0.5) && fog(0.5) < 1);
+    const disabled = resolveWorldEnvironment({ night: { starBrightness: 0 } });
+    assert.equal(resolveEnvironment(authored, disabled, { ...stateFromDefaults(disabled), hour: 0 }).stars.brightness, 0);
+  });
+
   check("world environment: moon shadow strength clamps, rejects invalid values and survives save", () => {
     assert.equal(resolveWorldEnvironment({}).night.moonShadowStrength, 0.45);
     for (const [input, expected] of [[-1, 0], [2, 1], [0, 0], [0.65, 0.65]] as const) {

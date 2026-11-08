@@ -44,6 +44,8 @@ export interface ResolvedEnvironment {
   nightAmbient: { color: Vec3; intensity: number };
   /** Visual full moon, following the very same direction as the night directional light. */
   moon: { direction: Vec3; color: Vec3; angularDiameterDeg: number; brightness: number };
+  /** Procedural live-sky stars, independent of night lighting and IBL. */
+  stars: { brightness: number; density: number; size: number };
   /** Sky turbidity to render; null when there is no (visible) sky. */
   skyTurbidity: number | null;
   /** The fog to render in place of the authored one; null when there is none. */
@@ -134,6 +136,12 @@ export function resolveEnvironment(
       color: hexToLinear(env.night.moonColor),
       angularDiameterDeg: env.night.moonAngularDiameterDeg,
       brightness: sun.isMoon ? env.night.moonBrightness * smoothstep(0, TWILIGHT_DEG, -sun.sunElevationDeg) : 0,
+    },
+    stars: {
+      brightness: env.night.starBrightness * smoothstep(0, 12, -sun.sunElevationDeg)
+        * (state.weather.preset === "fog" ? lerp(1, 0.05, weather.weight) : 1),
+      density: env.night.starDensity,
+      size: env.night.starSize,
     },
     skyTurbidity: authored.sky && !authored.sky.hidden ? authored.sky.turbidity + weather.skyTurbidityAdd : null,
     fog,

@@ -650,6 +650,12 @@ export interface LayoutWorldEnvironment {
     moonAngularDiameterDeg?: number;
     /** Visible disc brightness, independent of direct light intensity; 0 hides it. */
     moonBrightness?: number;
+    /** Live sky star radiance, 0 disables stars (0..5). */
+    starBrightness?: number;
+    /** Fraction of the deterministic star population (0..1). */
+    starDensity?: number;
+    /** Angular size multiplier (0.5..3). */
+    starSize?: number;
     /** Lower bound of the night ambient as a fraction of the authored ambient. */
     ambientFloor?: number;
     /** Independent night fill in moonColor (absolute AmbientLight intensity); 0 disables it. Fades out by day. */

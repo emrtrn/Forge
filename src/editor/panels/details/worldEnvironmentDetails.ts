@@ -76,12 +76,15 @@ const SECTIONS: Array<{ title: string; hint?: string; fields: NumberField[] }> =
   },
   {
     title: "Night",
-    hint: "Moon Intensity ay ışığını, Moon Shadow Strength gece gölgelerinin koyuluğunu ayarlar (0: kapalı, 1: tam kuvvet). Moon Disc Brightness görünür diski ayarlar; 0 ise ay gizlenir. Night Fill bağımsız ortam ışığıdır; gündüz söner. Ambient Floor mevcut ortam ışığının oranıdır.",
+    hint: "Moon Intensity ay ışığını, Moon Shadow Strength gece gölgelerinin koyuluğunu ayarlar (0: kapalı, 1: tam kuvvet). Moon Disc Brightness görünür diski ayarlar; 0 ise ay gizlenir. Star Brightness yıldız parlaklığını (0: kapalı), Star Density yoğunluğunu, Star Size boyutunu ayarlar. Yıldızlar gündüz söner. Night Fill bağımsız ortam ışığıdır; gündüz söner. Ambient Floor mevcut ortam ışığının oranıdır.",
     fields: [
       { group: "night", key: "moonIntensity", label: "Moon Intensity", min: 0, max: 2, step: 0.01 },
       { group: "night", key: "moonShadowStrength", label: "Moon Shadow Strength", min: 0, max: 1, step: 0.05 },
       { group: "night", key: "moonAngularDiameterDeg", label: "Moon Diameter (deg)", min: 0.1, max: 10, step: 0.1 },
       { group: "night", key: "moonBrightness", label: "Moon Disc Brightness", min: 0, max: 10, step: 0.1 },
+      { group: "night", key: "starBrightness", label: "Star Brightness", min: 0, max: 5, step: 0.1 },
+      { group: "night", key: "starDensity", label: "Star Density", min: 0, max: 1, step: 0.05 },
+      { group: "night", key: "starSize", label: "Star Size", min: 0.5, max: 3, step: 0.1 },
       { group: "night", key: "ambientFloor", label: "Ambient Floor", min: 0, max: 1, step: 0.05 },
       { group: "night", key: "ambientIntensity", label: "Night Fill", min: 0, max: 10, step: 0.05 },
     ],

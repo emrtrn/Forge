@@ -10,6 +10,7 @@ import {
 import type { Object3D } from "three";
 import { Sky } from "three/examples/jsm/objects/Sky.js";
 import { installMoonDisc } from "./moonDisc";
+import { installStarField } from "./starField";
 
 import type { Vec3 } from "@engine/scene/layout";
 import type { ResolvedSkyAtmosphere } from "@engine/scene/skyAtmosphere";
@@ -88,6 +89,7 @@ export function createSkyObject(): Sky {
   sky.raycast = () => {};
   installSkyLocalToneMappingExposure(sky);
   installMoonDisc(sky);
+  installStarField(sky);
   return sky;
 }
 

@@ -1059,6 +1059,7 @@ import { registerWorldBriefSettlementTests } from "../tests/engine/worldBriefSet
 import { registerRandomWorldTests } from "../tests/engine/randomWorld.test";
 import { registerWorldBriefWaterTests } from "../tests/engine/worldBriefWater.test";
 import { registerGroundCoverTests } from "../tests/engine/groundCover.test";
+import { registerRandomWorldPreviewTests } from "../tests/engine/randomWorldPreview.test";
 import { registerWorldBriefTests } from "../tests/engine/worldBrief.test";
 import { registerBriefTerrainTests } from "../tests/engine/briefTerrain.test";
 import { registerWorldJunctionTests } from "../tests/engine/worldJunctions.test";
@@ -1281,6 +1282,7 @@ registerWorldBriefSettlementTests(check);
 await registerRandomWorldTests(check, checkSlowAsync);
 await registerWorldBriefWaterTests(checkAsync);
 registerGroundCoverTests(check, checkSlow);
+registerRandomWorldPreviewTests(check);
 registerWorldJunctionTests(check);
 registerWorldSettlementTests(check);
 registerWorldParcelTests(check);

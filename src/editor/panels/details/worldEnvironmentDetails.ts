@@ -82,6 +82,8 @@ const SECTIONS: Array<{ title: string; hint?: string; fields: NumberField[] }> =
       { group: "night", key: "moonShadowStrength", label: "Moon Shadow Strength", min: 0, max: 1, step: 0.05 },
       { group: "night", key: "moonAngularDiameterDeg", label: "Moon Diameter (deg)", min: 0.1, max: 10, step: 0.1 },
       { group: "night", key: "moonBrightness", label: "Moon Disc Brightness", min: 0, max: 10, step: 0.1 },
+      { group: "night", key: "moonHaloIntensity", label: "Moon Halo Intensity", min: 0, max: 5, step: 0.1 },
+      { group: "night", key: "moonHaloSize", label: "Moon Halo Size", min: 0.5, max: 12, step: 0.5 },
       { group: "night", key: "starBrightness", label: "Star Brightness", min: 0, max: 5, step: 0.1 },
       { group: "night", key: "starDensity", label: "Star Density", min: 0, max: 1, step: 0.05 },
       { group: "night", key: "starSize", label: "Star Size", min: 0.5, max: 3, step: 0.1 },
@@ -124,6 +126,7 @@ export function renderWorldEnvironmentDetails(options: WorldEnvironmentDetailsOp
     let rows = entry.fields.map(numberRow).join("");
     if (entry.title === "Night") {
       rows += colorRow("night.moonColor", "Moon Color", env.night.moonColor);
+      rows += `<div class="detail-hint">Moon Halo Intensity ayın çevresindeki parıltıdır (0: kapalı). Moon Halo Size, halenin disk kenarından kaç ay yarıçapı kadar yayılacağını ayarlar. Moon Disc Brightness 0 ise hale de gizlenir.</div>`;
     }
     if (entry.title.startsWith("Surface")) {
       rows += colorRow("surface.snowColor", "Snow Color", env.surface.snowColor);

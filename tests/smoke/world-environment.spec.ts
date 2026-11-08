@@ -18,7 +18,7 @@ const LEVEL = "layouts/__playwright-wes.level.json";
 test.setTimeout(180_000);
 
 interface SavedLayout {
-  worldEnvironment?: { time?: { hour?: number; dayLengthMinutes?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number; moonBrightness?: number; moonAngularDiameterDeg?: number; moonShadowStrength?: number; starBrightness?: number; starDensity?: number; starSize?: number } };
+  worldEnvironment?: { time?: { hour?: number; dayLengthMinutes?: number }; season?: string; weather?: { preset?: string }; night?: { ambientIntensity?: number; moonBrightness?: number; moonHaloIntensity?: number; moonHaloSize?: number; moonAngularDiameterDeg?: number; moonShadowStrength?: number; starBrightness?: number; starDensity?: number; starSize?: number } };
 }
 
 test("World Environment: preview stays out of the level, Make Default is one undo step, Play starts from it", async ({ page, context }) => {
@@ -87,7 +87,7 @@ test("World Environment: preview stays out of the level, Make Default is one und
   await moonBrightness.press("Tab");
   await expect.poll(() => saves.at(-1)?.worldEnvironment?.night?.moonBrightness, { timeout: 15_000 }).toBe(0.7);
 
-  for (const [key, initial, value] of [["starBrightness", "1", "1.4"], ["starDensity", "0.5", "0.7"], ["starSize", "1", "1.3"]] as const) {
+  for (const [key, initial, value] of [["moonHaloIntensity", "0.5", "0.8"], ["moonHaloSize", "4", "6"], ["starBrightness", "1", "1.4"], ["starDensity", "0.5", "0.7"], ["starSize", "1", "1.3"]] as const) {
     const input = details.locator(`[data-wes-number="night.${key}"]`);
     await expect(input).toHaveValue(initial);
     await input.fill(value);
@@ -129,7 +129,7 @@ test("World Environment: preview stays out of the level, Make Default is one und
   await expect(moonSize).toHaveValue("2.5");
   await expect(moonBrightness).toHaveValue("0.7");
 
-  for (const [key, value] of [["starBrightness", "1.4"], ["starDensity", "0.7"], ["starSize", "1.3"]] as const) {
+  for (const [key, value] of [["moonHaloIntensity", "0.8"], ["moonHaloSize", "6"], ["starBrightness", "1.4"], ["starDensity", "0.7"], ["starSize", "1.3"]] as const) {
     await expect(details.locator(`[data-wes-number="night.${key}"]`)).toHaveValue(value);
   }
   await details.locator('[data-wes-number="night.starBrightness"]').scrollIntoViewIfNeeded();

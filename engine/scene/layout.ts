@@ -650,6 +650,10 @@ export interface LayoutWorldEnvironment {
     moonAngularDiameterDeg?: number;
     /** Visible disc brightness, independent of direct light intensity; 0 hides it. */
     moonBrightness?: number;
+    /** Independent soft glow outside the lunar disc (0..5; 0 disables). */
+    moonHaloIntensity?: number;
+    /** Halo extent beyond the limb, in moon radii (0.5..12). */
+    moonHaloSize?: number;
     /** Live sky star radiance, 0 disables stars (0..5). */
     starBrightness?: number;
     /** Fraction of the deterministic star population (0..1). */

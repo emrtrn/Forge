@@ -165,7 +165,7 @@
   "worldEnvironment": {
     "name": "World Environment",
     "time": {
-      "hour": 10,
+      "hour": 11,
       "dayLengthMinutes": 0
     },
     "sunPath": {
@@ -180,6 +180,9 @@
       "moonColor": "#9fb4ff",
       "moonAngularDiameterDeg": 2,
       "moonBrightness": 2,
+      "moonHaloIntensity": 0.1,
+      "moonHaloSize": 3,
+      "starSize": 1,
       "ambientFloor": 0.2,
       "ambientIntensity": 0.3
     },

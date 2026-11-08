@@ -145,8 +145,11 @@ export function registerAuthoredEnvironmentTests(check: Check): void {
     const snapshot = structuredClone(layout);
     const u = sky.material.uniforms;
     assert.equal(u.forgeMoonBrightness!.value, 0);
+    assert.equal(u.forgeMoonHaloIntensity!.value, 0);
     env.applyWorldEnvironment(layout, { state: at(0, layout), sun, ambient });
     assert.equal(u.forgeMoonBrightness!.value, 0.8);
+    assert.equal(u.forgeMoonHaloIntensity!.value, 0.5);
+    assert.equal(u.forgeMoonHaloSize!.value, 4);
     assert.deepEqual((u.forgeMoonDirection!.value as Vector3).toArray(), env.worldEnvironmentOverride!.light!.direction);
     assert.ok(Math.abs(u.forgeMoonRadiusSin!.value - Math.sin(Math.PI / 180)) < 1e-12);
     assert.equal(sky.visible, false, "a hidden sky never reveals the moon");
@@ -155,6 +158,7 @@ export function registerAuthoredEnvironmentTests(check: Check): void {
     env.applyWorldEnvironment(layout, { state: at(0, layout), sun, ambient });
     env.applyWorldEnvironment(layout, { state: null, sun, ambient });
     assert.equal(u.forgeMoonBrightness!.value, 0, "ending WES restores the original sky");
+    assert.equal(u.forgeMoonHaloIntensity!.value, 0);
     assert.deepEqual(layout, snapshot);
     env.teardown();
     assert.equal(env.sky, null);

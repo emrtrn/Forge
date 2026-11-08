@@ -49,7 +49,7 @@ export function maximalWorldEnvironment(): LayoutWorldEnvironment {
     hidden: true,
     time: { hour: 7.5, dayLengthMinutes: 24 },
     sunPath: { azimuthDeg: 135, noonElevationDeg: 48, sunriseHour: 5.5, sunsetHour: 19.25 },
-    night: { moonIntensity: 0.12, moonShadowStrength: 0.4, moonColor: "#8899ff", moonAngularDiameterDeg: 2, moonBrightness: 0.7, starBrightness: 1.4, starDensity: 0.6, starSize: 1.2, ambientFloor: 0.2, ambientIntensity: 1.2 },
+    night: { moonIntensity: 0.12, moonShadowStrength: 0.4, moonColor: "#8899ff", moonAngularDiameterDeg: 2, moonBrightness: 0.7, moonHaloIntensity: 0.8, moonHaloSize: 6, starBrightness: 1.4, starDensity: 0.6, starSize: 1.2, ambientFloor: 0.2, ambientIntensity: 1.2 },
     season: "winter",
     weather: { preset: "snow", intensity: 0.75 },
     surface: {
@@ -80,6 +80,30 @@ function levelWith(worldEnvironment?: unknown): Record<string, unknown> {
 }
 
 export function registerWorldEnvironmentTests(check: Check): void {
+  check("world environment: moon halo clamps and saves independently of solar bloom", () => {
+    assert.equal(resolveWorldEnvironment({}).night.moonHaloIntensity, 0.5);
+    assert.equal(resolveWorldEnvironment({}).night.moonHaloSize, 4);
+    assert.deepEqual(normalizeWorldEnvironment({ night: { moonHaloIntensity: -2, moonHaloSize: 50 } }).environment,
+      { night: { moonHaloIntensity: 0, moonHaloSize: 12 } });
+    for (const input of [null, true, "bad", Infinity]) {
+      const result = normalizeWorldEnvironment({ night: { moonHaloIntensity: input, moonHaloSize: input } });
+      assert.equal(result.environment?.night, undefined);
+      assert.equal(result.warnings.length, 2);
+    }
+    assert.deepEqual(validateLayout(levelWith({ night: { moonHaloIntensity: 0, moonHaloSize: 0.5 } })).worldEnvironment?.night,
+      { moonHaloIntensity: 0, moonHaloSize: 0.5 });
+    const env = resolveWorldEnvironment({ night: { moonHaloIntensity: 0.8, moonHaloSize: 6 } });
+    const moonAt = (hour: number) => resolveEnvironment({ sun: null, sky: null, fog: null, cloud: null }, env,
+      { ...stateFromDefaults(env), hour }).moon;
+    assert.equal(moonAt(0).haloIntensity, 0.8);
+    assert.equal(moonAt(0).haloSize, 6);
+    assert.equal(moonAt(12).haloIntensity, 0);
+    assert.ok(moonAt(18.1).haloIntensity > 0 && moonAt(18.1).haloIntensity < moonAt(19).haloIntensity);
+    for (const hour of [6, 18]) assert.ok(Math.abs(moonAt(hour - 1e-6).haloIntensity - moonAt(hour + 1e-6).haloIntensity) < 1e-8);
+    env.night.moonBrightness = 0;
+    assert.equal(moonAt(0).haloIntensity, 0);
+  });
+
   check("world environment: star controls clamp, reject invalid data and survive save", () => {
     assert.equal(resolveWorldEnvironment({}).night.starBrightness, 1);
     assert.equal(resolveWorldEnvironment({}).night.starDensity, 0.5);

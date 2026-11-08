@@ -27,7 +27,7 @@ export interface ResolvedWorldEnvironment {
   hidden: boolean;
   time: { hour: number; dayLengthMinutes: number };
   sunPath: { azimuthDeg: number; noonElevationDeg: number; sunriseHour: number; sunsetHour: number };
-  night: { moonIntensity: number; moonShadowStrength: number; moonColor: string; moonAngularDiameterDeg: number; moonBrightness: number; starBrightness: number; starDensity: number; starSize: number; ambientFloor: number; ambientIntensity: number };
+  night: { moonIntensity: number; moonShadowStrength: number; moonColor: string; moonAngularDiameterDeg: number; moonBrightness: number; moonHaloIntensity: number; moonHaloSize: number; starBrightness: number; starDensity: number; starSize: number; ambientFloor: number; ambientIntensity: number };
   season: Season;
   weather: { preset: WeatherPreset; intensity: number };
   surface: {
@@ -47,7 +47,7 @@ export const WORLD_ENVIRONMENT_DEFAULTS: ResolvedWorldEnvironment = {
   hidden: false,
   time: { hour: 12, dayLengthMinutes: 0 },
   sunPath: { azimuthDeg: 180, noonElevationDeg: 60, sunriseHour: 6, sunsetHour: 18 },
-  night: { moonIntensity: 0.08, moonShadowStrength: 0.45, moonColor: "#9fb4ff", moonAngularDiameterDeg: 1.2, moonBrightness: 1, starBrightness: 1, starDensity: 0.5, starSize: 1, ambientFloor: 0.15, ambientIntensity: 1.5 },
+  night: { moonIntensity: 0.08, moonShadowStrength: 0.45, moonColor: "#9fb4ff", moonAngularDiameterDeg: 1.2, moonBrightness: 1, moonHaloIntensity: 0.5, moonHaloSize: 4, starBrightness: 1, starDensity: 0.5, starSize: 1, ambientFloor: 0.15, ambientIntensity: 1.5 },
   season: "summer",
   weather: { preset: "clear", intensity: 1 },
   surface: {
@@ -171,6 +171,8 @@ export function normalizeWorldEnvironment(value: unknown): WorldEnvironmentNorma
     assign(next, "moonColor", color(night.moonColor, "night.moonColor"));
     assign(next, "moonAngularDiameterDeg", num(night.moonAngularDiameterDeg, "night.moonAngularDiameterDeg", 0.1, 10));
     assign(next, "moonBrightness", num(night.moonBrightness, "night.moonBrightness", 0, 10));
+    assign(next, "moonHaloIntensity", num(night.moonHaloIntensity, "night.moonHaloIntensity", 0, 5));
+    assign(next, "moonHaloSize", num(night.moonHaloSize, "night.moonHaloSize", 0.5, 12));
     assign(next, "starBrightness", num(night.starBrightness, "night.starBrightness", 0, 5));
     assign(next, "starDensity", num(night.starDensity, "night.starDensity", 0, 1));
     assign(next, "starSize", num(night.starSize, "night.starSize", 0.5, 3));

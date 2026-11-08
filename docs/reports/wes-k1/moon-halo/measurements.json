@@ -1,0 +1,14 @@
+{
+  "near": 70.0842,
+  "far": 19.076199999999996,
+  "brighter": 114.3008,
+  "wider": 33.2928,
+  "coreDifference": 0,
+  "translation": 0,
+  "cloudDifference": 0,
+  "foregroundDifference": 0,
+  "dayDifference": 0,
+  "hiddenDifference": 0,
+  "calls": 1,
+  "callsWithHalo": 1
+}

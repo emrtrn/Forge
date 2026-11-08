@@ -43,7 +43,7 @@ export interface ResolvedEnvironment {
   /** Independent night fill: remains available with no authored ambient or Sun, zero in full daylight. */
   nightAmbient: { color: Vec3; intensity: number };
   /** Visual full moon, following the very same direction as the night directional light. */
-  moon: { direction: Vec3; color: Vec3; angularDiameterDeg: number; brightness: number };
+  moon: { direction: Vec3; color: Vec3; angularDiameterDeg: number; brightness: number; haloIntensity: number; haloSize: number };
   /** Procedural live-sky stars, independent of night lighting and IBL. */
   stars: { brightness: number; density: number; size: number };
   /** Sky turbidity to render; null when there is no (visible) sky. */
@@ -135,6 +135,9 @@ export function resolveEnvironment(
       direction: sun.lightDirection,
       color: hexToLinear(env.night.moonColor),
       angularDiameterDeg: env.night.moonAngularDiameterDeg,
+      haloIntensity: env.night.moonBrightness > 0 && sun.isMoon
+        ? env.night.moonHaloIntensity * smoothstep(0, TWILIGHT_DEG, -sun.sunElevationDeg) : 0,
+      haloSize: env.night.moonHaloSize,
       brightness: sun.isMoon ? env.night.moonBrightness * smoothstep(0, TWILIGHT_DEG, -sun.sunElevationDeg) : 0,
     },
     stars: {

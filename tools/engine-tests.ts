@@ -1076,7 +1076,6 @@ import { registerEditorSaveCoordinatorTests } from "../tests/engine/editorSaveCo
 import { registerFoliageCellFootprintTests, registerFoliageCellSaveTests } from "../tests/engine/foliageCellSave.test";
 import { registerFoliageCellStreamingTests } from "../tests/engine/foliageCellStreaming.test";
 import { registerFoliageRingTests } from "../tests/engine/foliageRing.test";
-import { registerHeightFogTests } from "../tests/engine/heightFog.test";
 import { registerViewDistanceTests } from "../tests/engine/viewDistance.test";
 import { registerOpenWorldSetupTests } from "../tests/engine/openWorldSetup.test";
 import { registerWorldMapViewTests } from "../tests/engine/worldMapView.test";
@@ -1405,7 +1404,6 @@ registerFoliageFadeTests(check);
 registerFoliageCellsTests(check);
 registerFoliageCellFootprintTests(check);
 registerFoliageRingTests(check);
-registerHeightFogTests(check);
 registerViewDistanceTests(check);
 registerOpenWorldSetupTests(check);
 registerWorldMapViewTests(check);

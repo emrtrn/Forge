@@ -68,14 +68,24 @@ export interface RandomWorldPanelOptions {
   confirm?: (message: string) => boolean;
 }
 
+/** Farthest the opening view looks at the ground from, metres: the editor camera draws to 2000 m (`SCENE_CAMERA_FAR`). */
+const OVERVIEW_REACH = 1500;
+/** How far the opening view looks down, degrees. */
+const OVERVIEW_PITCH = 52;
+
 /**
- * A bird's-eye view of a whole built world from the south (north up, as in the
- * preview), for the editor to open the new level with.
+ * A bird's-eye view of a built world from the south (north up, as in the
+ * preview), for the editor to open the new level with: aimed a little north of
+ * the middle and close enough that the ground stays inside the camera's reach,
+ * so a small world shows whole and a large one its middle.
  */
 export function overviewCameraPose(extent: number, groundHeight = 0): EditorCameraPose {
   const camera = new PerspectiveCamera();
-  camera.position.set(0, groundHeight + 0.55 * extent, 0.62 * extent);
-  camera.lookAt(0, groundHeight, -0.06 * extent);
+  const reach = Math.min(0.8 * extent, OVERVIEW_REACH);
+  const pitch = (OVERVIEW_PITCH * Math.PI) / 180;
+  const target: [number, number, number] = [0, groundHeight, -0.1 * extent];
+  camera.position.set(target[0], target[1] + reach * Math.sin(pitch), target[2] + reach * Math.cos(pitch));
+  camera.lookAt(...target);
   camera.updateMatrixWorld();
   const { x, y, z, w } = camera.quaternion;
   return { position: [camera.position.x, camera.position.y, camera.position.z], quaternion: [x, y, z, w], up: [0, 1, 0] };

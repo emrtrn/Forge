@@ -9,6 +9,7 @@ import { dirname, resolve } from "node:path";
 import { DEFAULT_WORLD_PARTITION } from "../../engine/world/worldPartition";
 import { randomWorldBrief, type RandomWorldOptions } from "../../engine/worldbuilder/randomWorld";
 import { normalizeWorldBrief, worldBriefPath } from "../../engine/worldbuilder/worldBrief";
+import type { WorldBuildStep } from "./worldBriefBuild";
 import { runWorldBrief, type WorldBriefRunResult } from "./worldBriefRun";
 
 export interface RandomWorldRunOptions {
@@ -18,6 +19,7 @@ export interface RandomWorldRunOptions {
   out: string;
   world: Omit<RandomWorldOptions, "id" | "name"> & { name?: string };
   force?: boolean;
+  onProgress?: (step: WorldBuildStep) => void;
 }
 
 export interface RandomWorldRunResult extends WorldBriefRunResult {
@@ -40,6 +42,9 @@ export async function runRandomWorld(options: RandomWorldRunOptions): Promise<Ra
   await mkdir(dirname(absolute), { recursive: true });
   await writeFile(absolute, `${JSON.stringify(brief, null, 2)}\n`);
   const partition = options.world.size === "large" ? { ...structuredClone(DEFAULT_WORLD_PARTITION), enabled: true } : undefined;
-  const result = await runWorldBrief({ root: options.root, brief: briefPath, out: level, force: options.force, partition });
+  // The size decides partitioning, also for a level this replaces.
+  const result = await runWorldBrief({
+    root: options.root, brief: briefPath, out: level, force: options.force, partition, replacePartition: true, onProgress: options.onProgress,
+  });
   return { ...result, brief: briefPath, notes };
 }

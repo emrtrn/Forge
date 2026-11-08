@@ -12,7 +12,7 @@ import { normalizeRegionProfile } from "../../engine/worldbuilder/regionProfile"
 import { normalizeGroundCover } from "../../engine/worldbuilder/groundCover";
 import { normalizeWorldBrief, worldBriefLevelPath } from "../../engine/worldbuilder/worldBrief";
 import { buildImportedAssetRecord } from "../saveValidator";
-import { buildWorldFromBrief, levelCellDirs, type WorldBriefBuild } from "./worldBriefBuild";
+import { buildWorldFromBrief, levelCellDirs, type WorldBriefBuild, type WorldBuildStep } from "./worldBriefBuild";
 
 export interface WorldBriefRunOptions {
   /** Absolute public root. */
@@ -23,8 +23,12 @@ export interface WorldBriefRunOptions {
   out?: string;
   /** Replace an existing level. */
   force?: boolean;
-  /** `worldSettings.partition` of a new level; a replaced level keeps its own. */
+  /** `worldSettings.partition` of a new level; a replaced level keeps its own unless `replacePartition`. */
   partition?: unknown;
+  /** A replaced level takes `partition` too (a random world's size decides it). */
+  replacePartition?: boolean;
+  /** Told as each build step starts. */
+  onProgress?: (step: WorldBuildStep) => void;
 }
 
 export interface WorldBriefRunResult {
@@ -103,7 +107,7 @@ export async function runWorldBrief(options: WorldBriefRunOptions): Promise<Worl
   if (await exists(levelAbs)) {
     if (!options.force) throw new Error(`${level} exists; it may hold editor changes. Rerun with --force to rebuild it from the brief.`);
     const current = await readJson(root, level, "existing level") as { worldSettings?: { partition?: unknown } };
-    partition = current.worldSettings?.partition;
+    if (!options.replacePartition) partition = current.worldSettings?.partition;
   }
 
   let profile = null;
@@ -130,7 +134,7 @@ export async function runWorldBrief(options: WorldBriefRunOptions): Promise<Worl
     return typeof id === "string" ? id : null;
   };
 
-  const build = buildWorldFromBrief({ brief, levelPath: level, profile, cover, assetIdForFile, partition });
+  const build = buildWorldFromBrief({ brief, levelPath: level, profile, cover, assetIdForFile, partition, onProgress: options.onProgress });
 
   const write = async (path: string, data: string | Uint8Array): Promise<void> => {
     const absolute = within(root, path);

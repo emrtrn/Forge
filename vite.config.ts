@@ -62,6 +62,7 @@ import {
 } from "./tools/saveValidator";
 import { collectDroppedFields, formatDroppedFieldWarning } from "./tools/droppedFields";
 import { createProjectPaths, type ProjectPaths } from "./tools/projectPaths";
+import { handleRandomWorldRequest } from "./tools/world/randomWorldEndpoint";
 
 // Each dev server owns one immutable project selection. Helpers are scoped to
 // that server, so two projects in one process cannot share authoring roots.
@@ -950,6 +951,7 @@ const PRIVILEGED_URLS = new Set([
   "/__reimport-asset",
   "/__new-behavior",
   "/__open-level",
+  "/__world-random",
 ]);
 
 // Cap a single imported asset (binary models/textures/audio are larger than the
@@ -2441,6 +2443,31 @@ function isLocalRequest(req: IncomingMessage): boolean {
               JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }),
             );
           }
+          return;
+        }
+
+        // World Builder window: build a random world under assets/ in a child
+        // process and stream its progress (tools/world/randomWorldEndpoint.ts).
+        if (req.url === "/__world-random") {
+          if (req.method !== "POST") {
+            res.statusCode = 405;
+            res.end("Method not allowed");
+            return;
+          }
+          let body: unknown;
+          try {
+            body = await readJsonBody(req);
+          } catch (error) {
+            res.statusCode = 400;
+            res.setHeader("Content-Type", "application/json; charset=utf-8");
+            res.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+            return;
+          }
+          await handleRandomWorldRequest(body, req, res, {
+            forgeRoot: fileURLToPath(new URL(".", import.meta.url)),
+            publicDir: PUBLIC_DIR,
+            resolvePublicPath,
+          });
           return;
         }
 

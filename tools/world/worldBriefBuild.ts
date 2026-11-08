@@ -130,7 +130,13 @@ export interface WorldBriefBuildInput {
   cover?: GroundCover | null;
   /** `worldSettings.partition` of the level being replaced, kept as it is; undefined for a new level. */
   partition?: unknown;
+  /** Told as each build step starts (`WORLD_BUILD_STEPS`); it only reports, the build does not wait. */
+  onProgress?: (step: WorldBuildStep) => void;
 }
+
+/** Build steps in the order they start; a progress bar takes its share from the index. */
+export const WORLD_BUILD_STEPS = ["terrain", "paint", "settlements", "roads", "ground", "placements", "files"] as const;
+export type WorldBuildStep = (typeof WORLD_BUILD_STEPS)[number];
 
 export interface WorldBriefBuild {
   /** Public-root-relative path → file contents, exactly as a save writes them. */
@@ -318,6 +324,8 @@ export function saveLevelFiles(layout: RoomLayout, levelPath: string): {
 
 export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuild {
   const { brief, levelPath, profile } = input;
+  const progress = input.onProgress ?? (() => undefined);
+  progress("terrain");
   const warnings: string[] = [];
   const deferred: string[] = [];
   const models = modelResolver(brief.models, input.assetIdForFile);
@@ -360,6 +368,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     return tile;
   });
   // Paint once every height is known: the slope reads the neighbours, across tile edges too.
+  progress("paint");
   const weights = cover
     ? coverPaint(cover, brief, ground, densities, {
       clearings: briefClearings(brief).map(([x, z]) => [x, z, PILOT_TUNING.clearingRadius] as const),
@@ -429,7 +438,9 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
       stages.push(plan);
     }
   };
+  progress("settlements");
   runStages(WORLD_BRIEF_STAGES);
+  progress("roads");
   // Roads and streets, then the building pads over them (a road ends at its pad's edge).
   for (const spline of def.splines) {
     if (waterIds.has(spline.id) || spline.coordinateSpace !== "world") continue;
@@ -442,6 +453,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     applyTerrainUndoPatches(world, createTerrainPadPatches(world, buildingPads));
     paintPads(def, world.tiles, buildingPads, cover ? cover.roles.pad : PILOT_TUNING.padPaint.layerId);
   }
+  progress("ground");
   runStages(WORLD_BRIEF_GROUND_STAGES);
 
   const tileBytes = new Map<string, Uint8Array>();
@@ -455,6 +467,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   const globalBytes = encodeTerrainGlobalMap(def, buildTerrainGlobalAttributes(worldTerrainRenderSource(def, world.tiles)));
 
   // Placements: landmarks and props by their model rows, then the temporary scatter.
+  progress("placements");
   const groups = new Map<string, LayoutPlacement[]>();
   const place = (assetId: string, entry: { id: string; role: string; name: string; at: WorldPoint; rotationYDeg: number; scale: number; collision: boolean }): void => {
     const height = sampleHeight(entry.at[0], entry.at[1]);
@@ -539,6 +552,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   } as unknown as RoomLayout;
 
   // Save-canonical files.
+  progress("files");
   const files = new Map<string, string | Uint8Array>();
   const canonicalLayout = validateSavePayload({ layout }).layout as RoomLayout;
   const saved = saveLevelFiles(canonicalLayout, levelPath);

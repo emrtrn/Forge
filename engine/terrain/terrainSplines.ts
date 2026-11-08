@@ -1,7 +1,7 @@
 import { SplineCorridorIndex, splineToPolyline } from "../scene/landscape";
 import { validateLandscapeSplines } from "../scene/landscapeSplineValidation";
 import { normalizeLandscapeBrushWeights } from "../scene/landscapeBrush";
-import { createTerrainRegionPatches, terrainRegionGridBounds, type TerrainEditWorld, type TerrainUndoPatch } from "./terrainEdit";
+import { createTerrainRegionPatches, splitTerrainRegion, terrainRegionGridBounds, type TerrainEditWorld, type TerrainUndoPatch, type TerrainVertexEdit } from "./terrainEdit";
 import { terrainTileWorldBounds, type WorldTerrainDef, type WorldTerrainSpline } from "./terrainTypes";
 export type { WorldTerrainSpline } from "./terrainTypes";
 export { terrainSplineToWorld, terrainSplineToLocal } from "./terrainSplineData";
@@ -37,6 +37,13 @@ export function createTerrainSplinePatches(
   world: TerrainEditWorld,
   spline: WorldTerrainSpline,
   effect: TerrainSplineEffect = "both",
+  /**
+   * Prepare a bake larger than one editor transaction allows in pieces
+   * (`splitTerrainRegion`), for offline builders; the patches are the same.
+   * Without it an oversized bake throws, as the editor wants. `pieceVertices`
+   * sets the piece size (the transaction limit by default).
+   */
+  options: { split?: boolean; pieceVertices?: number } = {},
 ): TerrainUndoPatch[] {
   if (spline.coordinateSpace !== "world") throw new Error("Terrain spline must use world coordinates");
   if (!["deform", "paint", "both"].includes(effect)) throw new Error("Invalid terrain spline effect");
@@ -55,7 +62,7 @@ export function createTerrainSplinePatches(
     minX: Math.min(...reaches.map((reach) => reach.minX)), minZ: Math.min(...reaches.map((reach) => reach.minZ)),
     maxX: Math.max(...reaches.map((reach) => reach.maxX)), maxZ: Math.max(...reaches.map((reach) => reach.maxZ)),
   };
-  return createTerrainRegionPatches(world, bounds, {
+  const edit: TerrainVertexEdit = {
     affects: (x, z) => deform.sample(x, z) !== null || paint.sample(x, z) !== null,
     sample: (x, z, height, weights) => {
       let nextHeight: number | undefined;
@@ -84,5 +91,8 @@ export function createTerrainSplinePatches(
       }
       return { ...(nextHeight === undefined ? {} : { height: nextHeight }), ...(nextWeights === undefined ? {} : { weights: nextWeights }) };
     },
-  });
+  };
+  return options.split
+    ? splitTerrainRegion(world.def, bounds, options.pieceVertices).flatMap((piece) => createTerrainRegionPatches(world, piece, edit))
+    : createTerrainRegionPatches(world, bounds, edit);
 }

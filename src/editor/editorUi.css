@@ -942,6 +942,42 @@
    side; a row with a button, and anything that is not a row, keeps the width. */
 .forge-window-body { container-type: inline-size; }
 .forge-window .world-builder-list { max-height: 16em; overflow-y: auto; }
+
+/* World Builder window: random world choices, preview and Create (RANDOM_WORLD_PLAN step 5). */
+.random-world { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+@container (min-width: 660px) {
+  .random-world { grid-template-columns: minmax(0, 1fr) 320px; }
+  .random-world-create { grid-column: 1 / -1; }
+}
+.random-world-options { display: grid; gap: 6px; align-content: start; }
+.random-world-options .detail-row > span,
+.random-world-create .detail-row > span { font-size: 12px; }
+.random-world-segmented { flex-wrap: wrap; justify-self: start; max-width: 100%; }
+.random-world-segmented > button { height: 24px; padding: 0 7px; font-size: 12px; }
+.random-world-settlements { display: grid; gap: 4px; min-width: 0; }
+.random-world-chips, .random-world-add { display: flex; flex-wrap: wrap; gap: 4px; }
+.random-world-chip { display: inline-flex; align-items: center; gap: 2px; height: 22px; padding: 0 2px 0 8px; border: 1px solid var(--forge-border-strong); border-radius: 11px; background: var(--forge-bg-3); color: var(--forge-text); font-size: 12px; }
+.editor-shell .random-world-chip > button { width: 18px; height: 18px; padding: 0; border: 0; border-radius: 9px; background: transparent; color: var(--forge-text-secondary); line-height: 1; cursor: pointer; }
+.editor-shell .random-world-chip > button:hover:not(:disabled) { background: var(--forge-border); color: var(--forge-text); }
+.random-world-chip > button:disabled { opacity: 0.35; cursor: default; }
+.random-world-add > button { height: 24px; padding: 0 8px; font-size: 12px; }
+.random-world-seed { display: flex; gap: 6px; min-width: 0; }
+.random-world-seed > input { flex: 1; min-width: 0; }
+.random-world-preview { display: grid; gap: 6px; align-content: start; justify-items: start; }
+.random-world-preview canvas { width: 320px; max-width: 100%; aspect-ratio: 1; height: auto; border: 1px solid var(--forge-border); border-radius: var(--forge-radius-md); background: var(--forge-bg-0); }
+.random-world[data-preview-state="pending"] .random-world-preview canvas { opacity: 0.75; }
+.random-world-summary { color: var(--forge-text); font-size: 12px; }
+.random-world-hint { color: var(--forge-text-dim); font-size: 11px; line-height: 1.4; }
+.random-world-notes { margin: 0; padding-left: 16px; color: var(--forge-warning-text); font-size: 11px; }
+.random-world-create { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--forge-border-mid); }
+.random-world-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.editor-shell .random-world-actions > .forge-btn-primary { min-width: 96px; border-color: transparent; background: var(--forge-accent); color: var(--forge-accent-text); font-weight: 600; }
+.editor-shell .random-world-actions > .forge-btn-primary:hover:not(:disabled) { background: var(--forge-accent-hover); }
+.editor-shell .random-world-actions > .forge-btn-primary:disabled { opacity: 0.5; cursor: default; }
+.random-world-path { flex: 1; min-width: 0; overflow: hidden; color: var(--forge-text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.random-world-progress { display: flex; align-items: center; gap: 8px; color: var(--forge-text-secondary); font-size: 12px; }
+.random-world-progress[hidden] { display: none; }
+.random-world-progress progress { flex: 0 0 160px; height: 8px; }
 @container (min-width: 600px) {
   .world-builder-reference { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 16px; }
   .world-builder-reference > :not(.world-builder-row), .world-builder-reference > .world-builder-row:has(button) { grid-column: 1 / -1; }

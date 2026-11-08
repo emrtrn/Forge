@@ -4,7 +4,7 @@
  */
 import assert from "node:assert/strict";
 import { validateRandomWorldRequest } from "../../tools/world/randomWorldRequest";
-import { WORLD_BUILD_STEPS } from "../../tools/world/worldBriefBuild";
+import { WORLD_BUILD_STEPS } from "../../engine/worldbuilder/worldBrief";
 
 type Check = (label: string, run: () => void) => void;
 
@@ -61,5 +61,32 @@ export function registerRandomWorldRequestTests(check: Check): void {
 
   check("random world request: build steps are reported in order", () => {
     assert.deepEqual([...WORLD_BUILD_STEPS], ["terrain", "paint", "settlements", "roads", "ground", "placements", "files"]);
+  });
+}
+
+type AsyncCheck = (label: string, run: () => Promise<void>) => Promise<void>;
+
+/** A build that fails leaves the brief as it found it (`runRandomWorld`). */
+export async function registerRandomWorldRunCleanupTests(checkAsync: AsyncCheck): Promise<void> {
+  await checkAsync("random world run: a failed build restores the brief it replaced and removes a new one", async () => {
+    const { mkdtemp, mkdir, readFile, rm, writeFile, access } = await import("node:fs/promises");
+    const { join } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const { runRandomWorld } = await import("../../tools/world/randomWorldRun");
+    const root = await mkdtemp(join(tmpdir(), "forge-random-run-"));
+    try {
+      await mkdir(join(root, "assets/Worlds"), { recursive: true });
+      // An existing level that is not JSON: the build stops before writing anything.
+      await writeFile(join(root, "assets/Worlds/Broken.level.json"), "not json");
+      const world = { seed: 3, size: "small", landform: "plain", mountainHeight: "low", settlements: [{ type: "hamlet" }], roads: "between" } as const;
+      await writeFile(join(root, "assets/Worlds/Broken.worldbrief.json"), "previous brief");
+      await assert.rejects(runRandomWorld({ root, out: "assets/Worlds/Broken.level.json", force: true, world: { ...world, settlements: [...world.settlements] } }), /not JSON/);
+      assert.equal(await readFile(join(root, "assets/Worlds/Broken.worldbrief.json"), "utf8"), "previous brief");
+      await rm(join(root, "assets/Worlds/Broken.worldbrief.json"));
+      await assert.rejects(runRandomWorld({ root, out: "assets/Worlds/Broken.level.json", force: true, world: { ...world, settlements: [...world.settlements] } }), /not JSON/);
+      await assert.rejects(access(join(root, "assets/Worlds/Broken.worldbrief.json")));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 }

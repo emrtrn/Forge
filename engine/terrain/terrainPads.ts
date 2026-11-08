@@ -1,4 +1,4 @@
-import { createTerrainRegionPatches, terrainRegionGridBounds, type TerrainEditWorld, type TerrainUndoPatch } from "./terrainEdit";
+import { createTerrainRegionPatches, splitTerrainRegion, terrainRegionGridBounds, type TerrainEditWorld, type TerrainUndoPatch, type TerrainVertexEdit } from "./terrainEdit";
 import { terrainTileWorldBounds, type TerrainWorldBounds, type WorldTerrainDef } from "./terrainTypes";
 
 /**
@@ -52,7 +52,17 @@ export function terrainPadTileKeys(def: WorldTerrainDef, pads: readonly TerrainP
  * wherever the stronger pull changes. Apply the returned patches as one terrain
  * undo command; nothing is written here.
  */
-export function createTerrainPadPatches(world: TerrainEditWorld, pads: readonly TerrainPad[]): TerrainUndoPatch[] {
+export function createTerrainPadPatches(
+  world: TerrainEditWorld,
+  pads: readonly TerrainPad[],
+  /**
+   * Prepare a bake larger than one editor transaction allows in pieces
+   * (`splitTerrainRegion`), for offline builders; the patches are the same.
+   * Without it an oversized bake throws, as the editor wants. `pieceVertices`
+   * sets the piece size (the transaction limit by default).
+   */
+  options: { split?: boolean; pieceVertices?: number } = {},
+): TerrainUndoPatch[] {
   const spacing = world.def.spacing;
   const indexed = pads.map((pad) => {
     const baked = { ...pad, falloff: padBakeFalloff(pad, spacing) };
@@ -81,7 +91,8 @@ export function createTerrainPadPatches(world: TerrainEditWorld, pads: readonly 
     }
     return (level + free * ground) / (total + free);
   };
-  return createTerrainRegionPatches(world, union(indexed.map((entry) => padBounds(entry.pad, spacing))), {
+  const bounds = union(indexed.map((entry) => padBounds(entry.pad, spacing)));
+  const edit: TerrainVertexEdit = {
     affects: (x, z) => target(x, z, 0) !== null,
     sample: (x, z, height) => {
       const origin = world.def.origin[1];
@@ -90,7 +101,10 @@ export function createTerrainPadPatches(world: TerrainEditWorld, pads: readonly 
       const next = Number((level - origin).toFixed(4));
       return next === height ? {} : { height: next };
     },
-  });
+  };
+  return options.split
+    ? splitTerrainRegion(world.def, bounds, options.pieceVertices).flatMap((piece) => createTerrainRegionPatches(world, piece, edit))
+    : createTerrainRegionPatches(world, bounds, edit);
 }
 
 /** 1 inside, easing to 0 at `falloff` outside. */

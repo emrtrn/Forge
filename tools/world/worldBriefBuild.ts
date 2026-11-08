@@ -66,6 +66,7 @@ import {
   worldBriefRecipe,
   type BriefModel,
   type WorldBrief,
+  type WorldBuildStep,
 } from "../../engine/worldbuilder/worldBrief";
 import {
   validateFoliageData,
@@ -130,13 +131,10 @@ export interface WorldBriefBuildInput {
   cover?: GroundCover | null;
   /** `worldSettings.partition` of the level being replaced, kept as it is; undefined for a new level. */
   partition?: unknown;
-  /** Told as each build step starts (`WORLD_BUILD_STEPS`); it only reports, the build does not wait. */
-  onProgress?: (step: WorldBuildStep) => void;
+  /** Told as each build step starts (`WORLD_BUILD_STEPS` in worldBrief.ts); it only reports, the build does not wait. */
+  onProgress?: ((step: WorldBuildStep) => void) | undefined;
 }
 
-/** Build steps in the order they start; a progress bar takes its share from the index. */
-export const WORLD_BUILD_STEPS = ["terrain", "paint", "settlements", "roads", "ground", "placements", "files"] as const;
-export type WorldBuildStep = (typeof WORLD_BUILD_STEPS)[number];
 
 export interface WorldBriefBuild {
   /** Public-root-relative path → file contents, exactly as a save writes them. */
@@ -411,7 +409,8 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
       falloff: landmark.pad.falloff,
     });
   }
-  if (pads.length) applyTerrainUndoPatches(world, createTerrainPadPatches(world, pads));
+  // Bakes over a large world can be more than one editor transaction allows: `split` prepares them in pieces, with the same result.
+  if (pads.length) applyTerrainUndoPatches(world, createTerrainPadPatches(world, pads, { split: true }));
 
   // Stages: each sees the recipe, the placements and the splines the previous one left.
   def.splines = ground.courses.map(waterSpline);
@@ -444,13 +443,13 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   // Roads and streets, then the building pads over them (a road ends at its pad's edge).
   for (const spline of def.splines) {
     if (waterIds.has(spline.id) || spline.coordinateSpace !== "world") continue;
-    applyTerrainUndoPatches(world, createTerrainSplinePatches(world, spline as WorldTerrainSpline));
+    applyTerrainUndoPatches(world, createTerrainSplinePatches(world, spline as WorldTerrainSpline, "both", { split: true }));
   }
   const buildingPads: TerrainPad[] = recipe.generated.pads.map((pad) => ({
     polygon: pad.polygon, height: pad.height, falloff: pad.falloff ?? PAD_FALLOFF,
   }));
   if (buildingPads.length) {
-    applyTerrainUndoPatches(world, createTerrainPadPatches(world, buildingPads));
+    applyTerrainUndoPatches(world, createTerrainPadPatches(world, buildingPads, { split: true }));
     paintPads(def, world.tiles, buildingPads, cover ? cover.roles.pad : PILOT_TUNING.padPaint.layerId);
   }
   progress("ground");

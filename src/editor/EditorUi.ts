@@ -152,7 +152,7 @@ import {
 } from "./panels/details/environmentDetails";
 import { renderWorldSettingsPanel } from "./panels/world/worldSettingsPanel";
 import { WorldPartitionPanel } from "./panels/world/worldPartitionPanel";
-import { WorldBuilderPanel } from "./panels/world/worldBuilderPanel";
+import { RandomWorldPanel } from "./panels/world/randomWorldPanel";
 import { ForgeWindow } from "./panels/world/worldBuilderWindow";
 import { renderFoliagePanel } from "./panels/foliage/foliagePanel";
 import { UI_ICONS, ACTOR_TYPE_ICONS, type ActorTypeIcon } from "./editorIcons";
@@ -406,7 +406,7 @@ export class EditorUi {
   private worldPartitionPanel: WorldPartitionPanel | null = null;
   /** Polls the World Partition view while its tab is open. */
   private worldPartitionTimer: number | null = null;
-  private worldBuilderPanel: WorldBuilderPanel | null = null;
+  private worldBuilderPanel: RandomWorldPanel | null = null;
   private worldBuilderWindow: ForgeWindow | null = null;
   private statusText: HTMLElement;
   private statusToast: HTMLElement;
@@ -831,8 +831,6 @@ export class EditorUi {
     this.app.onPivotEditModeChanged = () => this.renderDetails(this.selected);
     this.app.onStatus = (message, tone) => {
       this.setStatus(message, tone);
-      // A finished save is reported here; the recipe's "unsaved" mark clears with it.
-      this.refreshWorldBuilderPanel();
     };
 
     this.renderOutliner(this.app.getSceneObjects());
@@ -4289,26 +4287,30 @@ export class EditorUi {
     this.worldSettingsPopoverCleanup = null;
   };
 
-  private refreshWorldBuilderPanel(): void {
-    if (this.worldBuilderWindow?.isOpen) this.worldBuilderPanel?.update();
-  }
-
   /**
    * Add Actor → Terrain → World Builder…: the non-modal World Builder window
-   * (WORLD_BUILDER_WINDOW_PLAN). Built on first use; opening it again keeps it
-   * where it is. Closing it only stops drawing the panel: the session's
-   * preview, layers and plan handles stay in the viewport.
+   * (RANDOM_WORLD_PLAN step 5): a few choices, a bird's-eye preview and Create,
+   * which builds a random world on the dev server and opens it. Built on first
+   * use; opening it again keeps it where it is.
    */
   private openWorldBuilderWindow(): void {
     this.worldBuilderWindow ??= new ForgeWindow({
       host: this.root,
       area: () => requireElement(this.root, "[data-viewport-host]").getBoundingClientRect(),
       title: "World Builder",
-      storageKey: "forge.worldBuilder.window",
+      storageKey: "forge.worldBuilder.randomWindow",
       testId: "world-builder-window",
+      defaultSize: { width: 760, height: 700 },
     });
     const frame = this.worldBuilderWindow;
-    this.worldBuilderPanel ??= new WorldBuilderPanel({ frame, session: this.app.worldBuilder });
+    this.worldBuilderPanel ??= new RandomWorldPanel({
+      frame,
+      hasUnsavedChanges: () => this.app.getHistoryState().canUndo,
+      openLevel: async (path) => {
+        await openProjectLevel(path);
+        window.location.reload();
+      },
+    });
     frame.open();
     this.worldBuilderPanel.update();
     // The hover menu would linger over the window (its close grace delay);
@@ -4317,8 +4319,6 @@ export class EditorUi {
   }
 
   private renderHistory(state: EditorHistoryState): void {
-    // Undo/redo can swap the World Builder recipe; redraw it if it is showing.
-    this.refreshWorldBuilderPanel();
     this.undoButton.disabled = !state.canUndo;
     this.redoButton.disabled = !state.canRedo;
     const undoTip = state.undoLabel ? `Undo ${state.undoLabel}` : "Undo";

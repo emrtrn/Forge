@@ -37,6 +37,8 @@ export interface ForgeWindowOptions {
   /** Browser storage key for the viewer's position and size; never in project data. */
   storageKey: string;
   testId?: string;
+  /** First-open size (before the viewer moves or resizes it); 520 × 640 by default. */
+  defaultSize?: { width: number; height: number };
   onClose?: () => void;
 }
 
@@ -149,11 +151,12 @@ export class ForgeWindow {
   private defaultGeometry(): ForgeWindowGeometry {
     const host = this.options.host.getBoundingClientRect();
     const area = this.options.area();
+    const { width, height } = this.options.defaultSize ?? { width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT };
     return {
-      x: area.right - host.left - DEFAULT_WIDTH - DEFAULT_MARGIN,
+      x: area.right - host.left - width - DEFAULT_MARGIN,
       y: area.top - host.top + DEFAULT_MARGIN,
-      width: DEFAULT_WIDTH,
-      height: DEFAULT_HEIGHT,
+      width,
+      height,
     };
   }
 

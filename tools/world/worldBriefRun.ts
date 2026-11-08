@@ -12,7 +12,8 @@ import { normalizeRegionProfile } from "../../engine/worldbuilder/regionProfile"
 import { normalizeGroundCover } from "../../engine/worldbuilder/groundCover";
 import { normalizeWorldBrief, worldBriefLevelPath } from "../../engine/worldbuilder/worldBrief";
 import { buildImportedAssetRecord } from "../saveValidator";
-import { buildWorldFromBrief, levelCellDirs, type WorldBriefBuild, type WorldBuildStep } from "./worldBriefBuild";
+import type { WorldBuildStep } from "../../engine/worldbuilder/worldBrief";
+import { buildWorldFromBrief, levelCellDirs, type WorldBriefBuild } from "./worldBriefBuild";
 
 export interface WorldBriefRunOptions {
   /** Absolute public root. */
@@ -28,7 +29,7 @@ export interface WorldBriefRunOptions {
   /** A replaced level takes `partition` too (a random world's size decides it). */
   replacePartition?: boolean;
   /** Told as each build step starts. */
-  onProgress?: (step: WorldBuildStep) => void;
+  onProgress?: ((step: WorldBuildStep) => void) | undefined;
 }
 
 export interface WorldBriefRunResult {

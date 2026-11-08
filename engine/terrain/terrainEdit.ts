@@ -259,6 +259,44 @@ export function terrainRegionGridBounds(def: WorldTerrainDef, bounds: TerrainWor
   return { x0, x1, z0, z1 };
 }
 
+/** `a` ∩ `b` in world XZ, or null when they do not meet. */
+export function intersectTerrainBounds(a: TerrainWorldBounds, b: TerrainWorldBounds): TerrainWorldBounds | null {
+  const box = { minX: Math.max(a.minX, b.minX), minZ: Math.max(a.minZ, b.minZ), maxX: Math.min(a.maxX, b.maxX), maxZ: Math.min(a.maxZ, b.maxZ) };
+  return box.minX <= box.maxX && box.minZ <= box.maxZ ? box : null;
+}
+
+/**
+ * Splits `bounds` into world boxes of at most `maxVertices` grid vertices each
+ * that hold every grid vertex of `bounds` exactly once (box edges sit half a
+ * spacing off the grid), so a caller can run an edit too large for one
+ * transaction piece by piece. A per-vertex edit applied piece after piece gives
+ * the same terrain as one region would.
+ */
+export function splitTerrainRegion(
+  def: WorldTerrainDef,
+  bounds: TerrainWorldBounds,
+  maxVertices = TERRAIN_REGION_MAX_VERTICES,
+): TerrainWorldBounds[] {
+  const { tileQuads: q, spacing, origin, tilesX, tilesZ } = def;
+  const x0 = Math.max(0, Math.ceil((bounds.minX - origin[0]) / spacing));
+  const x1 = Math.min(tilesX * q, Math.floor((bounds.maxX - origin[0]) / spacing));
+  const z0 = Math.max(0, Math.ceil((bounds.minZ - origin[2]) / spacing));
+  const z1 = Math.min(tilesZ * q, Math.floor((bounds.maxZ - origin[2]) / spacing));
+  if (x1 < x0 || z1 < z0) return [];
+  const side = Math.max(1, Math.floor(Math.sqrt(maxVertices)));
+  const pieces: TerrainWorldBounds[] = [];
+  for (let bz = z0; bz <= z1; bz += side) {
+    for (let bx = x0; bx <= x1; bx += side) {
+      const [ex, ez] = [Math.min(x1, bx + side - 1), Math.min(z1, bz + side - 1)];
+      pieces.push({
+        minX: origin[0] + (bx - 0.5) * spacing, maxX: origin[0] + (ex + 0.5) * spacing,
+        minZ: origin[2] + (bz - 0.5) * spacing, maxZ: origin[2] + (ez + 0.5) * spacing,
+      });
+    }
+  }
+  return pieces;
+}
+
 /**
  * Prepare a region edit without mutating tiles or summaries. Compute each world
  * vertex once from its positive-side owner, then copy its requested values to

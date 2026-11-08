@@ -50,6 +50,10 @@ import {
 import { ROAD_CLASSES, type RoadClass } from "./vocabulary";
 
 export const WORLD_BRIEF_SCHEMA_VERSION = 1;
+
+/** Steps of building a brief (`tools/world/worldBriefBuild.ts`), in the order they start; a progress bar takes its share from the index. */
+export const WORLD_BUILD_STEPS = ["terrain", "paint", "settlements", "roads", "ground", "placements", "files"] as const;
+export type WorldBuildStep = (typeof WORLD_BUILD_STEPS)[number];
 export const WORLD_BRIEF_SUFFIX = ".worldbrief.json";
 
 /** Where a model comes from (decision 21): Claude in Blender, Tripo AI, or a ready-made model. */

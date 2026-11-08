@@ -63,6 +63,19 @@ function readPose(camera: PerspectiveCamera): EditorCameraPose {
 }
 
 /**
+ * Sets the pose the editor opens `scenePath` with (e.g. a bird's-eye view of a
+ * world just built for it). False when storage is unavailable.
+ */
+export function storeEditorCameraPose(scenePath: string, pose: EditorCameraPose): boolean {
+  try {
+    window.localStorage.setItem(`${STORAGE_PREFIX}${encodeURIComponent(scenePath)}`, JSON.stringify(pose));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Remembers the perspective viewport pose for one level. The orthographic
  * technical presets (Top/Front/Left) are transient view choices and are not
  * persisted — a reload always comes back in Perspective, at the last pose.

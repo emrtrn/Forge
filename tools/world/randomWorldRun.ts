@@ -4,12 +4,11 @@
  * beside the level as `<Level>.worldbrief.json`, and the `world:brief` runner
  * builds the level from it. A large world is split into World Partition cells.
  */
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { DEFAULT_WORLD_PARTITION } from "../../engine/world/worldPartition";
 import { randomWorldBrief, type RandomWorldOptions } from "../../engine/worldbuilder/randomWorld";
-import { normalizeWorldBrief, worldBriefPath } from "../../engine/worldbuilder/worldBrief";
-import type { WorldBuildStep } from "./worldBriefBuild";
+import { normalizeWorldBrief, worldBriefPath, type WorldBuildStep } from "../../engine/worldbuilder/worldBrief";
 import { runWorldBrief, type WorldBriefRunResult } from "./worldBriefRun";
 
 export interface RandomWorldRunOptions {
@@ -19,7 +18,7 @@ export interface RandomWorldRunOptions {
   out: string;
   world: Omit<RandomWorldOptions, "id" | "name"> & { name?: string };
   force?: boolean;
-  onProgress?: (step: WorldBuildStep) => void;
+  onProgress?: ((step: WorldBuildStep) => void) | undefined;
 }
 
 export interface RandomWorldRunResult extends WorldBriefRunResult {
@@ -37,14 +36,21 @@ export async function runRandomWorld(options: RandomWorldRunOptions): Promise<Ra
   if (issues.length) throw new Error(`random world brief is invalid:\n  ${issues.join("\n  ")}`);
   const briefPath = worldBriefPath(level);
   const absolute = resolve(options.root, briefPath);
-  const existing = await readFile(absolute).then(() => true, () => false);
-  if (existing && !options.force) throw new Error(`${briefPath} exists; rerun with --force to replace it and its level.`);
+  const previous = await readFile(absolute).then((bytes) => bytes, () => null);
+  if (previous && !options.force) throw new Error(`${briefPath} exists; rerun with --force to replace it and its level.`);
   await mkdir(dirname(absolute), { recursive: true });
   await writeFile(absolute, `${JSON.stringify(brief, null, 2)}\n`);
   const partition = options.world.size === "large" ? { ...structuredClone(DEFAULT_WORLD_PARTITION), enabled: true } : undefined;
-  // The size decides partitioning, also for a level this replaces.
-  const result = await runWorldBrief({
-    root: options.root, brief: briefPath, out: level, force: options.force, partition, replacePartition: true, onProgress: options.onProgress,
-  });
+  let result: WorldBriefRunResult;
+  try {
+    // The size decides partitioning, also for a level this replaces.
+    result = await runWorldBrief({
+      root: options.root, brief: briefPath, out: level, force: options.force, partition, replacePartition: true, onProgress: options.onProgress,
+    });
+  } catch (error) {
+    // A failed build leaves no brief of its own behind: the one it replaced comes back, a new one goes.
+    await (previous ? writeFile(absolute, previous) : unlink(absolute)).catch(() => undefined);
+    throw error;
+  }
   return { ...result, brief: briefPath, notes };
 }

@@ -11,6 +11,8 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { normalizeRegionProfile, regionProfileAssetIds } from "../../engine/worldbuilder/regionProfile";
 import { normalizeGroundCover } from "../../engine/worldbuilder/groundCover";
 import { normalizeWorldBrief, worldBriefLevelPath } from "../../engine/worldbuilder/worldBrief";
+import { meshPaintDataPath } from "../../engine/scene/meshPaint";
+import { levelTerrainDir } from "../../engine/terrain/terrainTypes";
 import { buildImportedAssetRecord } from "../saveValidator";
 import type { WorldBuildStep } from "../../engine/worldbuilder/worldBrief";
 import { buildWorldFromBrief, levelCellDirs, type WorldBriefBuild } from "./worldBriefBuild";
@@ -105,7 +107,8 @@ export async function runWorldBrief(options: WorldBriefRunOptions): Promise<Worl
 
   const levelAbs = within(root, level);
   let partition: unknown = options.partition;
-  if (await exists(levelAbs)) {
+  const replacing = await exists(levelAbs);
+  if (replacing) {
     if (!options.force) throw new Error(`${level} exists; it may hold editor changes. Rerun with --force to rebuild it from the brief.`);
     const current = await readJson(root, level, "existing level") as { worldSettings?: { partition?: unknown } };
     if (!options.replacePartition) partition = current.worldSettings?.partition;
@@ -152,6 +155,12 @@ export async function runWorldBrief(options: WorldBriefRunOptions): Promise<Worl
   };
   const dirs = levelCellDirs(level);
   const isCell = (path: string): boolean => path.startsWith(`${dirs.main}/`);
+  // A replaced level's own terrains and mesh paint go with it: the new level names none of them,
+  // and paint keyed by the old placement ids would land on nothing.
+  if (replacing) {
+    await rm(within(root, levelTerrainDir(level)), { recursive: true, force: true });
+    await rm(within(root, meshPaintDataPath(level)), { force: true });
+  }
   // Terrain first (its tile directory starts empty), then the editor's order: cells, level, cleanup.
   await rm(within(root, build.tilesDir), { recursive: true, force: true });
   const rank = (path: string): number => (isCell(path) ? 0 : path === level ? 2 : 1);

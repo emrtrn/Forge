@@ -4279,8 +4279,8 @@ export class EditorUi {
   /**
    * Add Actor → Terrain → World Builder…: the non-modal World Builder window
    * (RANDOM_WORLD_PLAN step 5): a few choices, a bird's-eye preview and Create,
-   * which builds a random world on the dev server and opens it. Built on first
-   * use; opening it again keeps it where it is.
+   * which builds a random world into the open level on the dev server and
+   * reloads it. Built on first use; opening it again keeps it where it is.
    */
   private openWorldBuilderWindow(): void {
     this.worldBuilderWindow ??= new ForgeWindow({
@@ -4294,6 +4294,7 @@ export class EditorUi {
     const frame = this.worldBuilderWindow;
     this.worldBuilderPanel ??= new RandomWorldPanel({
       frame,
+      levelPath: () => this.projectInfo?.manifest.editor.defaultScene ?? null,
       hasUnsavedChanges: () => this.app.getHistoryState().canUndo,
       openLevel: async (path) => {
         await openProjectLevel(path);

@@ -127,3 +127,37 @@ export async function registerWorldBriefMissingAssetTests(checkAsync: AsyncCheck
     }
   });
 }
+
+/** Building into an existing level replaces it whole: its own terrains and mesh paint go too (`runWorldBrief`). */
+export async function registerRandomWorldReplaceTests(checkAsync: AsyncCheck): Promise<void> {
+  await checkAsync("random world run: building into an existing level removes its old terrains and mesh paint", async () => {
+    const { mkdtemp, mkdir, readFile, rm, writeFile, access, copyFile } = await import("node:fs/promises");
+    const { join, dirname } = await import("node:path");
+    const { tmpdir } = await import("node:os");
+    const { DEFAULT_REGION_PROFILE } = await import("../../engine/worldbuilder/randomWorld");
+    const { runRandomWorld } = await import("../../tools/world/randomWorldRun");
+    const root = await mkdtemp(join(tmpdir(), "forge-random-replace-"));
+    try {
+      for (const file of ["project.3dgame.json", "assets/manifest.json", DEFAULT_REGION_PROFILE]) {
+        await mkdir(dirname(join(root, file)), { recursive: true });
+        await copyFile(join("public", file), join(root, file));
+      }
+      // A hand-made level with a terrain of its own and mesh paint, then a world built into it.
+      const level = "assets/Levels/Mine.level.json";
+      await mkdir(join(root, "assets/Levels/Mine.landscapes"), { recursive: true });
+      await writeFile(join(root, level), JSON.stringify({ schema: 1, name: "Mine", instances: [] }));
+      await writeFile(join(root, "assets/Levels/Mine.landscapes/landscape-1.terrain.json"), "{}");
+      await writeFile(join(root, "assets/Levels/Mine.meshpaint.json"), "{}");
+      const world = { seed: 9, size: "small", landform: "plain", mountainHeight: "low", settlements: [{ type: "hamlet" }], roads: "between" } as const;
+      const result = await runRandomWorld({ root, out: level, force: true, world: { ...world, settlements: [...world.settlements] } });
+      assert.equal(result.level, level);
+      await assert.rejects(access(join(root, "assets/Levels/Mine.landscapes/landscape-1.terrain.json")));
+      await assert.rejects(access(join(root, "assets/Levels/Mine.meshpaint.json")));
+      const built = JSON.parse(await readFile(join(root, level), "utf8")) as { landscapes?: Array<{ dataRef: string }> };
+      assert.equal(built.landscapes?.length, 1);
+      await access(join(root, built.landscapes![0]!.dataRef));
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}

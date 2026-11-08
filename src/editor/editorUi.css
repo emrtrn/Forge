@@ -928,11 +928,12 @@
 .random-world-error { color: var(--forge-error-text); font-size: 12px; }
 .random-world-notes { margin: 0; padding-left: 16px; color: var(--forge-warning-text); font-size: 11px; }
 .random-world-create { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--forge-border-mid); }
+.random-world-target { color: var(--forge-text-secondary); font-size: 12px; }
 .random-world-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
 .editor-shell .random-world-actions > .forge-btn-primary { min-width: 96px; border-color: transparent; background: var(--forge-accent); color: var(--forge-accent-text); font-weight: 600; }
 .editor-shell .random-world-actions > .forge-btn-primary:hover:not(:disabled) { background: var(--forge-accent-hover); }
 .editor-shell .random-world-actions > .forge-btn-primary:disabled { opacity: 0.5; cursor: default; }
-.random-world-path { flex: 1; min-width: 0; overflow: hidden; color: var(--forge-text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.random-world-path { flex: 1; min-width: 0; overflow: hidden; color: var(--forge-text); font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
 .random-world-progress { display: flex; align-items: center; gap: 8px; color: var(--forge-text-secondary); font-size: 12px; }
 .random-world-progress[hidden] { display: none; }
 .random-world-progress progress { flex: 0 0 160px; height: 8px; }

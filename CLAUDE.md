@@ -179,14 +179,18 @@ engine/editor.
   `worldBuilderWindow.ts`): size, landform, settlements, roads, water, cover,
   densities and seed, with a bird's-eye preview drawn in a worker by the
   builder's own generator (`engine/worldbuilder/randomWorldPreview.ts`).
-  Create posts to `/__world-random` (`tools/world/randomWorldEndpoint.ts`;
-  request allowlist `validateRandomWorldRequest` in `randomWorldRequest.ts`:
-  only the generator's own choices, a `.level.json` under `assets/`), which
-  answers 409 for an existing level unless `force`, runs
+  The world is built into the level the window was opened in (it must be a
+  `.level.json` under `assets/`; otherwise Create is off and the window says
+  why) and replaces everything in it, so Create asks first. It posts to
+  `/__world-random` (`tools/world/randomWorldEndpoint.ts`; request allowlist
+  `validateRandomWorldRequest` in `randomWorldRequest.ts`: only the
+  generator's own choices, a `.level.json` under `assets/`) with `force`; the
+  endpoint answers 409 for an existing level without it, runs
   `build-random-world.mjs --request` in a child process (a large world is
   ~1–2 min of CPU) and streams one JSON line per build step
-  (`WORLD_BUILD_STEPS`), then `done`/`error`; the window then opens the level
-  (as Open Level) with a bird's-eye camera pose. New window choices go in the
+  (`WORLD_BUILD_STEPS`), then `done`/`error`; the editor then reloads the level
+  with a bird's-eye camera pose. Rebuilding a level removes its old
+  `<Level>.landscapes/` and `<Level>.meshpaint.json` (`runWorldBrief`). New window choices go in the
   request allowlist and `randomWorldBrief` together. The builder
   (`tools/world/worldBriefBuild.ts`, also `npm run world:brief` /
   `world:random`) writes `<Level>.worldrecipe.json` beside the level; nothing

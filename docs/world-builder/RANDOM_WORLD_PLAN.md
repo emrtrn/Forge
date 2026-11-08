@@ -89,9 +89,11 @@ Plan modu (Derekavak, sabit koordinatlı özet) aynı kurucunun üstüne sonra d
   noktalar ve mevsim henüz yok. Kuşbakışı önizleme kurucunun kendi üreticisini bir worker'da
   çalıştırır (`engine/worldbuilder/randomWorldPreview.ts`, seçim başına ~0,3–0,6 s): dağlar,
   boya, su ve köy yerleri kurulacak sahneyle aynı yerde; yollar düz çizgi, sokak/yapı/ağaç yok.
-  **Create** level'ı `public/assets` altına `/__world-random` ile kurar (yalnız geliştirme
-  sunucusu, ayrı Node süreci, adım adım ilerleme; var olan level'ın üstüne yazmadan önce sorar;
-  hata pencerede görünür), bitince level kuşbakışı kamerayla açılır. Kurucu düzeltmeleri: büyük
+  **Create** dünyayı pencerenin açıldığı level'a kurar (kullanıcı kararı, 8 Kasım: her level
+  kendi dünyasını alır; level `public/assets` altında olmalı, değilse Create kapalı ve pencere
+  nedenini söyler). Level'daki her şeyin yerini aldığı için önce sorar; `/__world-random`
+  (yalnız geliştirme sunucusu, ayrı Node süreci, adım adım ilerleme, hata pencerede görünür),
+  bitince level kuşbakışı kamerayla yeniden yüklenir; eski arazi klasörü ve mesh boyası silinir. Kurucu düzeltmeleri: büyük
   dünyada uzun yol / dağınık kasabalar "Terrain edit region is too large" ile duruyordu (yol ve
   ped işleme artık parça parça, çıktı bayt bayt aynı); başarısız kurulum özet dosyası bırakmıyor.
   Eski World Builder penceresi kalktı: panel, oturum, plan düzenleme, sahne katmanları,

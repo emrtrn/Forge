@@ -1,12 +1,13 @@
 /**
  * World Builder window (RANDOM_WORLD_PLAN step 5): a few choices, a bird's-eye
- * preview that follows them, and Create, which builds the level on the dev
- * server (`/__world-random`) and opens it.
+ * preview that follows them, and Create, which builds the world into the level
+ * the window was opened in (on the dev server, `/__world-random`) and reloads
+ * it. The world replaces everything in that level, so Create asks first.
  *
  * The preview runs the builder's own generator in a worker
  * (`engine/worldbuilder/workers/randomWorldPreviewWorker.ts`), so mountains,
  * settlements and water sit where the built level will have them; roads are
- * drawn as straight lines. The choices, folder and name are a per-viewer
+ * drawn as straight lines. The choices are a per-viewer
  * convenience kept in browser storage, never in project data.
  */
 import {
@@ -55,13 +56,13 @@ export interface RandomWorldChoices {
 
 interface StoredState {
   choices: RandomWorldChoices;
-  folder: string;
-  name: string;
 }
 
 export interface RandomWorldPanelOptions {
   frame: ForgeWindow;
-  /** True when the open level has edits a newly opened level would discard. */
+  /** The open level (public-root-relative); the world is built into it. Null before a level loads. */
+  levelPath: () => string | null;
+  /** True when the open level has edits the rebuild would discard. */
   hasUnsavedChanges: () => boolean;
   /** Makes `path` the open level and reloads the editor. */
   openLevel: (path: string) => Promise<void>;
@@ -112,7 +113,7 @@ export function defaultRandomWorldChoices(seed = newSeed()): RandomWorldChoices 
 
 /** Stored choices, each field checked; anything unusable falls back to the default. */
 function readStored(): StoredState {
-  const fallback: StoredState = { choices: defaultRandomWorldChoices(), folder: "assets/Worlds", name: "RandomWorld" };
+  const fallback: StoredState = { choices: defaultRandomWorldChoices() };
   let raw: unknown = null;
   try {
     raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null");
@@ -141,11 +142,7 @@ function readStored(): StoredState {
   for (const key of ["forest", "rocks", "fields"] as const) {
     choices.densities[key] = pick(given.densities?.[key], COVER_DENSITY_LEVELS, choices.densities[key]);
   }
-  return {
-    choices,
-    folder: typeof stored.folder === "string" ? stored.folder : fallback.folder,
-    name: typeof stored.name === "string" ? stored.name : fallback.name,
-  };
+  return { choices };
 }
 
 function escapeHtml(value: string): string {
@@ -175,8 +172,6 @@ const TIPS = {
   rocks: "Kaya sayısı.",
   fields: "Köy çevresindeki tarlaların ne kadar uzağa uzandığı (tarla olan örtülerde).",
   seed: "Aynı seçimler ve aynı tohum aynı dünyayı verir. Roll Dice başka bir dünya seçer.",
-  folder: "Level'ın yazılacağı klasör; public/assets altında olmalı (ör. assets/Worlds).",
-  name: "Level adı: harf, rakam, boşluk, _ . - kullanılabilir.",
 } as const;
 
 /** What the window says while each build step runs. */
@@ -189,6 +184,23 @@ export const BUILD_STEP_LABELS: Record<(typeof WORLD_BUILD_STEPS)[number], strin
   placements: "Kayalar, bitkiler ve su yerleştiriliyor…",
   files: "Dosyalar yazılıyor…",
 };
+
+/**
+ * Why the world cannot be built into `path` (the open level), or null when it
+ * can: generated levels live under `public/assets` with plain folder and file
+ * names (the endpoint's rule, `validateRandomWorldLevelPath`).
+ */
+export function randomWorldTargetProblem(path: string | null): string | null {
+  if (!path) return "Açık level yok.";
+  const parts = path.replace(/\\/g, "/").split("/");
+  if (parts[0] !== "assets" || parts.length < 2 || !/\.level\.json$/i.test(path)) {
+    return "Bu level public/assets altında değil; World Builder yalnız assets altındaki level'lara kurar. Content Browser'da assets altında yeni bir level oluşturup onu açın.";
+  }
+  if (parts.some((part) => !/^[A-Za-z0-9][A-Za-z0-9 _.-]*$/.test(part) || part.endsWith(".") || part.endsWith(" "))) {
+    return "Level'ın klasör ya da dosya adında kullanılamayan bir karakter var (yalnız harf, rakam, boşluk, _ . -). Level'ı yeniden adlandırın.";
+  }
+  return null;
+}
 
 function segmented<T extends string>(name: string, values: readonly T[], labels: Record<T, string>): string {
   return `<div class="forge-segmented random-world-segmented" role="group" aria-label="${name}" data-choice="${name}">${values
@@ -273,16 +285,16 @@ export class RandomWorldPanel {
           <div class="random-world-error" data-preview-error role="alert" hidden></div>
         </div>
         <div class="random-world-create">
-          <label class="detail-row"><span title="${escapeHtml(TIPS.folder)}">Folder</span><input type="text" data-folder aria-label="Folder" spellcheck="false"></label>
-          <label class="detail-row"><span title="${escapeHtml(TIPS.name)}">Name</span><input type="text" data-name aria-label="Name" spellcheck="false"></label>
+          <div class="random-world-target">Dünya açık level'a kurulur ve içindeki her şeyin yerini alır:</div>
           <div class="random-world-actions">
-            <span class="random-world-path" data-level-path></span>
+            <span class="random-world-path" data-level-path data-testid="random-world-level"></span>
             <button type="button" class="forge-btn-primary" data-create data-testid="random-world-create">Create</button>
           </div>
           <div class="random-world-progress" data-progress data-testid="random-world-progress" hidden>
             <progress max="1" value="0"></progress>
             <span data-progress-label></span>
           </div>
+          <div class="random-world-error" data-target-problem data-testid="random-world-target-problem" hidden></div>
           <div class="random-world-error" data-create-error data-testid="random-world-error" role="alert" hidden></div>
         </div>
       </div>`;
@@ -351,13 +363,6 @@ export class RandomWorldPanel {
         seed.value = String(this.state.choices.seed);
       }
     });
-    for (const key of ["folder", "name"] as const) {
-      this.element<HTMLInputElement>(`[data-${key}]`).addEventListener("input", (event) => {
-        this.state[key] = (event.target as HTMLInputElement).value;
-        this.store();
-        this.syncPath();
-      });
-    }
   }
 
   /** A choice changed: store it, redraw the controls (unless an input is being typed in) and the preview. */
@@ -399,8 +404,6 @@ export class RandomWorldPanel {
     }
     this.element<HTMLSelectElement>("[data-cover]").value = choices.cover;
     this.element<HTMLInputElement>("[data-seed]").value = String(choices.seed);
-    this.element<HTMLInputElement>("[data-folder]").value = this.state.folder;
-    this.element<HTMLInputElement>("[data-name]").value = this.state.name;
     this.element<HTMLElement>("[data-settlement-list]").innerHTML = choices.settlements
       .map((type, index) => `<span class="random-world-chip" data-testid="random-world-settlement">${LABELS.settlement[type]}<button type="button" data-remove-settlement="${index}" aria-label="Remove ${LABELS.settlement[type]}" title="Yerleşimi çıkar">×</button></span>`)
       .join("");
@@ -414,15 +417,20 @@ export class RandomWorldPanel {
     for (const button of this.root.querySelectorAll<HTMLButtonElement>("[data-remove-settlement]")) button.disabled = count <= 1;
   }
 
-  /** The level path Create writes: `<folder>/<name>.level.json`. */
-  levelPath(): string {
-    const folder = this.state.folder.trim().replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-    const name = this.state.name.trim().replace(/\.level\.json$/i, "");
-    return `${folder}/${name}.level.json`;
+  /** The level Create builds into: the open one. */
+  levelPath(): string | null {
+    const path = this.options.levelPath();
+    return path ? path.replace(/\\/g, "/").replace(/^\/+/, "") : null;
   }
 
   private syncPath(): void {
-    this.element<HTMLElement>("[data-level-path]").textContent = this.levelPath();
+    const path = this.levelPath();
+    const problem = randomWorldTargetProblem(path);
+    this.element<HTMLElement>("[data-level-path]").textContent = path ?? "—";
+    const box = this.element<HTMLElement>("[data-target-problem]");
+    box.hidden = problem === null;
+    box.textContent = problem ?? "";
+    this.element<HTMLButtonElement>("[data-create]").disabled = this.building || problem !== null;
   }
 
   private generatorOptions(): RandomWorldOptions {
@@ -612,9 +620,14 @@ export class RandomWorldPanel {
 
   private async create(): Promise<void> {
     if (this.building) return;
-    const confirm = this.options.confirm ?? ((message: string) => window.confirm(message));
-    if (this.options.hasUnsavedChanges() && !confirm("Açık level'da kaydedilmemiş değişiklikler var. Yeni dünya açılınca bunlar kaybolacak. Devam edilsin mi?")) return;
     const out = this.levelPath();
+    if (!out || randomWorldTargetProblem(out) !== null) return;
+    const confirm = this.options.confirm ?? ((message: string) => window.confirm(message));
+    const unsaved = this.options.hasUnsavedChanges() ? " Kaydedilmemiş değişiklikler de kaybolur." : "";
+    if (!confirm(`Yeni dünya "${out}" level'ına kurulacak ve level'daki mevcut her şeyin (arazi, nesneler, elle yapılan değişiklikler) yerini alacak.${unsaved} Devam edilsin mi?`)) {
+      this.root.dataset.createState = "cancelled";
+      return;
+    }
     const { choices } = this.state;
     const world = {
       seed: choices.seed, size: choices.size, landform: choices.landform, mountainHeight: choices.mountainHeight,
@@ -627,17 +640,8 @@ export class RandomWorldPanel {
     this.showCreateError(null);
     this.setProgress(0, "Kurucu başlatılıyor…");
     try {
-      let response = await fetch("/__world-random", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ out, world }) });
-      if (response.status === 409) {
-        const answer = (await response.json().catch(() => null)) as { exists?: boolean; paths?: string[]; error?: string } | null;
-        if (!answer?.exists) throw new Error(answer?.error ?? "the server refused the build");
-        if (!confirm(`${(answer.paths ?? [out]).join(" ve ")} zaten var. Üstüne yazılsın mı? Bu level'da yapılmış elle değişiklikler kaybolur.`)) {
-          this.element<HTMLElement>("[data-progress]").hidden = true;
-          this.root.dataset.createState = "cancelled";
-          return;
-        }
-        response = await fetch("/__world-random", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ out, world, force: true }) });
-      }
+      // The open level exists: the confirmation above is the permission to replace it.
+      const response = await fetch("/__world-random", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ out, world, force: true }) });
       if (!response.ok || !response.body) {
         const answer = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(answer?.error ?? `${response.status} ${response.statusText}`);
@@ -654,7 +658,7 @@ export class RandomWorldPanel {
       this.showCreateError(`Dünya kurulamadı: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       this.building = false;
-      this.element<HTMLButtonElement>("[data-create]").disabled = false;
+      this.syncPath();
     }
   }
 

@@ -269,6 +269,8 @@ export interface WorldBrief {
   terrain: BriefTerrain;
   /** Public-root-relative `*.regionprofile.json`. */
   regionProfile?: string;
+  /** Ground cover (`groundCover.ts`); without one the pilot's paint and plants are used. */
+  cover?: BriefCover;
   /** Public-root-relative image covering `area`. */
   reference?: { image: string; view: ReferenceView };
   playerStart?: BriefPoint;
@@ -283,13 +285,25 @@ export interface WorldBrief {
   models: BriefModel[];
 }
 
+/** Density levels of a ground cover (`groundCover.ts`). */
+export const COVER_DENSITY_LEVELS = ["low", "medium", "high"] as const;
+export type CoverDensityLevel = (typeof COVER_DENSITY_LEVELS)[number];
+
+export interface BriefCover {
+  /** Public-root-relative `*.cover.json`. */
+  file: string;
+  forest?: CoverDensityLevel;
+  rocks?: CoverDensityLevel;
+  fields?: CoverDensityLevel;
+}
+
 export interface WorldBriefNormalization {
   brief: WorldBrief | null;
   issues: string[];
 }
 
 const TOP_LEVEL_FIELDS = new Set([
-  "schema", "type", "id", "name", "seed", "frame", "area", "terrain", "regionProfile", "reference", "playerStart",
+  "schema", "type", "id", "name", "seed", "frame", "area", "terrain", "regionProfile", "cover", "reference", "playerStart",
   "valleys", "regions", "water", "roads", "landmarks", "settlements", "props", "environment", "models",
 ]);
 
@@ -528,6 +542,19 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
   const terrain = normalizeTerrain(ctx, value.terrain);
   const regionProfile = optional(value.regionProfile, () =>
     normalizeAssetPath(value.regionProfile, ".regionprofile.json") ?? reject(ctx, "regionProfile", "must be a public-root-relative *.regionprofile.json"));
+  const cover = optional(value.cover, (): BriefCover | null => {
+    if (!isRecord(value.cover)) return reject(ctx, "cover", "must be an object");
+    for (const key of Object.keys(value.cover)) if (!["file", "forest", "rocks", "fields"].includes(key)) issue(ctx, `cover.${key}`, "is not a cover field");
+    const file = normalizeAssetPath(value.cover.file, ".cover.json") ?? reject(ctx, "cover.file", "must be a public-root-relative *.cover.json");
+    const levels: Partial<Record<"forest" | "rocks" | "fields", CoverDensityLevel>> = {};
+    for (const key of ["forest", "rocks", "fields"] as const) {
+      const level = value.cover[key];
+      if (level === undefined) continue;
+      if (isOneOf(COVER_DENSITY_LEVELS, level)) levels[key] = level;
+      else issue(ctx, `cover.${key}`, `must be one of ${COVER_DENSITY_LEVELS.join(", ")}`);
+    }
+    return file === null ? null : { file, ...levels };
+  });
   const reference = optional(value.reference, () => {
     if (!isRecord(value.reference)) return reject(ctx, "reference", "must be an object");
     const image = normalizeAssetPath(value.reference.image, null) ?? reject(ctx, "reference.image", "must be a public-root-relative path");
@@ -649,7 +676,7 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
   return {
     brief: {
       schema: WORLD_BRIEF_SCHEMA_VERSION, type: "worldBrief", id, ...(name ? { name } : {}), seed, frame, area, terrain,
-      ...(regionProfile ? { regionProfile } : {}), ...(reference ? { reference } : {}), ...(playerStart ? { playerStart } : {}),
+      ...(regionProfile ? { regionProfile } : {}), ...(cover ? { cover } : {}), ...(reference ? { reference } : {}), ...(playerStart ? { playerStart } : {}),
       valleys, regions, water, roads: { nodes, edges }, landmarks, settlements, props,
       ...(environment ? { environment } : {}), models,
     },

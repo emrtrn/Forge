@@ -1,0 +1,122 @@
+{
+  "schema": 1,
+  "type": "groundCover",
+  "id": "steppe",
+  "name": "Steppe",
+  "layers": [
+    {
+      "id": "steppe",
+      "name": "Steppe Grass",
+      "color": "#b3a266",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "forest",
+      "name": "Forest Floor",
+      "color": "#3f4f2c",
+      "material": "starter-mat-grass",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "color": "#8b8a84",
+      "material": "lt-rock",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "color": "#8a6441",
+      "material": "lt-earth",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "riverbed",
+      "name": "River Bed",
+      "color": "#6f6a5c",
+      "material": "m-gravel-material",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "asphalt",
+      "name": "Asphalt",
+      "color": "#3d3d3f",
+      "physicalMaterial": "stone"
+    },
+    {
+      "id": "meadow",
+      "name": "Meadow",
+      "color": "#6f9a4a",
+      "material": "lt-meadow",
+      "physicalMaterial": "default"
+    }
+  ],
+  "roles": {
+    "open": "steppe",
+    "forest": "forest",
+    "rock": "rock",
+    "bed": "riverbed",
+    "pad": "dirt",
+    "road": "asphalt",
+    "waterside": "meadow"
+  },
+  "rock": {
+    "slope": [
+      26,
+      38
+    ]
+  },
+  "forest": {
+    "from": [
+      50,
+      170
+    ],
+    "share": 0,
+    "patch": 300
+  },
+  "waterside": {
+    "width": 25,
+    "trees": 0.6
+  },
+  "plants": [
+    {
+      "id": "steppe-grass",
+      "layer": "steppe",
+      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "density": 0.006,
+      "minWeight": 0.5,
+      "seed": 401
+    },
+    {
+      "id": "steppe-bush",
+      "layer": "steppe",
+      "foliageType": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "density": 0.0006,
+      "minWeight": 0.55,
+      "seed": 402
+    },
+    {
+      "id": "riverside-tree",
+      "layer": "forest",
+      "foliageType": "assets/world-builder/foliage/wb-broadleaf.foliagetype.json",
+      "density": 0.003,
+      "minWeight": 0.45,
+      "seed": 403
+    },
+    {
+      "id": "riverside-grass",
+      "layer": "meadow",
+      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "density": 0.02,
+      "minWeight": 0.5,
+      "seed": 404
+    }
+  ],
+  "rocks": {
+    "high": 120,
+    "slopes": 40,
+    "water": 12,
+    "outcrops": 70
+  }
+}

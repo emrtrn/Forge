@@ -14,7 +14,7 @@
  * Pure and deterministic; dependency-free. Placement on the ground is the
  * builder's: this module only lays out where things go.
  */
-import { DEFAULT_RELIEF_CLEAR, type BriefModel, type BriefRelief } from "./worldBrief";
+import { DEFAULT_RELIEF_CLEAR, type BriefModel, type BriefRelief, type CoverDensityLevel } from "./worldBrief";
 import type { RoadClass } from "./vocabulary";
 import { randomWater } from "./randomWater";
 
@@ -47,6 +47,17 @@ const VALLEY_SIDE_DEG = 12;
 export const ROAD_NETWORKS = ["between", "exits"] as const;
 export type RoadNetwork = (typeof ROAD_NETWORKS)[number];
 
+/** Ground covers Forge ships (`groundCover.ts`), by name. */
+export const COVERS = {
+  forest: "assets/world-builder/covers/forest.cover.json",
+  meadow: "assets/world-builder/covers/meadow.cover.json",
+  farmland: "assets/world-builder/covers/farmland.cover.json",
+  steppe: "assets/world-builder/covers/steppe.cover.json",
+  desert: "assets/world-builder/covers/desert.cover.json",
+  alpine: "assets/world-builder/covers/alpine.cover.json",
+} as const;
+export type CoverName = keyof typeof COVERS;
+
 /** Region profile a random world uses unless told otherwise (Forge's pilot profile). */
 export const DEFAULT_REGION_PROFILE = "assets/world-pilot/Levels/WbPilotValley.regionprofile.json";
 
@@ -74,6 +85,10 @@ export interface RandomWorldOptions {
   mountainHeight: MountainHeight;
   settlements: RandomSettlement[];
   roads: RoadNetwork;
+  /** Ground cover; without one the brief names none and the pilot's paint is used (the same look as `forest`). */
+  cover?: CoverName;
+  /** Forest, rock and field density of the cover; medium by default. */
+  densities?: Partial<Record<"forest" | "rocks" | "fields", CoverDensityLevel>>;
   /** Rivers and lakes, 0–3 each (`randomWater.ts`); none by default. */
   rivers?: number;
   lakes?: number;
@@ -266,6 +281,12 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
       relief,
     },
     regionProfile: options.regionProfile ?? DEFAULT_REGION_PROFILE,
+    ...(options.cover ? {
+      cover: {
+        file: COVERS[options.cover],
+        ...Object.fromEntries(Object.entries(options.densities ?? {}).filter(([, level]) => level && level !== "medium")),
+      },
+    } : {}),
     valleys: options.landform === "valley" ? [{
       id: "valley",
       axis: "northSouth",

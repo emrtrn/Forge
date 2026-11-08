@@ -33,6 +33,7 @@ Genişlik, derinlik ve ölçüler düz metredir; dönüşüm görmez.
 | `frame`, `area` | Koordinat çerçevesi; dünya sınırı `west/east/south/north` |
 | `terrain` | Landscape id ve adı, `tileQuads` (64/128/256), `spacing`, `heightRange`; tile sayısı alandan hesaplanır, arazi alanın ortasına oturur. İsteğe bağlı `relief`: tüm alana `hills` (`height`, `wavelength`) ve sırtlı `mountains` (`height`, `lift`, `wavelength`, `spurStretch`, `directionDeg` kuzeyden saat yönü); dağlar `clear` bantlarında (`settlements`, `roads`, `water`, `valleyFloors`: `inner` içinde hiç, `falloff` sonra tam) yerleşime, yol çizgisine, suya ve vadi tabanına uğramaz, tepeler orada %35'e iner |
 | `regionProfile`, `reference` | `*.regionprofile.json` yolu; alanı kaplayan referans görseli |
+| `cover` | Örtü (`groundCover.ts`): `file` (`*.cover.json`) ve isteğe bağlı `forest` / `rocks` / `fields` yoğunluğu (`low`/`medium`/`high`, varsayılan `medium`). Yoksa pilotun geçici boyası ve bitkileri kullanılır |
 | `playerStart` | Oyuncu başlangıcı |
 | `valleys` | Kesitlerle vadi: her kesitte `north`, taban `floor` ve kaya çizgisi `rock` (doğu değerleri; kesit aralıkları eşit olmak zorunda değil), kuzeyden güneye `floorProfile` kotları, `sideSlopeDeg`, isteğe bağlı `relief` (`slopeFoot`, `spurs`, `ridges`, `noise` metre; eksik anahtar varsayılanı alır: 18 / 26 / 16 / 10), `ridgeElevation`, iki yamacın örtüsü `slopeCover`. Bilinmeyen vadi ve rölyef alanı reddedilir |
 | `regions` | Ek bölgeler (rol + çokgen) |
@@ -105,6 +106,12 @@ bağımlılıksız):
 - `ridgeElevation` kullanılmaz: "not built yet" listesindedir.
 - Editör aşamaları araziye yazmaz (karar 19); bu adımları bugün yalnız `world:brief`
   çalıştırır, editörde arazi aşaması sonraki dilimdir.
+
+**Örtü** (`engine/worldbuilder/groundCover.ts`, `cover` verilince): boya katmanları,
+boyanın nereye gideceği (yatak, kar, kaya, tarla, orman, su kenarı, açık zemin), bitki kuralları
+ve kaya sayıları örtü dosyasından gelir. Forge altı örtü taşır
+(`public/assets/world-builder/covers/`: forest, meadow, farmland, steppe, desert, alpine);
+`forest` örtüsü aşağıdaki geçici adımlarla bayt bayt aynı sahneyi verir.
 
 **Geçici adımlar** (`tools/world/worldBriefTemporarySteps.ts`): boya, bitki kuralları,
 kaya saçılımı ve kulübe çiti. Her özeti okurlar ama sayıları (boya katmanları, bitki

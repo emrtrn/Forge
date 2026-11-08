@@ -74,12 +74,23 @@ import {
   validateSaveWorldRecipePayload,
 } from "../saveValidator";
 import { createBriefTerrain, type BriefTerrain, type WaterLake } from "../../engine/worldbuilder/briefTerrain";
+import {
+  coverDensity,
+  coverPaint,
+  coverPlantRules,
+  coverRockCounts,
+  coverSnowLine,
+  type CoverDensities,
+  type GroundCover,
+} from "../../engine/worldbuilder/groundCover";
 import { lakeBedDistance } from "../../engine/scene/lakeBed";
 import { createLakeAppearance, LAKE_LIMITS } from "../../engine/scene/waterBody";
 import {
   paintWeights,
   plantRules,
   PILOT_TUNING,
+  briefClearings,
+  scatterOutcrops,
   scatterRocks,
   waterSpline,
   yardFences,
@@ -115,6 +126,8 @@ export interface WorldBriefBuildInput {
   profile: RegionProfile | null;
   /** Manifest asset id of a public-root-relative model file, or null when it is not registered. */
   assetIdForFile: (file: string) => string | null;
+  /** The brief's ground cover, loaded; null (or absent) when it names none: the pilot's paint and plants. */
+  cover?: GroundCover | null;
   /** `worldSettings.partition` of the level being replaced, kept as it is; undefined for a new level. */
   partition?: unknown;
 }
@@ -202,8 +215,8 @@ function writeWeights(tile: TerrainTileData, index: number, weights: number[]): 
  * (inside the pad, easing out beyond it), blended over the paint already there.
  * Plants grow from the paint, so none stands in a building or its yard.
  */
-function paintPads(def: WorldTerrainDef, tiles: ReadonlyMap<string, TerrainTileData>, pads: readonly TerrainPad[]): void {
-  const { layerId, fade } = PILOT_TUNING.padPaint;
+function paintPads(def: WorldTerrainDef, tiles: ReadonlyMap<string, TerrainTileData>, pads: readonly TerrainPad[], layerId: string): void {
+  const { fade } = PILOT_TUNING.padPaint;
   const layer = def.layers.findIndex((entry) => entry.id === layerId);
   if (layer < 0) return;
   const quads = def.tileQuads;
@@ -231,7 +244,7 @@ function paintPads(def: WorldTerrainDef, tiles: ReadonlyMap<string, TerrainTileD
 
 /** Texels per axis the shore foam mask may use, with a margin under its 1024 limit. */
 const FOAM_TEXELS = 1000;
-/** Paint layer under a lake and along its shore. */
+/** Paint layer under a lake and along its shore without a ground cover. */
 const LAKE_SHORE_LAYER = "riverbed";
 
 /**
@@ -239,7 +252,7 @@ const LAKE_SHORE_LAYER = "riverbed";
  * with the bed recipe the editor's Lake bed tool would carve, so the user can
  * reshape it there. Null (with a reason) when it is too big for one Lake.
  */
-function lakeActor(lake: WaterLake, def: WorldTerrainDef, terrainId: string): { actor: Record<string, unknown> } | { problem: string } {
+function lakeActor(lake: WaterLake, def: WorldTerrainDef, terrainId: string, shoreLayer: string): { actor: Record<string, unknown> } | { problem: string } {
   const { spacing, origin } = def;
   const pad = lake.transition + 2 * spacing;
   const snap = (value: number, axis: 0 | 2, up: boolean): number => {
@@ -274,7 +287,7 @@ function lakeActor(lake: WaterLake, def: WorldTerrainDef, terrainId: string): { 
       bed: {
         points: lake.polygon.map(([x, z]) => [savedCoordinate(x), savedCoordinate(z)]),
         smooth: false, smoothness: 0, maxDepth: lake.depth, shoreSlopeDegrees: lake.shoreSlopeDeg, transitionWidth: lake.transition,
-        ...(def.layers.some((layer) => layer.id === LAKE_SHORE_LAYER) ? { shorePaint: { layerId: LAKE_SHORE_LAYER, strength: 1 } } : {}),
+        ...(def.layers.some((layer) => layer.id === shoreLayer) ? { shorePaint: { layerId: shoreLayer, strength: 1 } } : {}),
       },
       appearance: { ...createLakeAppearance(), ...(band > 1 ? { foamWidth: band, shoreWetnessWidth: band } : {}) },
     },
@@ -310,7 +323,11 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   const models = modelResolver(brief.models, input.assetIdForFile);
   const bounds = briefWorldBounds(brief);
   const ground = createBriefTerrain(brief);
-  const weights = paintWeights(brief, ground);
+  const cover = input.cover ?? null;
+  if (brief.cover && !cover) throw new Error(`the brief names ground cover ${brief.cover.file}; load it into the build input`);
+  const densities: CoverDensities = {
+    forest: coverDensity(brief.cover?.forest), rocks: coverDensity(brief.cover?.rocks), fields: coverDensity(brief.cover?.fields),
+  };
   const waterIds = new Set(ground.courses.map((course) => course.id));
 
   // Terrain: tiles cover the area, centred on it.
@@ -328,7 +345,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     def.origin[1],
     def.origin[2] + (bounds.min[1] + bounds.max[1]) / 2,
   ];
-  def.layers = structuredClone(PILOT_TUNING.layers);
+  def.layers = cover ? structuredClone(cover.layers) : structuredClone(PILOT_TUNING.layers);
   const size = terrain.tileQuads + 1;
   const tiles = def.tiles.map(({ key }) => {
     const { x, z } = created.tiles.get(key)!;
@@ -343,6 +360,12 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     return tile;
   });
   // Paint once every height is known: the slope reads the neighbours, across tile edges too.
+  const weights = cover
+    ? coverPaint(cover, brief, ground, densities, {
+      clearings: briefClearings(brief).map(([x, z]) => [x, z, PILOT_TUNING.clearingRadius] as const),
+      snowLine: coverSnowLine(cover, tiles.flatMap((tile) => Array.from(tile.heights.filter((_, k) => k % 7 === 0)))),
+    })
+    : paintWeights(brief, ground);
   const byKey = new Map(tiles.map((tile) => [`${tile.x}_${tile.z}`, tile]));
   const [lastI, lastJ] = [tilesX * terrain.tileQuads, tilesZ * terrain.tileQuads];
   const gridHeight = (gi: number, gj: number): number => {
@@ -357,7 +380,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
         const [gi, gj] = [tile.x * terrain.tileQuads + i, tile.z * terrain.tileQuads + j];
         const slope = Math.atan(Math.hypot(gridHeight(gi + 1, gj) - gridHeight(gi - 1, gj), gridHeight(gi, gj + 1) - gridHeight(gi, gj - 1))
           / (2 * terrain.spacing)) * 180 / Math.PI;
-        writeWeights(tile, j * size + i, weights(def.origin[0] + gi * terrain.spacing, def.origin[2] + gj * terrain.spacing, slope));
+        writeWeights(tile, j * size + i, weights(def.origin[0] + gi * terrain.spacing, def.origin[2] + gj * terrain.spacing, slope, tile.heights[j * size + i]!));
       }
     }
   }
@@ -417,7 +440,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   }));
   if (buildingPads.length) {
     applyTerrainUndoPatches(world, createTerrainPadPatches(world, buildingPads));
-    paintPads(def, world.tiles, buildingPads);
+    paintPads(def, world.tiles, buildingPads, cover ? cover.roles.pad : PILOT_TUNING.padPaint.layerId);
   }
   runStages(WORLD_BRIEF_GROUND_STAGES);
 
@@ -466,7 +489,12 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     const kept = group.placements.filter((placement) => placement.role !== PARCEL_MARKER_ROLE);
     if (kept.length) groups.set(group.assetId, [...(groups.get(group.assetId) ?? []), ...structuredClone(kept)]);
   }
-  const scatter: ScatterPlacement[] = [...yardFences(brief), ...scatterRocks(brief, ground, bounds)];
+  const rockCounts = cover ? coverRockCounts(cover, densities) : null;
+  const scatter: ScatterPlacement[] = [
+    ...yardFences(brief),
+    ...scatterRocks(brief, ground, bounds, rockCounts ?? undefined),
+    ...(cover && rockCounts && rockCounts.outcrops > 0 ? scatterOutcrops(brief, ground, bounds, rockCounts.outcrops, cover.rock.slope[0]) : []),
+  ];
   for (const entry of scatter) {
     const assetId = models.assetId(entry.role, entry.variant, entry.pick);
     if (!assetId) throw new Error(`temporary scatter: no model row for ${entry.role}${entry.variant ? ` (${entry.variant})` : ""}`);
@@ -475,7 +503,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
 
   const waterBodies: Record<string, unknown>[] = [];
   for (const lake of ground.lakes) {
-    const result = lakeActor(lake, def, terrain.id);
+    const result = lakeActor(lake, def, terrain.id, cover ? cover.roles.bed : LAKE_SHORE_LAYER);
     if ("problem" in result) warnings.push(result.problem);
     else waterBodies.push(result.actor);
   }
@@ -522,7 +550,8 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   files.set(levelPath, saved.level);
   const canonicalRecipe = validateSaveWorldRecipePayload({ level: levelPath, recipe }).recipe as unknown as WorldRecipe;
   files.set(worldRecipePath(levelPath), json(canonicalRecipe));
-  const foliageData = normalizeFoliageData({ schema: 1, type: "foliage", groups: [], landscapeRules: plantRules(terrain.id) });
+  const landscapeRules = cover ? coverPlantRules(cover, terrain.id, densities, input.assetIdForFile) : plantRules(terrain.id);
+  const foliageData = normalizeFoliageData({ schema: 1, type: "foliage", groups: [], landscapeRules });
   const partition = normalizeWorldPartitionSettings(input.partition);
   const foliageIndex = partition.enabled ? partitionFoliageData(foliageData, partition.grids.foliage) : null;
   if (foliageIndex && foliageIndex.cells.length) throw new Error("painted foliage cells are not built by world:brief");

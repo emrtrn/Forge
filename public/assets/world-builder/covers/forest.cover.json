@@ -1,0 +1,135 @@
+{
+  "schema": 1,
+  "type": "groundCover",
+  "id": "forest",
+  "name": "Forest",
+  "layers": [
+    {
+      "id": "meadow",
+      "name": "Meadow",
+      "color": "#6f9a4a",
+      "material": "lt-meadow",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "forest",
+      "name": "Forest Floor",
+      "color": "#3f4f2c",
+      "material": "starter-mat-grass",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "color": "#8b8a84",
+      "material": "lt-rock",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "color": "#8a6441",
+      "material": "lt-earth",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "riverbed",
+      "name": "River Bed",
+      "color": "#6f6a5c",
+      "material": "m-gravel-material",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "asphalt",
+      "name": "Asphalt",
+      "color": "#3d3d3f",
+      "physicalMaterial": "stone"
+    }
+  ],
+  "roles": {
+    "open": "meadow",
+    "forest": "forest",
+    "rock": "rock",
+    "bed": "riverbed",
+    "pad": "dirt",
+    "road": "asphalt"
+  },
+  "rock": {
+    "slope": [
+      34,
+      46
+    ]
+  },
+  "forest": {
+    "from": [
+      50,
+      170
+    ],
+    "share": 1,
+    "patch": 300
+  },
+  "plants": [
+    {
+      "id": "forest-conifer-a",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-conifer-a.foliagetype.json",
+      "density": 0.0025,
+      "minWeight": 0.6,
+      "seed": 101
+    },
+    {
+      "id": "forest-conifer-b",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-conifer-b.foliagetype.json",
+      "density": 0.002,
+      "minWeight": 0.45,
+      "seed": 102
+    },
+    {
+      "id": "forest-conifer-c",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-conifer-c.foliagetype.json",
+      "density": 0.0015,
+      "minWeight": 0.35,
+      "seed": 106
+    },
+    {
+      "id": "forest-bush",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "density": 0.0015,
+      "minWeight": 0.5,
+      "seed": 103
+    },
+    {
+      "id": "forest-bush-b",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "density": 0.001,
+      "minWeight": 0.5,
+      "seed": 107
+    },
+    {
+      "id": "meadow-bush",
+      "layer": "meadow",
+      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "density": 0.0006,
+      "minWeight": 0.6,
+      "seed": 104
+    },
+    {
+      "id": "meadow-grass",
+      "layer": "meadow",
+      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "density": 0.02,
+      "minWeight": 0.5,
+      "seed": 105
+    }
+  ],
+  "rocks": {
+    "high": 90,
+    "slopes": 24,
+    "water": 18,
+    "outcrops": 0
+  }
+}

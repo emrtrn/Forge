@@ -9,6 +9,7 @@
 import { mkdir, readdir, readFile, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { normalizeRegionProfile } from "../../engine/worldbuilder/regionProfile";
+import { normalizeGroundCover } from "../../engine/worldbuilder/groundCover";
 import { normalizeWorldBrief, worldBriefLevelPath } from "../../engine/worldbuilder/worldBrief";
 import { buildImportedAssetRecord } from "../saveValidator";
 import { buildWorldFromBrief, levelCellDirs, type WorldBriefBuild } from "./worldBriefBuild";
@@ -113,6 +114,12 @@ export async function runWorldBrief(options: WorldBriefRunOptions): Promise<Worl
     }
     profile = normalized.profile;
   }
+  let cover = null;
+  if (brief.cover) {
+    const normalized = normalizeGroundCover(await readJson(root, brief.cover.file, "ground cover"));
+    if (!normalized.cover) throw new Error(`ground cover ${brief.cover.file}: ${normalized.issues.join("; ")}`);
+    cover = normalized.cover;
+  }
   const project = await readJson(root, "project.3dgame.json", "project manifest") as { editor?: { assetManifest?: string } };
   const manifestPath = publicRelative(project.editor?.assetManifest ?? "assets/manifest.json", "editor.assetManifest");
   const manifest = await readJson(root, manifestPath, "asset manifest") as { assets?: Array<Record<string, unknown>> };
@@ -123,7 +130,7 @@ export async function runWorldBrief(options: WorldBriefRunOptions): Promise<Worl
     return typeof id === "string" ? id : null;
   };
 
-  const build = buildWorldFromBrief({ brief, levelPath: level, profile, assetIdForFile, partition });
+  const build = buildWorldFromBrief({ brief, levelPath: level, profile, cover, assetIdForFile, partition });
 
   const write = async (path: string, data: string | Uint8Array): Promise<void> => {
     const absolute = within(root, path);

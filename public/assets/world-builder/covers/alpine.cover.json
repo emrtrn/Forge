@@ -1,0 +1,133 @@
+{
+  "schema": 1,
+  "type": "groundCover",
+  "id": "alpine",
+  "name": "Alpine",
+  "layers": [
+    {
+      "id": "meadow",
+      "name": "Meadow",
+      "color": "#6f9a4a",
+      "material": "lt-meadow",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "forest",
+      "name": "Forest Floor",
+      "color": "#3f4f2c",
+      "material": "starter-mat-grass",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "color": "#8b8a84",
+      "material": "lt-rock",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "color": "#8a6441",
+      "material": "lt-earth",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "riverbed",
+      "name": "River Bed",
+      "color": "#6f6a5c",
+      "material": "m-gravel-material",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "asphalt",
+      "name": "Asphalt",
+      "color": "#3d3d3f",
+      "physicalMaterial": "stone"
+    },
+    {
+      "id": "snow",
+      "name": "Snow",
+      "color": "#eef2f5",
+      "material": "lt-snow",
+      "physicalMaterial": "snow"
+    }
+  ],
+  "roles": {
+    "open": "meadow",
+    "forest": "forest",
+    "rock": "rock",
+    "bed": "riverbed",
+    "pad": "dirt",
+    "road": "asphalt",
+    "snow": "snow"
+  },
+  "rock": {
+    "slope": [
+      30,
+      42
+    ]
+  },
+  "forest": {
+    "from": [
+      40,
+      150
+    ],
+    "share": 0.85,
+    "patch": 250
+  },
+  "snow": {
+    "quantile": 0.7,
+    "minAbove": 60,
+    "fade": 25,
+    "treeGap": 40
+  },
+  "plants": [
+    {
+      "id": "alpine-pine",
+      "layer": "forest",
+      "foliageType": "assets/foliage/Pine.foliagetype.json",
+      "density": 0.003,
+      "minWeight": 0.45,
+      "seed": 601
+    },
+    {
+      "id": "alpine-conifer",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-conifer-b.foliagetype.json",
+      "density": 0.0012,
+      "minWeight": 0.5,
+      "seed": 602
+    },
+    {
+      "id": "alpine-bush",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "density": 0.001,
+      "minWeight": 0.5,
+      "seed": 603
+    },
+    {
+      "id": "alpine-grass",
+      "layer": "meadow",
+      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "density": 0.015,
+      "minWeight": 0.5,
+      "seed": 604
+    },
+    {
+      "id": "alpine-bush-b",
+      "layer": "meadow",
+      "foliageType": "assets/world-pilot/foliage/wp-bush-b.foliagetype.json",
+      "density": 0.0006,
+      "minWeight": 0.6,
+      "seed": 605
+    }
+  ],
+  "rocks": {
+    "high": 120,
+    "slopes": 30,
+    "water": 18,
+    "outcrops": 80
+  }
+}

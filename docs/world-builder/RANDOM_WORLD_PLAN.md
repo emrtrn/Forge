@@ -75,7 +75,14 @@ Plan modu (Derekavak, sabit koordinatlı özet) aynı kurucunun üstüne sonra d
   Kurucu gölü editörün göl yatağı biçimiyle oyar, kıyıyı boyar, göl aktörü yazar (plan modu da
   kazanır); yol nehri düz greybox tabliyeli köprüyle geçer (altı oyulu kalır), göllerin 20 m
   dışından dolaşır. Test: `randomWorld.test.ts`, `worldBriefWater.test.ts`.
-- [ ] 4. Örtü tipleri
+- [x] 4. Örtü tipleri (8 Kasım 2026, kod; görsel onay bekliyor): `--cover forest|meadow|farmland|steppe|desert|alpine`
+  (varsayılan `forest`, bugünkü görünümle bayt bayt aynı) ve `--forest|--rocks|--fields low|medium|high`.
+  Örtü bir veri dosyasıdır (`public/assets/world-builder/covers/*.cover.json`, `normalizeGroundCover`):
+  en çok 8 boya katmanı ve rolleri, kaya eğimi, orman (köyden uzaklık, pay, yama boyu), su kenarı
+  şeridi, köy çevresi tarlalar (yamalı parseller, düz yerde), kar çizgisi (yükseklik yüzdeliği, en
+  alçak zeminin en az 60 m üstü; altında ağaç sınırı), bitkiler (`*.foliagetype.json` yolu) ve kaya
+  sayıları. Toplanan doğa varlıkları gelince yalnız bu dosyalar değişir. Kar yalnız dağlıkta oluşur;
+  "her yer karlı" mevsim işi (WES). Test: `tests/engine/groundCover.test.ts`.
 - [ ] 5. Editör penceresi
 - [ ] 6. Rol → model
 - [ ] 7. Ada ve kıyı

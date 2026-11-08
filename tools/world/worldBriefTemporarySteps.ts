@@ -191,6 +191,10 @@ export function scatterRocks(
   brief: WorldBrief,
   terrain: BriefTerrain,
   bounds: { min: WorldPoint; max: WorldPoint },
+  /** Rock counts; the pilot's without them (a ground cover gives its own). */
+  counts: { high: number; slopes: number; water: number } = {
+    high: PILOT_TUNING.rocksOnHighGround, slopes: PILOT_TUNING.rocksOnSlopes, water: PILOT_TUNING.rocksByWater,
+  },
 ): ScatterPlacement[] {
   const tuning = PILOT_TUNING;
   const random = seededRandom(brief.seed);
@@ -214,18 +218,18 @@ export function scatterRocks(
   const offRoad = (at: WorldPoint): boolean =>
     clearings.every(([cx, cz]) => Math.hypot(at[0] - cx, at[1] - cz) >= tuning.clearingRadius + 6)
     && !tuning.rockFreeBoxes.some(({ min, max }) => at[0] > min[0] && at[0] < max[0] && at[1] > min[1] && at[1] < max[1]);
-  for (let index = 0, tries = 0; index < tuning.rocksOnHighGround && tries < 5000; tries += 1) {
+  for (let index = 0, tries = 0; index < counts.high && tries < 5000; tries += 1) {
     const at: WorldPoint = [span(0, 5), span(1, 5)];
     const position = terrain.valleyAt(at[0], at[1]);
     if (position && position.rockEdge > 6) rock(`rock-high-${index++}`, at, "high");
   }
-  for (let index = 0, tries = 0; index < tuning.rocksOnSlopes && tries < 5000; tries += 1) {
+  for (let index = 0, tries = 0; index < counts.slopes && tries < 5000; tries += 1) {
     const at: WorldPoint = [span(0, 5), span(1, 5)];
     const position = terrain.valleyAt(at[0], at[1]);
     if (position && position.slopeDistance > 40 && position.rockEdge < 0 && offRoad(at)) rock(`rock-slope-${index++}`, at, "slope");
   }
   const { courses } = terrain;
-  for (let index = 0, tries = 0; courses.length && index < tuning.rocksByWater && tries < 5000; tries += 1) {
+  for (let index = 0, tries = 0; courses.length && index < counts.water && tries < 5000; tries += 1) {
     const course = courses[Math.floor(random() * courses.length)]!;
     const at = Math.min(course.points.length - 2, Math.floor(random() * (course.points.length - 1)));
     const [a, b] = [course.points[at]!, course.points[at + 1]!];
@@ -233,6 +237,46 @@ export function scatterRocks(
     const offset = (random() < 0.5 ? -1 : 1) * (course.width / 2 + 0.5 + random() * 4);
     const spot: WorldPoint = [a[0] - (b[1] - a[1]) / length * offset, a[1] + (b[0] - a[0]) / length * offset];
     if (inside(spot, 10)) rock(`rock-river-${index++}`, spot, "river");
+  }
+  return rocks;
+}
+
+/**
+ * Rock outcrops on any steep ground (from `minSlopeDeg`), away from the
+ * settlements and the water: a ground cover's `rocks.outcrops`. Valleys aside,
+ * the pilot's scatter only knows the valley shape.
+ */
+export function scatterOutcrops(
+  brief: WorldBrief,
+  terrain: BriefTerrain,
+  bounds: { min: WorldPoint; max: WorldPoint },
+  count: number,
+  minSlopeDeg: number,
+): ScatterPlacement[] {
+  const random = seededRandom((brief.seed ^ 0x6a09e667) >>> 0);
+  const settlements = brief.settlements.map((settlement) => [...briefToWorld(brief, settlement.center), (settlement.radius ?? 150) + 20] as const);
+  const rocks: ScatterPlacement[] = [];
+  const slopeAt = (x: number, z: number): number =>
+    Math.atan(Math.hypot(terrain.height(x + 2, z) - terrain.height(x - 2, z), terrain.height(x, z + 2) - terrain.height(x, z - 2)) / 4) * 180 / Math.PI;
+  for (let index = 0, tries = 0; index < count && tries < count * 60; tries += 1) {
+    const at: WorldPoint = [
+      bounds.min[0] + 10 + random() * (bounds.max[0] - bounds.min[0] - 20),
+      bounds.min[1] + 10 + random() * (bounds.max[1] - bounds.min[1] - 20),
+    ];
+    const slope = slopeAt(at[0], at[1]);
+    if (slope < minSlopeDeg) continue;
+    if (settlements.some(([x, z, reach]) => Math.hypot(at[0] - x, at[1] - z) < reach)) continue;
+    const water = terrain.water(at[0], at[1]);
+    if ((water && water.distance < water.course.width / 2 + 12) || terrain.lake(at[0], at[1])) continue;
+    const variant = slope >= minSlopeDeg + 10 ? "high" : "slope";
+    const pick = random();
+    const [low, high] = PILOT_TUNING.rockScale[variant];
+    const scale = Number((low + random() * (high - low)).toFixed(2));
+    const id = `rock-outcrop-${index++}`;
+    rocks.push({
+      role: "prop.rock", variant, id, name: id, at, scale, collision: scale >= PILOT_TUNING.rockCollisionScale,
+      rotationYDeg: Math.round(random() * 360), pick,
+    });
   }
   return rocks;
 }

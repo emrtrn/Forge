@@ -24389,6 +24389,36 @@
         "bytes": 9419
       },
       "license": "Project-local starter content"
+    },
+    {
+      "id": "wb-broadleaf-type",
+      "name": "WB Broadleaf Tree",
+      "assetType": "foliageType",
+      "category": "world-builder",
+      "path": "assets/world-builder/foliage/wb-broadleaf.foliagetype.json",
+      "tags": [
+        "world-builder",
+        "foliage"
+      ],
+      "placeable": false,
+      "placement": {
+        "surface": "floor",
+        "snapToWall": false,
+        "allowRotation": false,
+        "allowScale": false
+      },
+      "runtime": {
+        "loadGroup": "foliage",
+        "castShadow": false,
+        "receiveShadow": false,
+        "collision": false,
+        "bytes": 534
+      },
+      "license": "Project-local World Builder data",
+      "source": {
+        "origin": "forge",
+        "pack": "World Builder"
+      }
     }
   ]
 }

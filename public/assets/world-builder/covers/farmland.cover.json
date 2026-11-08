@@ -1,0 +1,144 @@
+{
+  "schema": 1,
+  "type": "groundCover",
+  "id": "farmland",
+  "name": "Farmland",
+  "layers": [
+    {
+      "id": "meadow",
+      "name": "Meadow",
+      "color": "#6f9a4a",
+      "material": "lt-meadow",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "forest",
+      "name": "Forest Floor",
+      "color": "#3f4f2c",
+      "material": "starter-mat-grass",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "rock",
+      "name": "Rock",
+      "color": "#8b8a84",
+      "material": "lt-rock",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "dirt",
+      "name": "Dirt",
+      "color": "#8a6441",
+      "material": "lt-earth",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "riverbed",
+      "name": "River Bed",
+      "color": "#6f6a5c",
+      "material": "m-gravel-material",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "asphalt",
+      "name": "Asphalt",
+      "color": "#3d3d3f",
+      "physicalMaterial": "stone"
+    },
+    {
+      "id": "field-gold",
+      "name": "Field (grain)",
+      "color": "#c9a94a",
+      "physicalMaterial": "default"
+    },
+    {
+      "id": "field-green",
+      "name": "Field (green crop)",
+      "color": "#86a33f",
+      "physicalMaterial": "default"
+    }
+  ],
+  "roles": {
+    "open": "meadow",
+    "forest": "forest",
+    "rock": "rock",
+    "bed": "riverbed",
+    "pad": "dirt",
+    "road": "asphalt",
+    "fields": [
+      "field-gold",
+      "field-green",
+      "dirt"
+    ]
+  },
+  "rock": {
+    "slope": [
+      34,
+      46
+    ]
+  },
+  "forest": {
+    "from": [
+      80,
+      200
+    ],
+    "share": 0.4,
+    "patch": 200
+  },
+  "fields": {
+    "reach": 320,
+    "maxSlopeDeg": 9,
+    "size": [
+      35,
+      90
+    ]
+  },
+  "plants": [
+    {
+      "id": "wood-broadleaf",
+      "layer": "forest",
+      "foliageType": "assets/world-builder/foliage/wb-broadleaf.foliagetype.json",
+      "density": 0.0022,
+      "minWeight": 0.5,
+      "seed": 301
+    },
+    {
+      "id": "wood-conifer",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-conifer-b.foliagetype.json",
+      "density": 0.0008,
+      "minWeight": 0.55,
+      "seed": 302
+    },
+    {
+      "id": "wood-bush",
+      "layer": "forest",
+      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "density": 0.0012,
+      "minWeight": 0.5,
+      "seed": 303
+    },
+    {
+      "id": "meadow-grass",
+      "layer": "meadow",
+      "foliageType": "assets/world-pilot/foliage/wp-grass-a.foliagetype.json",
+      "density": 0.02,
+      "minWeight": 0.5,
+      "seed": 304
+    },
+    {
+      "id": "meadow-bush",
+      "layer": "meadow",
+      "foliageType": "assets/world-pilot/foliage/wp-bush-a.foliagetype.json",
+      "density": 0.0008,
+      "minWeight": 0.6,
+      "seed": 305
+    }
+  ],
+  "rocks": {
+    "high": 60,
+    "slopes": 16,
+    "water": 14,
+    "outcrops": 30
+  }
+}

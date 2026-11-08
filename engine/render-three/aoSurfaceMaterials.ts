@@ -1,4 +1,4 @@
-import { Material, MeshNormalMaterial, type Mesh, type Scene, type Texture } from 'three';
+import { Material, MeshBasicMaterial, MeshNormalMaterial, type Mesh, type Scene, type Texture } from 'three';
 import { applyFoliageFadeToOverride } from './foliageFade';
 import { RiverWaterObject } from './riverWater';
 
@@ -54,6 +54,8 @@ export class AoSurfaceMaterials {
     normal.customProgramCacheKey = () => `forge-ao-surface-v1:${source.customProgramCacheKey()}`;
     return normal;
   }
+  /** Drawn for far foliage billboards: their quads only face the camera in their own shader. */
+  private readonly hidden = Object.assign(new MeshBasicMaterial({ visible: false }), { allowOverride: false });
   render<T>(scene: Scene, render: () => T): T {
     const saved: Array<[Mesh, Material | Material[]]> = [];
     scene.traverseVisible(object => {
@@ -62,11 +64,12 @@ export class AoSurfaceMaterials {
       // supply normals from their wave shader, rather than a geometry attribute.
       if (!mesh.isMesh || object.userData.forgeTerrain) return;
       saved.push([mesh, mesh.material]);
+      if (object.userData.forgeImpostor) { mesh.material = this.hidden; return; }
       mesh.material = object instanceof RiverWaterObject ? object.getAoNormalMaterial()
         : Array.isArray(mesh.material) ? mesh.material.map(m => this.get(m, object.userData.aoWaterSurface === true)) : this.get(mesh.material, object.userData.aoWaterSurface === true);
     });
     try { return render(); }
     finally { for (const [mesh, material] of saved) mesh.material = material; }
   }
-  dispose(): void { for (const entry of [...this.entries.values()]) entry.release(); }
+  dispose(): void { for (const entry of [...this.entries.values()]) entry.release(); this.hidden.dispose(); }
 }

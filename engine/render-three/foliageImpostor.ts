@@ -2,19 +2,22 @@
  * Far foliage billboards (impostors): past a type's cull distance its Landscape
  * rule plants are drawn as camera-facing quads out to the type's `farDistance`.
  *
- * The atlas is baked once per mesh at load: the model, unlit (base colour and
- * alpha only), photographed from {@link IMPOSTOR_FRAMES} directions around its
- * up axis. A billboard turns about the world up axis toward the camera and shows
- * the frame nearest the direction it is seen from, relative to the plant's yaw,
- * then is lit by the scene like any standard surface, so time of day and fog
- * still apply. Its normal points mostly up: a crown faces every way, and a
- * camera-facing card goes dark whenever the camera looks toward the sun.
+ * The atlas is baked once per mesh at load: the model photographed from
+ * {@link IMPOSTOR_FRAMES} directions around its up axis, twice — unlit (base
+ * colour and alpha) and as view-space normals (alpha-tested, two-sided like the
+ * leaves). A billboard turns about the world up axis toward the camera, shows
+ * the frame nearest the direction it is seen from (relative to the plant's yaw)
+ * and is lit per pixel through the normal frame with the model's roughness, so
+ * leaves facing the sky catch the sky as the model's do; time of day and fog
+ * apply as to any standard surface. A single flat normal could not: the card
+ * read near black against the lit crowns of the models.
  *
  * Hand-off: the models dissolve per instance with a screen-door dither over the
  * type's fade window (`foliageFade.ts`); a billboard runs the complementary test
  * on the same window and threshold, so exactly one of the two covers a pixel.
  * The billboards dissolve the same way over the last 15% of the far distance.
  */
+import { AoSurfaceMaterials } from "./aoSurfaceMaterials";
 import {
   Box3,
   Color,
@@ -51,6 +54,10 @@ export const IMPOSTOR_FAR_FADE = 0.15;
 
 export interface FoliageImpostorAtlas {
   texture: Texture;
+  /** View-space normals per frame (tangent space of the billboard: x right, y up, z toward the camera). */
+  normalTexture: Texture;
+  /** Mean roughness of the model's materials. */
+  roughness: number;
   frames: number;
   /** Billboard width and height at instance scale 1, metres. */
   width: number;
@@ -96,12 +103,21 @@ export function bakeFoliageImpostorAtlas(renderer: WebGLRenderer, model: Object3
   subject.position.set(0, 0, 0);
   subject.updateMatrixWorld(true);
   const owned: Material[] = [];
+  const originals: Array<[Mesh, Material | Material[]]> = [];
+  const unlit: Array<[Mesh, Material | Material[]]> = [];
+  let roughnessSum = 0, roughnessCount = 0;
   subject.traverse((object) => {
     const mesh = object as Mesh;
     if (!mesh.isMesh) return;
+    originals.push([mesh, mesh.material]);
+    for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+      const roughness = (material as Material & { roughness?: number }).roughness;
+      if (typeof roughness === "number") { roughnessSum += roughness; roughnessCount += 1; }
+    }
     mesh.material = Array.isArray(mesh.material)
       ? mesh.material.map((material) => { const copy = unlitCopy(material); owned.push(copy); return copy; })
       : (() => { const copy = unlitCopy(mesh.material); owned.push(copy); return copy; })();
+    unlit.push([mesh, mesh.material]);
   });
   const box = new Box3().setFromObject(subject);
   // Widest reach from the up axis over every yaw: the farthest bounding-box corner.
@@ -128,6 +144,14 @@ export function bakeFoliageImpostorAtlas(renderer: WebGLRenderer, model: Object3
     // washed out (encoded twice), and far billboards are smoothed by their mips anyway.
     samples: 0,
   });
+  const normalTarget = new WebGLRenderTarget(atlasWidth, FRAME_HEIGHT, {
+    type: UnsignedByteType,
+    generateMipmaps: true,
+    minFilter: LinearMipmapLinearFilter,
+    magFilter: LinearFilter,
+    samples: 0,
+  });
+  const normals = new AoSurfaceMaterials();
   // A single-sampled shot of frame 0 at frame size, read back for the mean colour
   // (smaller, the thin branches fail the alpha test and only the trunk is left).
   const probe = new WebGLRenderTarget(frameWidth, FRAME_HEIGHT, { type: UnsignedByteType, colorSpace: SRGBColorSpace });
@@ -168,14 +192,28 @@ export function bakeFoliageImpostorAtlas(renderer: WebGLRenderer, model: Object3
     target.viewport.set(0, 0, atlasWidth, FRAME_HEIGHT);
     renderer.setRenderTarget(target);
     renderer.clear(true, true, true);
-    target.scissorTest = true;
-    for (let frame = 0; frame < IMPOSTOR_FRAMES; frame += 1) {
-      target.viewport.set(frame * frameWidth, 0, frameWidth, FRAME_HEIGHT);
-      target.scissor.set(frame * frameWidth, 0, frameWidth, FRAME_HEIGHT);
-      renderer.setRenderTarget(target);
-      renderer.clear(false, true, false);
-      shoot((frame / IMPOSTOR_FRAMES) * Math.PI * 2);
+    const shootFrames = (into: WebGLRenderTarget): void => {
+      into.scissorTest = true;
+      for (let frame = 0; frame < IMPOSTOR_FRAMES; frame += 1) {
+        into.viewport.set(frame * frameWidth, 0, frameWidth, FRAME_HEIGHT);
+        into.scissor.set(frame * frameWidth, 0, frameWidth, FRAME_HEIGHT);
+        renderer.setRenderTarget(into);
+        renderer.clear(false, true, false);
+        shoot((frame / IMPOSTOR_FRAMES) * Math.PI * 2);
+      }
+    };
+    shootFrames(target);
+    // Normals: the source materials' alpha test and sidedness; a flat normal behind.
+    for (const [mesh, material] of originals) {
+      mesh.material = Array.isArray(material) ? material.map((entry) => normals.get(entry)) : normals.get(material);
     }
+    renderer.setClearColor(new Color(0.5, 0.5, 1), 0);
+    normalTarget.scissorTest = false;
+    normalTarget.viewport.set(0, 0, atlasWidth, FRAME_HEIGHT);
+    renderer.setRenderTarget(normalTarget);
+    renderer.clear(true, true, true);
+    shootFrames(normalTarget);
+    for (const [mesh, material] of unlit) mesh.material = material;
   } finally {
     renderer.setRenderTarget(previousTarget);
     renderer.setClearColor(previousClear, previousAlpha);
@@ -183,6 +221,7 @@ export function bakeFoliageImpostorAtlas(renderer: WebGLRenderer, model: Object3
   }
 
   probe.dispose();
+  normals.dispose();
   for (const material of owned) material.dispose();
 
   const geometry = new PlaneGeometry(1, 1);
@@ -191,13 +230,15 @@ export function bakeFoliageImpostorAtlas(renderer: WebGLRenderer, model: Object3
   geometry.boundingBox = new Box3(new Vector3(-radius, box.min.y, -radius), new Vector3(radius, box.max.y, radius));
   return {
     texture: target.texture,
+    normalTexture: normalTarget.texture,
+    roughness: roughnessCount > 0 ? roughnessSum / roughnessCount : 1,
     frames: IMPOSTOR_FRAMES,
     width,
     height,
     minY: box.min.y,
     color,
     geometry,
-    dispose: () => { target.dispose(); geometry.dispose(); },
+    dispose: () => { target.dispose(); normalTarget.dispose(); geometry.dispose(); },
   };
 }
 
@@ -227,6 +268,9 @@ const VERTEX_SETUP = `
   bool impostorHidden = vImpostorDistance < uImpostorFade.x || vImpostorDistance > uImpostorFade.w;
   #ifdef USE_MAP
     vMapUv = vec2((impostorFrame + uv.x) / impostorFrames, uv.y);
+  #endif
+  #ifdef USE_NORMALMAP
+    vNormalMapUv = vec2((impostorFrame + uv.x) / impostorFrames, uv.y);
   #endif`;
 
 const FRAGMENT_PARS = `
@@ -258,9 +302,15 @@ const ALPHA_TEST = `
 
 const MAIN = /void\s+main\s*\(\s*\)\s*\{/;
 
-/** The billboard material of one rule: the atlas lit as a standard surface. */
+/**
+ * The billboard material of one rule: the atlas lit as a standard surface through
+ * its normal frames, with the model's roughness. Marked so the AO normal pass
+ * skips it (`forgeImpostor`): that pass draws plain geometry, not billboards.
+ */
 export function createFoliageImpostorMaterial(atlas: FoliageImpostorAtlas, uniforms: FoliageImpostorUniforms): MeshStandardMaterial {
-  const material = new MeshStandardMaterial({ map: atlas.texture, roughness: 1, metalness: 0, side: DoubleSide });
+  const material = new MeshStandardMaterial({
+    map: atlas.texture, normalMap: atlas.normalTexture, roughness: atlas.roughness, metalness: 0, side: DoubleSide,
+  });
   const shape = { value: new Vector4(atlas.width, atlas.height, atlas.minY, atlas.frames) };
   const image = atlas.texture.image as { width: number; height: number };
   const atlasSize = { value: new Vector2(image.width, image.height) };
@@ -272,7 +322,7 @@ export function createFoliageImpostorMaterial(atlas: FoliageImpostorAtlas, unifo
       .replace("#include <common>", `#include <common>${VERTEX_PARS}`)
       .replace("#include <uv_vertex>", `#include <uv_vertex>${VERTEX_SETUP}`)
       .replace("#include <beginnormal_vertex>",
-        "vec3 objectNormal = normalize(vec3(impostorDir.x * 0.3, 1.0, impostorDir.y * 0.3));")
+        "vec3 objectNormal = vec3(impostorDir.x, 0.0, impostorDir.y);")
       .replace("#include <begin_vertex>", [
         "vec3 transformed = impostorRight * (position.x * uImpostorShape.x) + vec3(0.0, uImpostorShape.z + position.y * uImpostorShape.y, 0.0);",
         "if (impostorHidden) transformed = vec3(0.0);",
@@ -280,13 +330,9 @@ export function createFoliageImpostorMaterial(atlas: FoliageImpostorAtlas, unifo
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", `#include <common>${FRAGMENT_PARS}`)
       .replace(MAIN, (main) => `${main}${FRAGMENT_MAIN}`)
-      .replace("#include <alphatest_fragment>", ALPHA_TEST)
-      // No specular: an up-facing normal seen at a grazing angle would mirror the
-      // sky at full Fresnel and wash the crowns out to grey.
-      .replace("#include <lights_physical_fragment>",
-        "#include <lights_physical_fragment>\n  material.specularColor = vec3(0.0);\n  material.specularF90 = 0.0;");
+      .replace("#include <alphatest_fragment>", ALPHA_TEST);
   };
-  material.customProgramCacheKey = () => "forge-foliage-impostor-v1";
+  material.customProgramCacheKey = () => "forge-foliage-impostor-v2";
   return material;
 }
 
@@ -320,6 +366,7 @@ export function createFoliageImpostorBatch(
   mesh.receiveShadow = false;
   mesh.computeBoundingSphere();
   mesh.raycast = () => {};
+  mesh.userData.forgeImpostor = true;
   mesh.name = "foliage-impostors";
   return mesh;
 }

@@ -131,24 +131,31 @@ export function renderSkyDetails(options: EnvironmentDetailsOptions): void {
   });
 }
 
+// Editor-friendly units: 0.1 in Details corresponds to 0.0001 in the renderer.
+const FOG_DENSITY_UI_SCALE = 1000;
+// 0.1 in Details corresponds to a height falloff of 0.001 per metre.
+const FOG_HEIGHT_FALLOFF_UI_SCALE = 100;
+
 export function renderFogDetails(options: EnvironmentDetailsOptions): void {
   const { body, selection } = options;
   const fog = selection.fog;
   if (!fog) return;
   options.setDetailsScale([1, 1, 1]);
+  const displayedDensity = Number((fog.density * FOG_DENSITY_UI_SCALE).toFixed(6));
+  const displayedFalloff = Number((fog.heightFalloff * FOG_HEIGHT_FALLOFF_UI_SCALE).toFixed(6));
   const densityRow = `
       <label class="detail-row">
-        <span>Density</span>
-        <input data-fog-number="density" type="number" step="0.00001" min="0" max="10"
-          value="${fog.density}" />
+        <span>Density<small class="param-range">0 &ndash; 2</small></span>
+        <input data-fog-number="density" type="number" step="0.001" min="0" max="10000" data-slider-max="2" title="Slider: 0-2. Type a higher value if needed."
+          value="${displayedDensity}" />
       </label>`;
   const numberRow = (key: "heightFalloff" | "baseHeight" | "startDistance" | "maxOpacity" | "sunStrength", label: string, min: number, max: number, step: number) => `
-    <label class="detail-row"><span>${label}</span><input data-fog-number="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${fog[key]}" /></label>`;
+    <label class="detail-row"><span>${label}</span><input data-fog-number="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${key === "heightFalloff" ? displayedFalloff : fog[key]}" /></label>`;
   const heightRows = `
-    ${numberRow("heightFalloff", "Height Falloff", 0, 10, 0.001)}
+    ${numberRow("heightFalloff", "Height Falloff", 0, 1, 0.01)}
     ${numberRow("baseHeight", "Base Height (m)", -100000, 100000, 1)}
     ${numberRow("startDistance", "Clear Distance (m)", 0, 100000, 1)}
-    <div class="detail-hint">Height Falloff: 0 disables height effects; 0.01 halves density approximately every 69 m above Base Height.</div>`;
+    <div class="detail-hint">Height Falloff: 0 disables height effects; 0.1 halves density every 693 m, and 1 every 69 m above Base Height.</div>`;
   const linearRows = `
       <label class="detail-row">
         <span>Start</span>
@@ -240,8 +247,9 @@ export function renderFogDetails(options: EnvironmentDetailsOptions): void {
       const key = input.dataset.fogNumber as keyof LayoutHeightFog | undefined;
       const value = Number(input.value);
       if (!key || !Number.isFinite(value)) return;
+      const scale = key === "density" ? FOG_DENSITY_UI_SCALE : key === "heightFalloff" ? FOG_HEIGHT_FALLOFF_UI_SCALE : 1;
       options.setHeightFog(
-        { [key]: value } as Partial<LayoutHeightFog>,
+        { [key]: value / scale } as Partial<LayoutHeightFog>,
         "Edit Exponential Height Fog",
       );
     });

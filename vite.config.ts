@@ -7,6 +7,8 @@ import { foliageCellPath } from "./engine/world/foliageCells";
 import { validateTerrainGlobalMap } from "./engine/terrain/terrainGlobalMapFile";
 import { levelTerrainDir, terrainGlobalMapPath, terrainTilePath } from "./engine/terrain/terrainTypes";
 import { collectJsonStrings, findOrphanedLevelTerrain } from "./tools/terrainOrphans";
+import { prepareLevelContentDelete } from "./tools/levelContentDelete";
+import { isLevelDocument } from "./tools/worldDataCheck";
 import { validateSaveTerrainPayload, validateSaveTerrainTile, validateSaveTerrainGlobal, TERRAIN_JSON_BODY_MAX_BYTES, TERRAIN_TILE_BODY_MAX_BYTES, TERRAIN_GLOBAL_BODY_MAX_BYTES } from "./tools/terrainSaveValidator";
 import { defineConfig } from "vite";
 import type { Plugin } from "vite";
@@ -2154,9 +2156,23 @@ function isLocalRequest(req: IncomingMessage): boolean {
             let deletedFiles = 1;
             let removedAssets = 0;
             let cleanedLayouts = 0;
+            let preservedLevelData: string[] = [];
             if (fileStat.isDirectory()) {
               const deletedPaths = await listFilesRecursive(absPath, payload.path);
               deletedFiles = deletedPaths.length;
+              const levels: string[] = [];
+              for (const path of deletedPaths.filter((path) => /\.json$/i.test(path))) {
+                if (isLayoutJsonPath(path)) levels.push(path);
+                else {
+                  const document = await readFile(resolvePublicPath(path), "utf8");
+                  try { if (isLevelDocument(JSON.parse(document))) levels.push(path); }
+                  catch { /* A non-level JSON file has no inferred level siblings. */ }
+                }
+              }
+              const plan = await prepareLevelContentDelete(resolvePublicPath, levels, payload.path);
+              // Removing a whole folder would also remove shared files within
+              // it. Keep the folder intact until those dependencies are moved.
+              if (plan.preserved.length) throw new Error(`Cannot delete folder: level data is used by other documents: ${plan.preserved.join(", ")}`);
               await ensureDefaultSceneSurvivesFolderDelete(payload.path);
               const removed = await removeManifestFolderEntries(payload.path).catch(() => ({
                 changed: false,
@@ -2175,6 +2191,27 @@ function isLocalRequest(req: IncomingMessage): boolean {
               ).catch(() => 0);
               await rm(absPath, { recursive: true });
             } else if (fileStat.isFile()) {
+              let level = isLayoutJsonPath(payload.path);
+              if (!level && /\.json$/i.test(payload.path)) {
+                const document = await readFile(absPath, "utf8");
+                try { level = isLevelDocument(JSON.parse(document)); }
+                catch { /* Other JSON assets keep their existing delete behavior. */ }
+              }
+              if (level) {
+                const manifest = await readProjectManifest();
+                if (normalizePublicRelativePath(payload.path).toLowerCase() === normalizePublicRelativePath(manifest.editor.defaultScene).toLowerCase()) {
+                  throw new Error("cannot delete the active level; set another level as default first");
+                }
+                const plan = await prepareLevelContentDelete(resolvePublicPath, [payload.path]);
+                preservedLevelData = plan.preserved;
+                // Resolve every exact root within this project's public tree
+                // before any recursive removal. The preflight checked all descendants.
+                const targets = plan.remove.map((root) => ({ ...root, absolute: resolvePublicPath(root.path) }));
+                for (const target of targets) {
+                  await rm(target.absolute, { recursive: target.directory });
+                  deletedFiles += target.files.length;
+                }
+              }
               await unlink(absPath);
               if (MODEL_EXTS.has(extname(payload.path).toLowerCase())) {
                 await deleteModelSidecars(payload.path);
@@ -2196,6 +2233,7 @@ function isLocalRequest(req: IncomingMessage): boolean {
               deletedFiles,
               removedAssets,
               cleanedLayouts,
+              preservedLevelData,
             }));
           } catch (error) {
             res.statusCode = 400;

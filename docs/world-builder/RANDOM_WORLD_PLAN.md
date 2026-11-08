@@ -52,6 +52,9 @@ varlıklarla ve renkli boyayla çalışır.
 
 Plan modu (Derekavak, sabit koordinatlı özet) aynı kurucunun üstüne sonra devam eder.
 
+Level ve üretilmiş dünya verilerinin silinmesi:
+[sahiplik, ortak veri koruması ve silme kapsamı](LEVEL_DATA_LIFECYCLE.md).
+
 ## Durum
 
 - [x] 1. Ortak kurucu (7 Kasım 2026): yerleşim zinciri kurucuda; sokak, yol ve setler araziye

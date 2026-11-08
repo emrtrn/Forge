@@ -2859,14 +2859,19 @@ export class EditorUi {
       );
       return;
     }
-    if (!window.confirm(`Delete "${item.label}"? This cannot be undone.`)) return;
+    const message = isLevelItem(item)
+      ? `Delete "${item.label}" and its level data (terrain, foliage and generated world files)? Data used by other documents will be kept. This cannot be undone.`
+      : `Delete "${item.label}"? This cannot be undone.`;
+    if (!window.confirm(message)) return;
     try {
       const result = await deleteProjectContent(item.path);
       if (this.contentClipboard?.path === item.path) this.clearContentClipboard();
       if (item.editable && this.selectedAssetId === item.editable.id) {
         this.setSelectedAsset(null);
       }
-      this.setStatus(`Deleted ${result.path}`, "success");
+      const kept = result.preservedLevelData.length
+        ? `; kept shared level data: ${result.preservedLevelData.join(", ")}` : "";
+      this.setStatus(`Deleted ${result.path} (${result.deletedFiles} file(s))${kept}`, "success");
       if (result.registered) {
         try {
           this.editableAssets = await this.app.reloadEditableAssets();

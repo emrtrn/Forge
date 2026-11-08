@@ -92,6 +92,135 @@ async function inventory(root) {
   return result;
 }
 
+async function writePublic(root, path, value) {
+  const target = resolve(root, "public", path);
+  await mkdir(dirname(target), { recursive: true });
+  await writeFile(target, typeof value === "string" ? value : JSON.stringify(value));
+}
+
+async function levelWithData(root, name = "assets/Levels/World") {
+  const definition = `${name}.landscapes/terrain.terrain.json`;
+  const level = `${name}.level.json`;
+  const data = {
+    [`${name}.worldbrief.json`]: { terrain: definition, model: "assets/shared/tree.glb" },
+    [`${name}.worldrecipe.json`]: { terrain: definition },
+    [`${name}.foliage.json`]: { landscapeRules: [], foliageCells: ["0_0"] },
+    [`${name}.meshpaint.json`]: {},
+    [`${name}.hlod.json`]: { cells: [{ key: "0_0" }] },
+    [definition]: { schema: 1, tiles: [{ key: "0_0" }] },
+    [`${name}.landscapes/terrain.tiles/0_0.tile.bin`]: "terrain binary",
+    [`${name}.landscapes/terrain.global.bin`]: "global binary",
+    [`${name}.cells/main/0_0.cell.json`]: { instances: [], loadGroups: [] },
+    [`${name}.cells/foliage/0_0.foliage.json`]: {},
+    [`${name}.cells/hlod/0_0.hlod.glb`]: "proxy binary",
+    [`${name}.foam/hash.foam.json`]: { fingerprint: "hash" },
+    [`${name}.foam/hash.foam.bin`]: "foam binary",
+  };
+  await writePublic(root, level, { schema: 1, name, loadGroups: [], instances: [], worldCells: ["0_0"], landscapes: [{ dataRef: definition }] });
+  for (const [path, value] of Object.entries(data)) await writePublic(root, path, value);
+  const manifestPath = resolve(root, "public/assets/manifest.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.assets.push({ id: name, assetType: "level", path: level });
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  return { level, definition, data, name };
+}
+
+test("deleting a level removes all its owned data and manifest entry, keeping shared assets and other projects", async (t) => {
+  const { a, b } = await fixture(t);
+  const { level, data, name } = await levelWithData(a);
+  await writePublic(a, "assets/shared/tree.glb", "shared tree");
+  await writePublic(a, "assets/shared/tree.materials.json", {});
+  await writePublic(a, `${name}Other.foliage.json`, {});
+  await writePublic(a, "assets/Levels/World.regionprofile.json", {});
+  const beforeB = await inventory(b);
+  const api = await serverFor(t, a);
+  const response = await api("/__content-delete", { path: level });
+  assert.equal(response.status, 200, response.text);
+  assert.equal(response.json().deletedFiles, Object.keys(data).length + 1);
+  assert.deepEqual(response.json().preservedLevelData, []);
+  for (const path of [level, ...Object.keys(data), `${name}.landscapes`, `${name}.cells`, `${name}.foam`]) {
+    await assert.rejects(readFile(resolve(a, "public", path)), { code: "ENOENT" }, path);
+  }
+  for (const path of ["assets/shared/tree.glb", "assets/shared/tree.materials.json", `${name}Other.foliage.json`, `${name}.regionprofile.json`]) {
+    await readFile(resolve(a, "public", path));
+  }
+  assert.deepEqual(JSON.parse(await readFile(resolve(a, "public/assets/manifest.json"), "utf8")).assets, []);
+  assert.deepEqual(await inventory(b), beforeB);
+});
+
+test("level deletion preserves shared dependency groups transitively without its own recipe keeping dead data alive", async (t) => {
+  const { a } = await fixture(t);
+  const { level, name, definition } = await levelWithData(a);
+  // Only the recipe is directly shared; its terrain and the implicit cells of
+  // its referenced foliage index must survive as well.
+  await writePublic(a, `${name}.worldrecipe.json`, { terrain: definition, foliage: `${name}.foliage.json` });
+  await writePublic(a, "assets/Copy.level.json", { instances: [], loadGroups: [], recipe: `/assets/Levels/../Levels/World.worldrecipe.json?v=1` });
+  const api = await serverFor(t, a);
+  const response = await api("/__content-delete", { path: level });
+  assert.equal(response.status, 200, response.text);
+  assert.deepEqual(response.json().preservedLevelData, [
+    `${name}.cells`, `${name}.foliage.json`, `${name}.landscapes`, `${name}.worldrecipe.json`,
+  ]);
+  for (const path of [definition, `${name}.landscapes/terrain.global.bin`, `${name}.landscapes/terrain.tiles/0_0.tile.bin`, `${name}.cells/main/0_0.cell.json`, `${name}.worldrecipe.json`]) {
+    await readFile(resolve(a, "public", path));
+  }
+  for (const path of [level, `${name}.worldbrief.json`, `${name}.meshpaint.json`, `${name}.hlod.json`, `${name}.foam/hash.foam.bin`]) {
+    await assert.rejects(readFile(resolve(a, "public", path)), { code: "ENOENT" });
+  }
+});
+
+test("copied levels preserve shared terrain; alternate legacy level names preserve implicit siblings", async (t) => {
+  const { a } = await fixture(t);
+  const world = await levelWithData(a);
+  await writePublic(a, "assets/Copy.level.json", { instances: [], loadGroups: [], landscapes: [{ dataRef: world.definition.replaceAll("/", "\\") }] });
+  const api = await serverFor(t, a);
+  const response = await api("/__content-delete", { path: world.level });
+  assert.equal(response.status, 200, response.text);
+  assert.deepEqual(response.json().preservedLevelData, [`${world.name}.landscapes`]);
+  const legacy = await levelWithData(a, "assets/Legacy");
+  await writePublic(a, "assets/Legacy.json", { instances: [], loadGroups: [] });
+  const second = await api("/__content-delete", { path: legacy.level });
+  assert.equal(second.status, 200, second.text);
+  assert.equal(second.json().preservedLevelData.length, 8);
+  for (const path of Object.keys(legacy.data)) await readFile(resolve(a, "public", path));
+});
+
+test("level delete preflight refuses active levels, uninspectable references and linked descendants before removing anything", async (t) => {
+  const { a, b } = await fixture(t);
+  const { level, name } = await levelWithData(a);
+  const api = await serverFor(t, a);
+  const before = await inventory(a);
+  assert.equal((await api("/__content-delete", { path: "layouts/main.level.json" })).status, 400);
+  assert.deepEqual(await inventory(a), before);
+  await writePublic(a, "assets/Broken.json", "{ invalid");
+  const broken = await inventory(a);
+  const response = await api("/__content-delete", { path: level });
+  assert.equal(response.status, 400);
+  assert.match(response.json().error, /Cannot check level data references/);
+  assert.deepEqual(await inventory(a), broken);
+  await rm(resolve(a, "public/assets/Broken.json"));
+  await symlink(resolve(b, "public/assets"), resolve(a, "public", `${name}.landscapes/.linked`), process.platform === "win32" ? "junction" : "dir");
+  assert.equal((await api("/__content-delete", { path: level })).status, 400);
+  await readFile(resolve(a, "public", level));
+  await readFile(resolve(a, "public", `${name}.worldbrief.json`));
+});
+
+test("folder deletion keeps shared level data safe, then removes the folder after its external reference is gone", async (t) => {
+  const { a } = await fixture(t);
+  const { definition } = await levelWithData(a, "assets/Disposable/World");
+  await writePublic(a, "assets/Copy.level.json", { instances: [], loadGroups: [], landscapes: [{ dataRef: definition }] });
+  const api = await serverFor(t, a);
+  const before = await inventory(a);
+  const response = await api("/__content-delete", { path: "assets/Disposable" });
+  assert.equal(response.status, 400);
+  assert.match(response.json().error, /used by other documents/);
+  assert.deepEqual(await inventory(a), before);
+  await rm(resolve(a, "public/assets/Copy.level.json"));
+  const deleted = await api("/__content-delete", { path: "assets/Disposable" });
+  assert.equal(deleted.status, 200, deleted.text);
+  await assert.rejects(readdir(resolve(a, "public/assets/Disposable")), { code: "ENOENT" });
+});
+
 test("import, reimport and model sidecars stay in the selected project through rename/copy/delete", async (t) => {
   const { a, b } = await fixture(t);
   const beforeB = await inventory(b);

@@ -251,6 +251,7 @@ export async function deleteProjectContent(
   deletedFiles: number;
   removedAssets: number;
   cleanedLayouts: number;
+  preservedLevelData: string[];
 }> {
   const response = await fetch("/__content-delete", {
     method: "POST",
@@ -265,6 +266,7 @@ export async function deleteProjectContent(
     deletedFiles?: number;
     removedAssets?: number;
     cleanedLayouts?: number;
+    preservedLevelData?: string[];
     error?: string;
   } | null;
   if (!response.ok || !data?.ok) {
@@ -277,6 +279,7 @@ export async function deleteProjectContent(
     deletedFiles: data.deletedFiles ?? 1,
     removedAssets: data.removedAssets ?? (data.registered ? 1 : 0),
     cleanedLayouts: data.cleanedLayouts ?? 0,
+    preservedLevelData: data.preservedLevelData ?? [],
   };
 }
 

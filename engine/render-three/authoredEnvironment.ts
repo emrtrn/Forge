@@ -27,7 +27,7 @@
  * tone-mapping exposure — is exposed as {@link applySkyPostProcessExposure} so
  * the owner keeps driving it.
  */
-import { AmbientLight, Color, Fog, FogExp2, Mesh, Vector3 } from "three";
+import { AmbientLight, Color, Mesh, Vector3 } from "three";
 import type {
   DirectionalLight,
   Object3D,
@@ -49,7 +49,7 @@ import {
   skyAtmosphereToneMappingExposure,
   sunDirectionFromLightRotation,
 } from "./skyAtmosphere";
-import { applySceneFog, resolveHeightFog } from "./heightFog";
+import { applySceneFog, resolveHeightFog, updateHeightFog } from "./heightFog";
 import {
   advanceCloudTime,
   applyCloudUniforms,
@@ -148,6 +148,7 @@ export class AuthoredEnvironment {
   private reflectionTarget: WebGLCubeRenderTarget | null = null;
   /** The World Environment override rendered this frame; null renders the authored look. */
   private override: ResolvedEnvironment | null = null;
+  private resolvedFog: ResolvedHeightFog | null = null;
   private lastCapture: CaptureRecord | null = null;
   private dynamicClock = false;
   private readonly sunSlot = new SunLightOverride();
@@ -233,7 +234,8 @@ export class AuthoredEnvironment {
   /** Applies the Exponential Height Fog to `scene.fog` (distance-based). */
   applyFog(layout: RoomLayout | null): void {
     const actor = layout?.heightFog ?? null;
-    applySceneFogInPlace(this.scene, actor ? (this.override?.fog ?? resolveHeightFog(actor)) : null);
+    this.resolvedFog = actor ? (this.override?.fog ?? resolveHeightFog(actor)) : null;
+    applySceneFog(this.scene, this.resolvedFog);
   }
 
   /** Builds the static Cloud Layer dome; an absent actor removes it (see {@link applySky}). */
@@ -463,6 +465,7 @@ export class AuthoredEnvironment {
   /** Per-frame: keep the domes centred on the camera and advance the clouds. */
   update(deltaSeconds: number): void {
     const camera = this.camera();
+    updateHeightFog(this.scene, this.resolvedFog, this.resolvedFog && this.resolvedFog.sunStrength > 0 ? this.sunDirection() : null);
     if (this.skyObject) followCameraWithSky(this.skyObject, camera);
     if (this.cloudObject) {
       followCameraWithClouds(this.cloudObject, camera);
@@ -483,6 +486,8 @@ export class AuthoredEnvironment {
    */
   teardown(): void {
     this.disposeNightAmbient();
+    this.resolvedFog = null;
+    updateHeightFog(this.scene, null, null);
     this.override = null;
     this.lastCapture = null;
     this.sunSlot.reset();
@@ -523,29 +528,6 @@ function disposeDomeResources(root: Object3D): void {
       material?.dispose();
     }
   });
-}
-
-/**
- * Scene fog from a resolved Height Fog, updating the existing fog object in
- * place when its kind matches: the World Environment re-applies fog every frame
- * and must not allocate a new `Fog` each time.
- */
-function applySceneFogInPlace(scene: Scene, resolved: ResolvedHeightFog | null): void {
-  if (resolved && !resolved.hidden) {
-    const fog = scene.fog;
-    if (resolved.mode === "exp" && fog instanceof FogExp2) {
-      fog.color.set(resolved.color);
-      fog.density = resolved.density;
-      return;
-    }
-    if (resolved.mode === "linear" && fog instanceof Fog) {
-      fog.color.set(resolved.color);
-      fog.near = resolved.start;
-      fog.far = resolved.end;
-      return;
-    }
-  }
-  applySceneFog(scene, resolved);
 }
 
 /**

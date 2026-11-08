@@ -51,20 +51,8 @@ export interface EditableSky {
   };
 }
 
-/**
- * Resolved Exponential Height Fog fields for the Details panel (singleton actor).
- * Faz 1 is distance-based: `exp` mode uses `density`, `linear` mode uses
- * `start`/`end`.
- */
-export interface EditableFog {
-  name: string;
-  hidden: boolean;
-  mode: "exp" | "linear";
-  color: string;
-  density: number;
-  start: number;
-  end: number;
-}
+/** Resolved height fog fields shared with editor and renderer. */
+export type EditableFog = import("../../engine/scene/heightFog").ResolvedHeightFog;
 
 /**
  * Resolved static Cloud Layer fields for the Details panel (singleton actor). A

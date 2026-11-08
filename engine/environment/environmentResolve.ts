@@ -108,6 +108,8 @@ export function resolveEnvironment(
       density: f.density * density,
       start: f.start / density,
       end: f.end / density,
+      startDistance: f.startDistance / density,
+      sunColor: scaleHex(f.sunColor, lerp(NIGHT_FOG_SCALE, 1, sun.daylight)),
     };
   }
 

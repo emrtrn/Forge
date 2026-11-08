@@ -1747,10 +1747,17 @@ export function validateHeightFog(value: unknown): Record<string, unknown> | nul
     fog.color = input.color;
   }
 
+  if (typeof input.sunColor === "string" && /^#[0-9a-fA-F]{6}$/.test(input.sunColor)) fog.sunColor = input.sunColor;
+
   // Density keeps 6 decimals: a fog fitted to a kilometre-range view distance
   // is ~1e-4 (Faz 7d), which 3 decimals would round to nothing.
   const numeric: Array<[keyof typeof input, number, number, number]> = [
     ["density", 0, 10, 6],
+    ["heightFalloff", 0, 10, 6],
+    ["baseHeight", -100000, 100000, 3],
+    ["startDistance", 0, 100000, 3],
+    ["maxOpacity", 0, 1, 6],
+    ["sunStrength", 0, 1, 6],
     ["start", 0, 100000, 3],
     ["end", 0, 100000, 3],
   ];

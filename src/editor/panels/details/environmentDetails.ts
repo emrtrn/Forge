@@ -139,9 +139,16 @@ export function renderFogDetails(options: EnvironmentDetailsOptions): void {
   const densityRow = `
       <label class="detail-row">
         <span>Density</span>
-        <input data-fog-number="density" type="number" step="0.005" min="0" max="2"
+        <input data-fog-number="density" type="number" step="0.00001" min="0" max="10"
           value="${fog.density}" />
       </label>`;
+  const numberRow = (key: "heightFalloff" | "baseHeight" | "startDistance" | "maxOpacity" | "sunStrength", label: string, min: number, max: number, step: number) => `
+    <label class="detail-row"><span>${label}</span><input data-fog-number="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${fog[key]}" /></label>`;
+  const heightRows = `
+    ${numberRow("heightFalloff", "Height Falloff", 0, 10, 0.001)}
+    ${numberRow("baseHeight", "Base Height (m)", -100000, 100000, 1)}
+    ${numberRow("startDistance", "Clear Distance (m)", 0, 100000, 1)}
+    <div class="detail-hint">Height Falloff: 0 disables height effects; 0.01 halves density approximately every 69 m above Base Height.</div>`;
   const linearRows = `
       <label class="detail-row">
         <span>Start</span>
@@ -175,8 +182,13 @@ export function renderFogDetails(options: EnvironmentDetailsOptions): void {
           <span>Color</span>
           <input data-fog-color type="color" value="${escapeHtml(fog.color)}" />
         </label>
-        ${fog.mode === "linear" ? linearRows : densityRow}
-        <div class="detail-hint">Mesafeye dayalı sahne sisi. Yüksekliğe göre azalma sonraki bir aşamada.</div>
+        ${fog.mode === "linear" ? linearRows : densityRow + heightRows}
+        ${numberRow("maxOpacity", "Maximum Opacity", 0, 1, 0.01)}
+        ${numberRow("sunStrength", "Sun Tint Strength", 0, 1, 0.01)}
+        <label class="detail-row"><span>Sun Tint</span><input data-fog-sun-color type="color" value="${escapeHtml(fog.sunColor)}" /></label>
+        <button type="button" class="detail-button" data-fog-ground-mist>Ground Mist Setup</button>
+        <div class="detail-hint">Ground Mist enables height falloff and sun tint, keeping density and base height. Adjust Base Height to your terrain.</div>
+        <div class="detail-hint">Sun Tint warms the haze towards the Sun and fades below the horizon.</div>
       </div>
       ${fogViewDistanceSection(fog, options.viewDistance)}
     `;
@@ -184,9 +196,13 @@ export function renderFogDetails(options: EnvironmentDetailsOptions): void {
   body.querySelector<HTMLButtonElement>("[data-fog-fit-view]")?.addEventListener("click", () => {
     if (options.viewDistance === null) return;
     options.setHeightFog(
-      { mode: "exp", density: Number(exponentialFogDensityFor(options.viewDistance).toFixed(6)) },
+      { mode: "exp", density: Number(exponentialFogDensityFor(options.viewDistance).toFixed(6)), heightFalloff: 0, startDistance: 0, maxOpacity: 1 },
       "Fit Fog to View Distance",
     );
+  });
+
+  body.querySelector<HTMLButtonElement>("[data-fog-ground-mist]")?.addEventListener("click", () => {
+    options.setHeightFog({ mode: "exp", heightFalloff: 0.01, startDistance: 10, maxOpacity: 1, sunStrength: 0.25 }, "Apply Ground Mist Setup");
   });
 
   const nameInput = body.querySelector<HTMLInputElement>("[data-fog-name]");
@@ -214,6 +230,10 @@ export function renderFogDetails(options: EnvironmentDetailsOptions): void {
       options.setHeightFog({ color: value }, "Edit Exponential Height Fog");
     },
   );
+
+  body.querySelector<HTMLInputElement>("[data-fog-sun-color]")?.addEventListener("change", (event) => {
+    options.setHeightFog({ sunColor: (event.currentTarget as HTMLInputElement).value }, "Edit Fog Sun Tint");
+  });
 
   body.querySelectorAll<HTMLInputElement>("[data-fog-number]").forEach((input) => {
     input.addEventListener("change", () => {
@@ -249,11 +269,11 @@ function fogViewDistanceSection(fog: LayoutHeightFog, viewDistance: number | nul
       <div class="detail-section">
         <div class="detail-section-title">View Distance</div>
         <div class="detail-row">
-          <span>At ${viewDistance} m</span>
+          <span>At ${viewDistance} m (base height)</span>
           <span class="detail-value" data-fog-view-opacity>${percent}% fog</span>
         </div>
         ${warning}
-        <button type="button" class="detail-button" data-fog-fit-view>Fit to View Distance</button>
+        <button type="button" class="detail-button" data-fog-fit-view>Fit to View Distance</button><div class="detail-hint">Fit resets height falloff, clear distance and maximum opacity to hide the far edge.</div>
         <div class="detail-hint">Görüş mesafesinde %${Math.round(VIEW_DISTANCE_FOG_OPACITY * 100)} yoğunluğa ulaşan üstel sis.</div>
       </div>`;
 }

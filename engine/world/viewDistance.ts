@@ -44,14 +44,34 @@ export interface FogOpacitySource {
   readonly density: number;
   readonly start: number;
   readonly end: number;
+  readonly heightFalloff?: number;
+  readonly baseHeight?: number;
+  readonly startDistance?: number;
+  readonly maxOpacity?: number;
 }
 
-/** How opaque a Height Fog is at `distance`; 0 without a (visible) fog. */
-export function heightFogOpacityAt(fog: FogOpacitySource | null, distance: number): number {
-  if (!fog || fog.hidden) return 0;
-  return fog.mode === "linear"
-    ? linearFogOpacityAt(fog.start, fog.end, distance)
-    : exponentialFogOpacityAt(fog.density, distance);
+/** Analytic height-density average along a ray, stable for horizontal views. */
+export function heightFogDensityAverage(falloff: number, base: number, startY: number, endY: number): number {
+  if (falloff <= 0) return 1;
+  const delta = falloff * Math.abs(endY - startY);
+  const integral = delta < 0.001 ? 1 - delta / 2 + delta * delta / 6 : -Math.expm1(-delta) / delta;
+  return Math.exp(Math.max(-20, Math.min(20, -falloff * (Math.min(startY, endY) - base)))) * integral;
+}
+
+/** Horizontal opacity at camera height unless an endpoint height is supplied.
+ * Callers without camera information receive a reference at the fog base height.
+ */
+export function heightFogOpacityAt(fog: FogOpacitySource | null, distance: number, cameraY?: number, endY?: number): number {
+  if (!fog || fog.hidden || !Number.isFinite(distance) || distance < 0) return 0;
+  const maxOpacity = fog.maxOpacity ?? 1;
+  if (fog.mode === "linear") return Math.min(maxOpacity, linearFogOpacityAt(fog.start, fog.end, distance));
+  const clear = fog.startDistance ?? 0;
+  const length = Math.max(0, distance - clear);
+  const origin = cameraY ?? fog.baseHeight ?? 0;
+  const end = endY ?? origin;
+  const start = origin + (end - origin) * Math.min(1, clear / Math.max(distance, 0.0001));
+  const average = heightFogDensityAverage(fog.heightFalloff ?? 0, fog.baseHeight ?? 0, start, end);
+  return Math.min(maxOpacity, exponentialFogOpacityAt(fog.density * average, length));
 }
 
 /** Fog opacity at the far plane below which a far view mode level shows a hard terrain edge. */

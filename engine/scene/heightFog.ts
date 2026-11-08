@@ -1,17 +1,6 @@
 import type { LayoutHeightFog } from "./layout";
 
-/**
- * Render-agnostic Exponential Height Fog model: resolved settings + defaults,
- * shared by the editor view-models and the three.js render binding
- * (`engine/render-three/heightFog.ts`). Kept free of three.js so editor core and
- * the save validator can read it without pulling in the renderer.
- *
- * Faz 1 is a distance-based scene fog (à la Unreal's Exponential Height Fog, but
- * without true world-height falloff): `exp` mode maps to three's `FogExp2`
- * (exponential with distance) and `linear` mode to `Fog` (near/far). Density and
- * start/end are tuned to the small (~100u) scene scale. True height-based falloff
- * is Faz 2 (a custom fog shader) and intentionally not modeled here.
- */
+/** Renderer-independent fog settings. Optional analytic height effects preserve legacy defaults. */
 export type HeightFogMode = "exp" | "linear";
 
 export interface ResolvedHeightFog {
@@ -23,6 +12,12 @@ export interface ResolvedHeightFog {
   color: string;
   /** Exponential density (exp mode); tuned to the ~100u scene scale. */
   density: number;
+  heightFalloff: number;
+  baseHeight: number;
+  startDistance: number;
+  maxOpacity: number;
+  sunColor: string;
+  sunStrength: number;
   /** Linear fog near distance (linear mode). */
   start: number;
   /** Linear fog far distance (linear mode). */
@@ -35,6 +30,12 @@ export const HEIGHT_FOG_DEFAULTS: ResolvedHeightFog = {
   mode: "exp",
   color: "#bcc6d1",
   density: 0.03,
+  heightFalloff: 0,
+  baseHeight: 0,
+  startDistance: 0,
+  maxOpacity: 1,
+  sunColor: "#ffe2bd",
+  sunStrength: 0,
   start: 5,
   end: 60,
 };
@@ -51,6 +52,12 @@ export function resolveHeightFog(
     mode: actor.mode ?? defaults.mode,
     color: actor.color ?? defaults.color,
     density: actor.density ?? defaults.density,
+    heightFalloff: actor.heightFalloff ?? defaults.heightFalloff,
+    baseHeight: actor.baseHeight ?? defaults.baseHeight,
+    startDistance: actor.startDistance ?? defaults.startDistance,
+    maxOpacity: actor.maxOpacity ?? defaults.maxOpacity,
+    sunColor: actor.sunColor ?? defaults.sunColor,
+    sunStrength: actor.sunStrength ?? defaults.sunStrength,
     start: actor.start ?? defaults.start,
     end: actor.end ?? defaults.end,
   };

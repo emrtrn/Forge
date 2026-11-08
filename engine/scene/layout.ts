@@ -474,13 +474,7 @@ export interface LayoutSkyAtmosphere {
   skyLightCapture?: LayoutSkyLightCapture;
 }
 
-/**
- * Singleton environment actor: an Exponential Height Fog (à la Unreal). Faz 1 is
- * a distance-based scene fog — `exp` maps to three's `FogExp2`, `linear` to `Fog`
- * (near/far). All fields are optional; absent reads the defaults in
- * `engine/scene/heightFog.ts`. True world-height falloff is Faz 2 and not modeled
- * here.
- */
+/** Singleton distance fog with optional analytic height falloff and directional tint. */
 export interface LayoutHeightFog {
   /** Display name in the Outliner. Absent means "Exponential Height Fog". */
   name?: string;
@@ -492,6 +486,16 @@ export interface LayoutHeightFog {
   color?: string;
   /** Exponential density (exp mode), tuned to the ~100u scene scale. */
   density?: number;
+  /** Density halves every ln(2)/heightFalloff metres above baseHeight; 0 disables. */
+  heightFalloff?: number;
+  baseHeight?: number;
+  /** Clear distance in exponential mode (metres). */
+  startDistance?: number;
+  /** Upper opacity limit, 0..1. */
+  maxOpacity?: number;
+  /** Tint towards the directional sun, independent of volumetric lighting. */
+  sunColor?: string;
+  sunStrength?: number;
   /** Linear fog near distance (linear mode). */
   start?: number;
   /** Linear fog far distance (linear mode). */

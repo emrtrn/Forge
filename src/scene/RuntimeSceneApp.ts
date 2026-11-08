@@ -2407,7 +2407,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     setCameraFarOverride(this.camera, far, { nearMin });
     if (farViewMode && far !== null && this.layout) {
       const fog = this.layout.heightFog ? resolveHeightFog(this.layout.heightFog) : null;
-      const opacity = heightFogOpacityAt(fog, far);
+      const opacity = heightFogOpacityAt(fog, far, this.camera.position.y);
       if (opacity < VIEW_DISTANCE_FOG_WARN_OPACITY) {
         console.warn(
           `[view-distance] fog is ${Math.round(opacity * 100)}% opaque at the ${Math.round(far)} m far plane, so terrain ends in a hard edge; use Height Fog > Fit to View Distance`,

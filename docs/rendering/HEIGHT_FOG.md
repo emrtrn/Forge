@@ -1,0 +1,17 @@
+# Analytic height fog
+
+The editor and runtime share the existing scene fog path. Advanced settings patch fog-aware materials, including water, terrain and instanced foliage. There is no ray marching, texture sampling, shadow lookup, new render target or additional draw pass for fog.
+
+Legacy defaults preserve the distance-only appearance: `heightFalloff=0`, `startDistance=0`, `maxOpacity=1`, `sunStrength=0`. Existing authored levels are not rewritten. Select Exponential Height Fog and use **Ground Mist Setup** to enable an initial setup, then place **Base Height** at the terrain or lake altitude and adjust Density.
+
+- **Height Falloff**: density is multiplied by `exp(-falloff * (height-baseHeight))`. At 0.01 it halves every 69.3 m. Below the base, density increases. The shader integrates this profile analytically along the view ray, with a stable horizontal-ray limit and bounded exponents.
+- **Clear Distance**: removes the first part of the exponential fog ray. Distances retain Three.js view-depth semantics for backward compatibility.
+- **Maximum Opacity**: caps exponential and linear fog. Values below 1 may expose distant terrain termination.
+- **Sun Tint Strength / Sun Tint**: inexpensive directional inscattering lobe; follows the existing sun direction and fades out below the horizon. World Environment also darkens the tint at night. Does not simulate light shafts or shadowed fog.
+- **Fit to View Distance**: restores uniform exponential fog, zero clear distance and full maximum opacity before fitting 98% opacity. The Details estimate is at base height; the runtime warning uses camera height with a horizontal view reference. Neither guarantees coverage in all viewing directions with height falloff enabled.
+
+Advanced settings register newly visible fog-aware materials each frame via a visible graph traversal; shader hooks are installed once per material with weak ownership. Shared uniform vectors update once per scene frame. Tint conversion is cached by output color space. Legacy-only scenes skip registration. Existing terrain, wind, reflection and shadow shader hooks are chained. Reflection cameras use their own camera matrices, and shared materials read the current rendering scene's settings.
+
+Validation (2026-11-08): TypeScript passed; the default engine suite reported 2,560 passing checks. After the clone-hook correction, 67 focused fog/environment checks passed with exit code 0, and `build:verify` completed its build, fixture/type/import/tool checks, all 2,567 engine checks (including slow checks), strict dist verification and world-data checks. Windows PowerShell's stderr-to-file wrapper returned 1 on expected test warnings despite all stages completing; the final world-data command was also checked through cmd.exe to preserve its actual exit code. Regressions cover numerical integration, horizontal/vertical rays, altitude, clear distance, opacity limits, save precision, prior shader hooks, cloned hooks, scene switching and fog removal. No browser or Playwright checks were run; visual quality and actual GPU/CPU costs remain unmeasured. Checks ran on the shared working tree; unrelated foliage/terrain edits are excluded from the fog commit.
+
+Manual acceptance: compare Ground Mist on/off at ground level and above a valley; inspect water, foliage and terrain at the same depth; rotate toward/away from the sun; preview day/night; save/reload; check Fit to View Distance. Preserve authored level data during these checks.

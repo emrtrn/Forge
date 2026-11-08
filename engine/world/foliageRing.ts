@@ -1,7 +1,7 @@
 /**
- * Procedural foliage ring planning (OPEN_WORLD_PLAN Faz 6 F3): which 32 m cells
- * of a Landscape foliage rule should exist around the camera, and at what
- * density. Pure; the host generates, builds and removes the cells.
+ * Procedural foliage ring planning (OPEN_WORLD_PLAN Faz 6 F3): which cells
+ * (32 m for grass, larger for far-seen types: {@link foliageRingCellSize}) of a
+ * Landscape foliage rule should exist around the camera, and at what density. Pure; the host generates, builds and removes the cells.
  *
  * Density thins with distance in bands. Generation keeps a candidate only when
  * its fixed random value is below the keep fraction, so a cell rebuilt at a
@@ -9,7 +9,14 @@
  */
 import { worldCellKey } from "./worldGrid";
 
+/** Smallest (and grass) ring cell size, metres. */
 export const FOLIAGE_RING_CELL_SIZE = 32;
+/** Largest ring cell size, metres. */
+export const FOLIAGE_RING_MAX_CELL_SIZE = 256;
+/** A cell is grown to about a sixth of the type's cull distance... */
+const CELL_SIZE_PER_REACH = 1 / 6;
+/** ...but never past this many generation candidates (a quarter of the 4096 per-cell instance cap). */
+const MAX_CELL_CANDIDATES = 1024;
 /** Ring radius cap for a rule whose type never culls (`cullEnd = 0`) on a surface wider than this. */
 export const FOLIAGE_RING_MAX_RADIUS = 512;
 /** Cells are kept until 1.25× the radius, so a camera on the edge does not churn them. */
@@ -40,6 +47,26 @@ export interface FoliageRingPlan {
   build: FoliageRingCell[];
   /** Built cells to remove: past the unload ring, off the surface, or density zero. */
   unload: string[];
+}
+
+/**
+ * Ring cell size for a rule, metres: 32 m for grass, doubled while the cell stays
+ * under a sixth of the type's cull distance and under {@link MAX_CELL_CANDIDATES}
+ * candidates at the rule's density, up to {@link FOLIAGE_RING_MAX_CELL_SIZE}. A tree
+ * type seen from 900 m grows in 128 m cells: a 32 m ring of that reach is ~2200
+ * batches, more than the per-frame build budget keeps up with on the road.
+ *
+ * It reads the authored cull distance and density, never the quality scales, so
+ * the layout (cell seeds) is the same on every machine. Changing a type's cull
+ * distance across a doubling step reshuffles that rule's layout once.
+ */
+export function foliageRingCellSize(cullEnd: number, density: number): number {
+  const byReach = cullEnd > 0 ? cullEnd * CELL_SIZE_PER_REACH : 0;
+  const byCount = density > 0 ? Math.sqrt(MAX_CELL_CANDIDATES / density) : Infinity;
+  const limit = Math.min(byReach, byCount, FOLIAGE_RING_MAX_CELL_SIZE);
+  let size = FOLIAGE_RING_CELL_SIZE;
+  while (size * 2 <= limit) size *= 2;
+  return size;
 }
 
 /**

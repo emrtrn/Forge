@@ -1,7 +1,10 @@
 /** Procedural foliage ring planning (OPEN_WORLD_PLAN Faz 6 F3). */
 import assert from "node:assert/strict";
 import {
+  FOLIAGE_RING_CELL_SIZE,
+  FOLIAGE_RING_MAX_CELL_SIZE,
   FOLIAGE_RING_MAX_RADIUS,
+  foliageRingCellSize,
   foliageRingRadius,
   planFoliageRing,
   type FoliageRingCell,
@@ -16,6 +19,18 @@ function built(cells: readonly FoliageRingCell[]): Map<string, number> {
 }
 
 export function registerFoliageRingTests(check: Check): void {
+  check("foliage ring: cell size grows with the cull distance, capped by candidates per cell", () => {
+    assert.equal(foliageRingCellSize(80, 1), FOLIAGE_RING_CELL_SIZE, "grass keeps 32 m cells");
+    assert.equal(foliageRingCellSize(0, 0.01), FOLIAGE_RING_CELL_SIZE, "a type that never culls keeps 32 m cells");
+    assert.equal(foliageRingCellSize(900, 0.01), 128, "a far-seen tree grows in 128 m cells");
+    assert.equal(foliageRingCellSize(900, 1), 32, "a dense type stays under the candidate cap");
+    assert.equal(foliageRingCellSize(900, 0.25), 64);
+    assert.equal(foliageRingCellSize(5000, 0.001), FOLIAGE_RING_MAX_CELL_SIZE);
+    // The tree ring of a 900 m reach: a 32 m grid is ~2200 batches, the grown one ~150.
+    const count = (cellSize: number) => planFoliageRing({ center: [0, 0], radius: 900, density: 1, bounds: WIDE, built: new Map(), cellSize }).build.length;
+    assert.ok(count(32) > 2000 && count(foliageRingCellSize(900, 0.01)) < 200);
+  });
+
   check("foliage ring: radius follows the cull distance, or covers a small surface for a type that never culls", () => {
     assert.deepEqual(foliageRingRadius(90, 0.5, WIDE), { radius: 45, capped: false });
     assert.deepEqual(foliageRingRadius(90, 0, WIDE), { radius: 90, capped: false }, "non-positive scale falls back to 1");

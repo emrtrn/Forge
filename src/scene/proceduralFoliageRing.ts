@@ -1,7 +1,8 @@
 /**
  * Play-side procedural foliage ring (OPEN_WORLD_PLAN Faz 6 F3).
  *
- * Every Landscape foliage rule grows in 32 m cells around the camera, out to
+ * Every Landscape foliage rule grows in cells around the camera (32 m for grass,
+ * larger for a type seen from far: `foliageRingCellSize`), out to
  * its type's cull distance (× the quality cull scale), thinning in distance
  * bands (`engine/world/foliageRing.ts`). Cells are generated off the main
  * thread (`FoliageCellGenerator`) over terrain tiles mirrored into it, then
@@ -12,7 +13,7 @@ import type { FoliageRenderBinding, FoliageRenderResolver } from "@engine/render
 import type { ForgeFoliageTypeDef, LandscapeFoliageRule } from "@engine/scene/foliage";
 import type { TerrainTileLookup } from "@engine/terrain/terrainHeightQuery";
 import { tileKey, type TerrainTileData } from "@engine/terrain/terrainTypes";
-import { FOLIAGE_RING_CELL_SIZE, foliageRingRadius, planFoliageRing, type FoliageRingBounds } from "@engine/world/foliageRing";
+import { foliageRingCellSize, foliageRingRadius, planFoliageRing, type FoliageRingBounds } from "@engine/world/foliageRing";
 import type { FoliageCellGenerator, FoliageGeneratorTerrainDef } from "./foliageCellGenerator";
 
 /** A terrain the ring grows on: World Terrain tiles, or a 1×1 Landscape as one tile. */
@@ -64,6 +65,8 @@ interface ReadyCell {
 
 interface RuleState {
   source: ProceduralFoliageRuleSource;
+  /** Ring cell size, metres; fixed per rule for the ring's life. */
+  cellSize: number;
   bounds: FoliageRingBounds;
   built: Map<string, { keep: number; count: number }>;
   pending: Map<string, PendingCell>;
@@ -83,6 +86,7 @@ export class ProceduralFoliageRing {
   constructor(private readonly options: ProceduralFoliageRingOptions) {
     this.rules = options.rules.map((source) => ({
       source,
+      cellSize: foliageRingCellSize(source.type.cullEnd, source.rule.density),
       bounds: terrainBounds(source.terrain.def),
       built: new Map(),
       pending: new Map(),
@@ -171,21 +175,21 @@ export class ProceduralFoliageRing {
       const known = new Map<string, number>();
       for (const [key, { keep }] of state.built) known.set(key, keep);
       for (const [key, { keep }] of state.pending) known.set(key, keep);
-      const plan = planFoliageRing({ center, radius, density, bounds: state.bounds, built: known });
+      const plan = planFoliageRing({ center, radius, density, bounds: state.bounds, built: known, cellSize: state.cellSize });
       for (const key of plan.unload) {
         state.pending.delete(key);
         if (state.built.delete(key)) this.options.binding.removePackedGroup(objectKey(state, key));
       }
       for (const cell of plan.build) {
         if (this.inFlight.size >= maxInFlight) return;
-        if (!this.cellTilesReady(terrain, cell.cellX, cell.cellZ)) continue;
+        if (!this.cellTilesReady(terrain, cell.cellX, cell.cellZ, state.cellSize)) continue;
         const token = this.nextToken++;
         state.pending.set(cell.key, { keep: cell.keepFraction, token });
         const job = this.options.generator.generate({
           terrainId: terrain.id,
           rule,
           type,
-          request: { cellX: cell.cellX, cellZ: cell.cellZ, cellSize: FOLIAGE_RING_CELL_SIZE, keepFraction: cell.keepFraction },
+          request: { cellX: cell.cellX, cellZ: cell.cellZ, cellSize: state.cellSize, keepFraction: cell.keepFraction },
         }).then(
           ({ count, matrices }) => {
             this.ready.push({ rule: index, key: cell.key, keep: cell.keepFraction, token, matrices, count });
@@ -230,7 +234,7 @@ export class ProceduralFoliageRing {
   }
 
   /** True once every existing tile under the cell (plus a two-vertex margin for normals) is mirrored. */
-  private cellTilesReady(terrain: ProceduralFoliageTerrain, cellX: number, cellZ: number): boolean {
+  private cellTilesReady(terrain: ProceduralFoliageTerrain, cellX: number, cellZ: number, cellSize: number): boolean {
     const { def } = terrain;
     const tileSize = def.tileQuads * def.spacing;
     const margin = 2 * def.spacing;
@@ -238,8 +242,8 @@ export class ProceduralFoliageRing {
       Math.max(0, Math.floor((min - margin - origin) / tileSize)),
       Math.min(tiles - 1, Math.floor((max + margin - origin) / tileSize)),
     ] as const;
-    const [x0, x1] = range(cellX * FOLIAGE_RING_CELL_SIZE, (cellX + 1) * FOLIAGE_RING_CELL_SIZE, def.origin[0], def.tilesX);
-    const [z0, z1] = range(cellZ * FOLIAGE_RING_CELL_SIZE, (cellZ + 1) * FOLIAGE_RING_CELL_SIZE, def.origin[2], def.tilesZ);
+    const [x0, x1] = range(cellX * cellSize, (cellX + 1) * cellSize, def.origin[0], def.tilesX);
+    const [z0, z1] = range(cellZ * cellSize, (cellZ + 1) * cellSize, def.origin[2], def.tilesZ);
     const synced = this.synced.get(terrain.id)!;
     for (let z = z0; z <= z1; z += 1) {
       for (let x = x0; x <= x1; x += 1) {

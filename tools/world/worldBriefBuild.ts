@@ -73,7 +73,9 @@ import {
   validateSaveWorldCellsPayload,
   validateSaveWorldRecipePayload,
 } from "../saveValidator";
-import { createBriefTerrain, type BriefTerrain } from "../../engine/worldbuilder/briefTerrain";
+import { createBriefTerrain, type BriefTerrain, type WaterLake } from "../../engine/worldbuilder/briefTerrain";
+import { lakeBedDistance } from "../../engine/scene/lakeBed";
+import { createLakeAppearance, LAKE_LIMITS } from "../../engine/scene/waterBody";
 import {
   paintWeights,
   plantRules,
@@ -225,6 +227,58 @@ function paintPads(def: WorldTerrainDef, tiles: ReadonlyMap<string, TerrainTileD
       }
     }
   }
+}
+
+/** Texels per axis the shore foam mask may use, with a margin under its 1024 limit. */
+const FOAM_TEXELS = 1000;
+/** Paint layer under a lake and along its shore. */
+const LAKE_SHORE_LAYER = "riverbed";
+
+/**
+ * A lake as the editor's Lake actor: fills the carved bed below its surface,
+ * with the bed recipe the editor's Lake bed tool would carve, so the user can
+ * reshape it there. Null (with a reason) when it is too big for one Lake.
+ */
+function lakeActor(lake: WaterLake, def: WorldTerrainDef, terrainId: string): { actor: Record<string, unknown> } | { problem: string } {
+  const { spacing, origin } = def;
+  const pad = lake.transition + 2 * spacing;
+  const snap = (value: number, axis: 0 | 2, up: boolean): number => {
+    const steps = (value - origin[axis]) / spacing;
+    const limit = (axis === 0 ? def.tilesX : def.tilesZ) * def.tileQuads;
+    return origin[axis] + Math.min(limit, Math.max(0, up ? Math.ceil(steps) : Math.floor(steps))) * spacing;
+  };
+  const min: [number, number] = [snap(lake.min[0] - pad, 0, false), snap(lake.min[1] - pad, 2, false)];
+  const max: [number, number] = [snap(lake.max[0] + pad, 0, true), snap(lake.max[1] + pad, 2, true)];
+  const cells = Math.round((max[0] - min[0]) / spacing) * Math.round((max[1] - min[1]) / spacing);
+  if (cells > LAKE_LIMITS.cells) return { problem: `lake ${lake.id} is too big for one Lake (${cells} terrain cells, limit ${LAKE_LIMITS.cells}); no water placed` };
+  // The shore foam and wet-shore masks have four texels across their band and at
+  // most 1024 per axis (`waterFoam.ts`; the wet shore pads the bounds by its band):
+  // past about 250 m the 1 m default bands are widened to fit.
+  const extent = Math.max(max[0] - min[0], max[1] - min[1]) + 8;
+  const band = Math.min(4, Math.ceil((extent * 4) / FOAM_TEXELS * 10) / 10);
+  // The seed is the point furthest from the shore, where the bed is deepest.
+  let seed: [number, number] = [(lake.min[0] + lake.max[0]) / 2, (lake.min[1] + lake.max[1]) / 2];
+  let best = -Infinity;
+  for (let z = lake.min[1]; z <= lake.max[1]; z += 2) {
+    for (let x = lake.min[0]; x <= lake.max[0]; x += 2) {
+      const inside = lakeBedDistance(lake.polygon, x, z);
+      if (inside > best) [best, seed] = [inside, [x, z]];
+    }
+  }
+  return {
+    actor: {
+      schema: 1, kind: "lake", mode: "fillExisting", coordinateSpace: "world",
+      id: `${lake.id}-water`, name: title(lake.id), terrainRef: terrainId,
+      seed: [savedCoordinate(seed[0]), savedCoordinate(seed[1])], bounds: { min, max },
+      surfaceLevel: Number(lake.surface.toFixed(3)),
+      bed: {
+        points: lake.polygon.map(([x, z]) => [savedCoordinate(x), savedCoordinate(z)]),
+        smooth: false, smoothness: 0, maxDepth: lake.depth, shoreSlopeDegrees: lake.shoreSlopeDeg, transitionWidth: lake.transition,
+        ...(def.layers.some((layer) => layer.id === LAKE_SHORE_LAYER) ? { shorePaint: { layerId: LAKE_SHORE_LAYER, strength: 1 } } : {}),
+      },
+      appearance: { ...createLakeAppearance(), ...(band > 1 ? { foamWidth: band, shoreWetnessWidth: band } : {}) },
+    },
+  };
 }
 
 /** The level as the editor saves it: partitioned when its settings say so, every element through the save validators. */
@@ -419,6 +473,14 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     place(assetId, entry);
   }
 
+  const waterBodies: Record<string, unknown>[] = [];
+  for (const lake of ground.lakes) {
+    const result = lakeActor(lake, def, terrain.id);
+    if ("problem" in result) warnings.push(result.problem);
+    else waterBodies.push(result.actor);
+  }
+  if (waterBodies.length > LAKE_LIMITS.bodies) throw new Error(`${waterBodies.length} lakes; a level holds at most ${LAKE_LIMITS.bodies}`);
+
   const start = brief.playerStart ? briefToWorld(brief, brief.playerStart) : null;
   const startHeight = start ? sampleHeight(start[0], start[1]) : null;
   if (start && startHeight === null) throw new Error("playerStart is off the terrain");
@@ -445,6 +507,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
       id: `${course.id}-water-1`, name: title(course.id), landscapeRef: terrain.id, splineRef: course.id, coordinateSpace: "world",
       surfaceLevel: Number(course.surface[0]!.toFixed(3)), reflectionQuality: "medium",
     })),
+    ...(waterBodies.length ? { waterBodies } : {}),
   } as unknown as RoomLayout;
 
   // Save-canonical files.

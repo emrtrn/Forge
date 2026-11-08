@@ -1,5 +1,7 @@
 import type { LayoutLakeWaterBody } from "../scene/layout";
-import { lakeBedDistance, lakeBedPolyline, type BedPoint } from "../scene/lakeBed";
+import { lakeBedDistance, lakeBedPolyline, lakeBedTarget, type BedPoint } from "../scene/lakeBed";
+
+export { lakeBedTarget };
 import { LAKE_LIMITS, validateWaterBody } from "../scene/waterBody";
 import { captureTerrainTileRect, type TerrainDirtyRect, type TerrainUndoPatch } from "./terrainEdit";
 import { terrainHeightAt } from "./terrainHeightQuery";
@@ -62,13 +64,6 @@ export function preflightLakeBed(def: WorldTerrainDef, lake: LayoutLakeWaterBody
   return { ...grid, keys, poly, tileBytes, estimate };
 }
 
-export function lakeBedTarget(level: number, depth: number, slopeDegrees: number, width: number, distance: number): number {
-  const m = Math.tan(slopeDegrees * Math.PI / 180);
-  if (distance >= 0) return level - Math.min(depth, distance * m);
-  const r = -distance; if (r >= width) return Infinity;
-  const t = r / width, blend = t * t * (3 - 2 * t);
-  return level + m * r / (1 - blend);
-}
 
 function copies(def: WorldTerrainDef, tiles: Map<string, TerrainTileData>, gx: number, gz: number) {
   const q = def.tileQuads, tx = Math.min(def.tilesX - 1, Math.floor(gx / q)), tz = Math.min(def.tilesZ - 1, Math.floor(gz / q));

@@ -91,10 +91,28 @@ export function registerBriefTerrainTests(check: Check): void {
     assert.equal(terrain.height(200, 0), terrain.ground(200, 0), "far from water the ground is untouched");
   });
 
-  check("brief terrain: lakes are reported as not carved; a river needs its depths", () => {
-    const lake = createBriefTerrain(brief({ water: [{ id: "tarn", kind: "lake", polygon: [[0, 0], [20, 0], [10, 20]] }] }));
-    assert.deepEqual(lake.deferred, ["water tarn: lakes are not carved yet"]);
-    assert.equal(lake.ground(0, 0), 0, "no valley: flat at the datum");
+  check("brief terrain: a lake carves its bed below a level the ground around it holds in", () => {
+    // A tilted plain: the ring's lowest ground is on the low (south, +z) side.
+    const shore: Array<[number, number]> = Array.from({ length: 12 }, (_, i) => [60 * Math.cos(i * Math.PI / 6), 60 * Math.sin(i * Math.PI / 6)]);
+    const terrain = createBriefTerrain(brief({
+      valleys: [valley("v", [-280, 280], [-290, 290], { floorProfile: [{ north: 300, elevation: 60 }, { north: -300, elevation: 30 }] })],
+      water: [{ id: "tarn", kind: "lake", polygon: shore, bedDepth: 3 }],
+    }));
+    assert.deepEqual(terrain.deferred, []);
+    const [lake] = terrain.lakes;
+    assert.ok(lake && lake.depth === 3);
+    // Every ring point out to the transition stands at or above the water.
+    for (let i = 0; i < 72; i += 1) {
+      const angle = i * Math.PI / 36;
+      for (const reach of [61, 68, 75]) {
+        const [x, z] = [reach * Math.cos(angle), reach * Math.sin(angle)];
+        assert.ok(terrain.height(x, z) >= lake.surface - 1e-9, `ring at ${x.toFixed(1)}, ${z.toFixed(1)}`);
+      }
+    }
+    assert.ok(Math.abs(terrain.height(0, 0) - (lake.surface - 3)) < 1e-9, "full depth in the middle");
+    assert.ok(terrain.height(0, 0) <= terrain.ground(0, 0), "carving only lowers the ground");
+    assert.ok(terrain.lake(0, 0)!.inside > 50 && terrain.lake(0, 200) === null);
+    assert.equal(terrain.height(0, 200), terrain.ground(0, 200), "far from the lake the ground is untouched");
     assert.throws(() => createBriefTerrain(brief({ water: [{ id: "dry", kind: "river", line: [[0, 0], [0, 50]], width: 4 }] })),
       /dry needs width, bedDepth and surfaceDepth/);
   });

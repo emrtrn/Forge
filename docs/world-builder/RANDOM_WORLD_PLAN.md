@@ -63,7 +63,18 @@ Plan modu (Derekavak, sabit koordinatlı özet) aynı kurucunun üstüne sonra d
   yerleşimleri en kısa ağla bağlar, `exits` iki yolu harita kenarına çıkarır. Boya eğimden kaya,
   yerleşimden uzakta orman. Orta boy ~10 s, büyük (4 km, World Partition açık) ~36 s.
   Test: `tests/engine/randomWorld.test.ts`.
-- [ ] 3. Su
+- [x] 3. Su (8 Kasım 2026, kod; görsel onay bekliyor): `--rivers 0-3 --lakes 0-3` (varsayılan 0:
+  su istenmezse özet birebir aynı). Su, köy/yol/dağ yerleşiminden sonra kendi rastgele dizisiyle
+  eklenir (`engine/worldbuilder/randomWater.ts`): aynı tohum + su = aynı dünya + su. Nehir susuz
+  arazide yüksek yerden başlar, suyun akacağı yolu izler (çukurları doldurup taşar), harita
+  kenarında, bir gölde ya da başka bir nehirde biter; köylerin sel payına (nehirde yarıçapın yarısı
+  + 170 m) ve yol çıkışlarına girmez. Göl önce derin çanaklara, yoksa nehrin aşağı kısmına (nehir
+  orada biter), yoksa en alçak düz yere konur; kıyı halkası 6 m'den fazla yükselen yere (yamaç dibi)
+  konmaz, gerekirse küçülür. Nehir göl kıyısında, kol ana nehrin çizgisinde biter. Vadide nehir
+  varsa köyler tabanın bir yanına geçer.
+  Kurucu gölü editörün göl yatağı biçimiyle oyar, kıyıyı boyar, göl aktörü yazar (plan modu da
+  kazanır); yol nehri düz greybox tabliyeli köprüyle geçer (altı oyulu kalır), göllerin 20 m
+  dışından dolaşır. Test: `randomWorld.test.ts`, `worldBriefWater.test.ts`.
 - [ ] 4. Örtü tipleri
 - [ ] 5. Editör penceresi
 - [ ] 6. Rol → model

@@ -16,6 +16,8 @@ import { briefToWorld, type WorldBrief } from "../../engine/worldbuilder/worldBr
 export const PILOT_TUNING = {
   /** Terrain spline falloff of a water line, metres. */
   waterFalloff: 2,
+  /** Lake shore paint: full this far past the shore, fading over the second, metres. */
+  lakeShore: [3, 4] as const,
   meadowFade: [6, 30] as const,
   rockFade: 30,
   /** Relief worlds (`terrain.relief`): rock from this slope to full at the second, degrees. */
@@ -62,6 +64,19 @@ function smoothstep(value: number): number {
   return t * t * (3 - 2 * t);
 }
 
+/**
+ * River bed paint, 0..1: under a river and its bank, and under a lake out to
+ * `lakeShore[0]` past its shore, fading over `lakeShore[1]`.
+ */
+function wetGround(terrain: BriefTerrain, x: number, z: number): number {
+  const hit = terrain.water(x, z);
+  const river = hit ? 1 - smoothstep((hit.distance - (hit.course.width / 2 + WATER_BED_MARGIN)) / 3) : 0;
+  const lake = terrain.lake(x, z);
+  const [reach, fade] = PILOT_TUNING.lakeShore;
+  const shore = lake ? 1 - smoothstep((-lake.inside - reach) / fade) : 0;
+  return Math.max(river, shore);
+}
+
 /** Landmarks with level ground, world XZ. */
 export function briefClearings(brief: WorldBrief): WorldPoint[] {
   return brief.landmarks.filter((landmark) => landmark.pad).map((landmark) => briefToWorld(brief, landmark.at));
@@ -86,8 +101,7 @@ export function paintWeights(brief: WorldBrief, terrain: BriefTerrain): (x: numb
       const rock = smoothstep((slopeDeg - rock0) / (rock1 - rock0));
       const wild = reach.reduce((nearest, [cx, cz, radius]) => Math.min(nearest, Math.hypot(x - cx, z - cz) - radius), Infinity);
       const forest = smoothstep((wild + 40 * fbm(x / 90, z / 90, 3, brief.seed + 29) - forest0) / (forest1 - forest0));
-      const hit = terrain.water(x, z);
-      const riverbed = hit ? 1 - smoothstep((hit.distance - (hit.course.width / 2 + WATER_BED_MARGIN)) / 3) : 0;
+      const riverbed = wetGround(terrain, x, z);
       const open = (1 - rock) * (1 - riverbed);
       return [open * (1 - forest), open * forest, rock * (1 - riverbed), 0, riverbed, 0];
     };
@@ -100,8 +114,7 @@ export function paintWeights(brief: WorldBrief, terrain: BriefTerrain): (x: numb
     const clearing = clearings.reduce((most, [cx, cz]) =>
       Math.max(most, 1 - smoothstep((Math.hypot(x - cx, z - cz) + wobble - tuning.clearingRadius) / 12)), 0);
     const forest = smoothstep((out - tuning.meadowFade[0]) / (tuning.meadowFade[1] - tuning.meadowFade[0])) * (1 - clearing);
-    const hit = terrain.water(x, z);
-    const riverbed = hit ? 1 - smoothstep((hit.distance - (hit.course.width / 2 + WATER_BED_MARGIN)) / 3) : 0;
+    const riverbed = wetGround(terrain, x, z);
     const open = (1 - rock) * (1 - riverbed);
     return [open * (1 - forest), open * forest, rock * (1 - riverbed), 0, riverbed, 0];
   };

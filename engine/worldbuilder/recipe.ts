@@ -112,6 +112,8 @@ export interface PlanWater extends PlanProvenance {
   path?: WorldPoint[];
   /** Outline (lakes). */
   polygon?: WorldPoint[];
+  /** Water surface width of a river, metres; masks use their default without it. */
+  width?: number;
 }
 
 export interface PlanLandmark extends PlanProvenance {
@@ -481,6 +483,8 @@ function normalizeWater(ctx: Ctx, path: string, value: Record<string, unknown>):
     if (!polygon) return null;
     water.polygon = polygon;
   }
+  const width = optionalPositive(ctx, `${path}.width`, value.width);
+  if (width !== undefined) water.width = width;
   return water;
 }
 

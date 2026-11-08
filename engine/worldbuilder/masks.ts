@@ -30,6 +30,8 @@ export interface SourceSet {
 export interface WaterOptions {
   /** Half width of a plan river's channel around its centre line, metres. Default 4. */
   riverHalfWidth?: number;
+  /** Extra metres round every river's channel (its carved bank). Default 0. */
+  riverMargin?: number;
 }
 
 export interface ExclusionOptions extends WaterOptions {
@@ -136,13 +138,15 @@ export function roadSources(input: MaskInput): SourceSet {
   };
 }
 
-/** Plan water: river centre lines widened by `riverHalfWidth`, lake outlines filled. */
+/** Plan water: river centre lines widened by `riverHalfWidth` (else half their `width`, else the default), lake outlines filled. */
 export function waterSources(input: MaskInput, options: WaterOptions = {}): SourceSet {
-  const halfWidth = options.riverHalfWidth ?? DEFAULT_RIVER_HALF_WIDTH;
   const sources: DistanceSource[] = [];
   for (const water of input.recipe.plan.water) {
     if (water.polygon) sources.push({ kind: "polygon", polygon: water.polygon });
-    else if (water.path) sources.push({ kind: "polyline", points: water.path, radii: water.path.map(() => halfWidth) });
+    else if (water.path) {
+      const radius = (options.riverHalfWidth ?? (water.width === undefined ? DEFAULT_RIVER_HALF_WIDTH : water.width / 2)) + (options.riverMargin ?? 0);
+      sources.push({ kind: "polyline", points: water.path, radii: water.path.map(() => radius) });
+    }
   }
   return { sources, warnings: [] };
 }

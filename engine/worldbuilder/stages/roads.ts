@@ -13,6 +13,11 @@
  * are at most `ROUTE_SPACING` apart and set on the terrain height. What the
  * route still breaks — steep legs, tight bends, water crossings — is reported.
  *
+ * Bridges (`bridges.ts`): each river crossing gets a level deck at a fixed
+ * height; the span's segment neither deforms nor paints the terrain, so the
+ * river runs on under it, and a greybox deck (`structure.bridge`) stands there.
+ * Lakes are walls for the route.
+ *
  * Junctions (`junctions.ts`): where three or more roads meet, the two of the
  * highest class run through the node and the others end at their edge.
  *
@@ -25,18 +30,27 @@
  * The spline lives on the World Terrain under the edge's start node (else its
  * end node). Ids derive from edge ids, so a re-run updates the same spline.
  */
+import { SHAPE_PRIMITIVE_SIZE, shapeAssetId } from "../../scene/shapes";
+import type { LayoutPlacement } from "../../scene/layout";
+import { bridgeRoute, type BridgeRiver, type BridgeSpan } from "../bridges";
 import { resolveJunctions, type JunctionRoad } from "../junctions";
+import { DEFAULT_RIVER_HALF_WIDTH } from "../masks";
+import type { WorldPoint } from "../normalize";
 import type { RoadEdge } from "../recipe";
 import type { ResolvedRoadClass } from "../roadClass";
 import { roadSpec, roadSpline, routeHeights, terrainAt } from "../roadSpline";
 import { designRoadNetwork } from "../roadProfile";
 import { MAX_ROUTE_POINTS, planRoute, type RouteResult } from "../route";
-import type { GeneratedSpline, StageOutput, StageTerrain, WorldStage } from "../stage";
+import type { GeneratedPlacement, GeneratedSpline, StageOutput, StageTerrain, WorldStage } from "../stage";
 import { ROAD_CLASSES } from "../vocabulary";
 
 export { ROUTE_SPACING } from "../route";
 
 export const ROADS_STAGE_ID = "roads";
+/** Greybox bridge deck: thickness, extra width beyond the road, colour. */
+const DECK_THICKNESS = 0.8;
+const DECK_EXTRA_WIDTH = 1;
+const DECK_COLOR = "#9c968c";
 
 /** Spline id of the road that realises a plan edge. */
 export function roadSplineId(edgeId: string): string {
@@ -46,7 +60,7 @@ export function roadSplineId(edgeId: string): string {
 export const roadsStage: WorldStage = {
   id: ROADS_STAGE_ID,
   label: "Roads",
-  version: 5,
+  version: 6,
   run(input): StageOutput {
     const { nodes, edges } = input.recipe.plan.roadGraph;
     const positions = new Map(nodes.map((node) => [node.id, node.position]));
@@ -96,6 +110,22 @@ export const roadsStage: WorldStage = {
     }
 
     warnings.push(...resolveJunctions(routed.map((entry) => entry.road)).warnings);
+    // River crossings: a point at each end of the span, the deck height held between them.
+    const rivers: BridgeRiver[] = input.recipe.plan.water.flatMap((water) => (water.path
+      ? [{ points: water.path, halfWidth: water.width === undefined ? DEFAULT_RIVER_HALF_WIDTH : water.width / 2 }]
+      : []));
+    const spans = new Map<string, BridgeSpan[]>();
+    for (const entry of routed) {
+      const bridged = bridgeRoute(entry.road.points, rivers, input.sampleHeight, `road ${entry.edge.id}`);
+      warnings.push(...bridged.warnings);
+      if (bridged.points.length > MAX_ROUTE_POINTS) {
+        warnings.push(`road ${entry.edge.id}: bridging would pass ${MAX_ROUTE_POINTS} points; no bridges`);
+        continue;
+      }
+      entry.road.points = bridged.points;
+      // A wet crossing it could not bridge is in `bridged.warnings`; the route's own count also takes in the bank.
+      spans.set(entry.edge.id, bridged.spans);
+    }
     const grounded: Array<(typeof routed)[number] & { ground: number[] }> = [];
     for (const entry of routed) {
       const heights = routeHeights(entry.road.points, input.sampleHeight);
@@ -110,8 +140,10 @@ export const roadsStage: WorldStage = {
     grounded.sort((a, b) => rank(a) - rank(b) || (a.edge.id < b.edge.id ? -1 : a.edge.id > b.edge.id ? 1 : 0));
     const profiles = designRoadNetwork(grounded.map(({ edge, spec, road, ground }) => ({
       id: edge.id, points: road.points, ground, width: spec.width, maxGrade: Math.tan(spec.maxSlopeDeg * Math.PI / 180),
+      fixes: (spans.get(edge.id) ?? []).flatMap((span) => [{ index: span.start, height: span.height }, { index: span.start + 1, height: span.height }]),
     })));
     const splines: GeneratedSpline[] = [];
+    const placements: GeneratedPlacement[] = [];
     grounded.forEach(({ edge, terrain, spec, road }, index) => {
       const profile = profiles[index]!;
       const route = routes.get(edge.id)!;
@@ -122,12 +154,17 @@ export const roadsStage: WorldStage = {
       if (profile.overLimit) {
         warnings.push(`road ${edge.id}: the roads it joins force ${round1(Math.atan(profile.maxGrade) * 180 / Math.PI)}° (limit ${spec.maxSlopeDeg}°)`);
       }
-      splines.push({ landscapeId: terrain.id, edge: edge.id, spline: roadSpline(roadSplineId(edge.id), edge.id, road.points, profile.heights, spec, terrain, warnOnce) });
+      const edgeSpans = spans.get(edge.id) ?? [];
+      const bridges = new Set(edgeSpans.map((span) => span.start));
+      splines.push({ landscapeId: terrain.id, edge: edge.id, spline: roadSpline(roadSplineId(edge.id), edge.id, road.points, profile.heights, spec, terrain, warnOnce, bridges) });
+      edgeSpans.forEach((span, index) => {
+        placements.push(deckPlacement(`wb-bridge-${edge.id}-${index + 1}`, road.points[span.start]!, road.points[span.start + 1]!, profile.heights[span.start]!, spec.width));
+      });
     });
     // Splines keep the plan's edge order.
     const order = new Map(edges.map((edge, index) => [edge.id, index]));
     splines.sort((a, b) => order.get(a.edge!)! - order.get(b.edge!)!);
-    return { placements: [], splines, warnings };
+    return { placements, splines, warnings };
   },
 };
 
@@ -138,9 +175,25 @@ function routeWarnings(edge: RoadEdge, route: RouteResult, spec: ResolvedRoadCla
   if (route.tightBends > 0) {
     warnings.push(`road ${edge.id}: ${route.tightBends} bend(s) tighter than the ${spec.minTurnRadius} m turn radius (tightest ${round1(route.tightestRadius!)} m)`);
   }
-  if (route.waterCrossings > 0) warnings.push(`road ${edge.id} crosses water ${route.waterCrossings} time(s); it needs a bridge or ford`);
   if (route.protectedHits > 0) warnings.push(`road ${edge.id} still enters a protected area`);
   return warnings;
+}
+
+/** A greybox deck from `from` to `to`, its top at `height`. */
+function deckPlacement(id: string, from: WorldPoint, to: WorldPoint, height: number, roadWidth: number): GeneratedPlacement {
+  const [dx, dz] = [to[0] - from[0], to[1] - from[1]];
+  const round3 = (value: number): number => Number(value.toFixed(3));
+  const placement: LayoutPlacement & { id: string } = {
+    id,
+    role: "structure.bridge",
+    name: "Bridge",
+    position: [round3((from[0] + to[0]) / 2), round3(height - DECK_THICKNESS / 2), round3((from[1] + to[1]) / 2)],
+    // Local X runs along the road.
+    rotation: [0, round3((Math.atan2(-dz, dx) * 180) / Math.PI), 0],
+    scale: [round3(Math.hypot(dx, dz) / SHAPE_PRIMITIVE_SIZE), round3(DECK_THICKNESS / SHAPE_PRIMITIVE_SIZE), round3((roadWidth + DECK_EXTRA_WIDTH) / SHAPE_PRIMITIVE_SIZE)],
+    color: DECK_COLOR,
+  };
+  return { assetId: shapeAssetId("cube"), placement };
 }
 
 function round1(value: number): number {

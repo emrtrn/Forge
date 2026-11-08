@@ -39,6 +39,8 @@ export function roadSpline(
   road: ResolvedRoadClass,
   terrain: StageTerrain,
   warnOnce: (key: string, message: string) => void,
+  /** Segment indices that are bridge spans: they leave the ground and its paint alone and carry no mesh (the deck is the road). */
+  bridges: ReadonlySet<number> = new Set(),
 ): WorldTerrainSpline {
   const points: ForgeLandscapeSplinePoint[] = route.map(([x, z], index) => ({
     id: `p${index}`,
@@ -50,7 +52,12 @@ export function roadSpline(
   if (road.surfaceLayer !== undefined && layerId === undefined) {
     warnOnce(`layer:${terrain.id}:${road.surfaceLayer}`, `terrain ${terrain.id} has no paint layer "${road.surfaceLayer}"; its roads carry no paint`);
   }
-  const segments: ForgeLandscapeSplineSegment[] = points.slice(1).map((point, index) => ({
+  const segments: ForgeLandscapeSplineSegment[] = points.slice(1).map((point, index) => (bridges.has(index) ? {
+    id: `s${index}`,
+    startPointId: points[index]!.id,
+    endPointId: point.id,
+    deform: { enabled: false, raiseTerrain: false, lowerTerrain: false, flatten: false },
+  } : {
     id: `s${index}`,
     startPointId: points[index]!.id,
     endPointId: point.id,

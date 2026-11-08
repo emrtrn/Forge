@@ -115,7 +115,7 @@ export function registerRegionProfileTests(check: Check): void {
 
   check("world builder: engine/worldbuilder modules stay dependency-free (no three.js)", () => {
     // Only World Builder's own modules and the three-free scene / terrain spline data modules.
-    const allowedScene = new Set(["layout", "placementIdentity", "shapes", "landscape"]);
+    const allowedScene = new Set(["layout", "placementIdentity", "shapes", "landscape", "lakeBed"]);
     const allowedTerrain = new Set(["terrainSplineData", "terrainTypes"]);
     const files = readdirSync("engine/worldbuilder", { recursive: true, encoding: "utf8" })
       .filter((file) => file.endsWith(".ts"));

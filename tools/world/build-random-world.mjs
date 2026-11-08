@@ -5,11 +5,11 @@ import { fileURLToPath } from "node:url";
 
 // npm run world:random -- --out <*.level.json under public/> [--size small|medium|large]
 //   [--landform plain|hills|mountains|valley] [--mountains low|medium|high]
-//   [--settlements village,hamlet,...] [--roads between|exits] [--seed N] [--force]
+//   [--settlements village,hamlet,...] [--roads between|exits] [--rivers 0-3] [--lakes 0-3] [--seed N] [--force]
 // Builds a whole greybox world from a few choices (docs/world-builder/RANDOM_WORLD_PLAN.md).
 // The brief it wrote stays beside the level; `npm run world:brief` rebuilds from it.
 const usage = "Usage: npm run world:random -- --out <*.level.json under public/> [--size small|medium|large] "
-  + "[--landform plain|hills|mountains|valley] [--mountains low|medium|high] [--settlements village,hamlet] [--roads between|exits] [--seed N] [--force]";
+  + "[--landform plain|hills|mountains|valley] [--mountains low|medium|high] [--settlements village,hamlet] [--roads between|exits] [--rivers 0-3] [--lakes 0-3] [--seed N] [--force]";
 const CHOICES = {
   size: ["small", "medium", "large"],
   landform: ["plain", "hills", "mountains", "valley"],
@@ -19,7 +19,7 @@ const CHOICES = {
 
 async function main() {
   const args = process.argv.slice(2);
-  const values = { size: "medium", landform: "hills", mountains: "medium", settlements: "village,hamlet", roads: "exits", seed: String(Date.now() % 100000) };
+  const values = { size: "medium", landform: "hills", mountains: "medium", settlements: "village,hamlet", roads: "exits", rivers: "0", lakes: "0", seed: String(Date.now() % 100000) };
   let out = null;
   let force = false;
   for (let index = 0; index < args.length; index += 1) {
@@ -44,6 +44,11 @@ async function main() {
     if (!["hamlet", "village", "town"].includes(type)) throw new Error(`--settlements: ${type} is not hamlet, village or town`);
     return { type };
   });
+  const [rivers, lakes] = ["rivers", "lakes"].map((key) => {
+    const count = Number(values[key]);
+    if (!Number.isInteger(count) || count < 0 || count > 3) throw new Error(`--${key} must be 0, 1, 2 or 3`);
+    return count;
+  });
   const seed = Number(values.seed);
   if (!Number.isInteger(seed) || seed < 0) throw new Error("--seed must be a whole number");
 
@@ -57,14 +62,16 @@ async function main() {
   const started = Date.now();
   const result = await runRandomWorld({
     root, out, force,
-    world: { seed, size: values.size, landform: values.landform, mountainHeight: values.mountains, settlements, roads: values.roads },
+    world: { seed, size: values.size, landform: values.landform, mountainHeight: values.mountains, settlements, roads: values.roads, rivers, lakes },
   });
   for (const note of result.notes) console.warn(`[world:random] ${note}`);
   for (const warning of result.build.warnings) if (!warning.includes("meshAsset")) console.warn(`[world:random] ${warning}`);
   const buildings = result.build.layout.instances.flatMap((group) => group.placements).filter((placement) => placement.role?.startsWith("building.")).length;
   const cells = result.build.cellKeys.length ? `, ${result.build.cellKeys.length} World Partition cells` : "";
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
-  console.log(`[world:random] ${result.level} (seed ${seed}): ${buildings} buildings, ${result.written} files${cells}, ${seconds} s. Brief: ${result.brief}. Open it from the Content Browser.`);
+  const bridges = result.build.layout.instances.flatMap((group) => group.placements).filter((placement) => placement.role === "structure.bridge").length;
+  const water = `${result.build.ground.courses.length} river(s), ${result.build.ground.lakes.length} lake(s), ${bridges} bridge(s)`;
+  console.log(`[world:random] ${result.level} (seed ${seed}): ${buildings} buildings, ${water}, ${result.written} files${cells}, ${seconds} s. Brief: ${result.brief}. Open it from the Content Browser.`);
 }
 
 main().catch((error) => {

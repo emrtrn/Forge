@@ -8,11 +8,15 @@
  * camera. The brief it writes is an ordinary `*.worldbrief.json`, so a random
  * world can be kept, read and edited like a planned one.
  *
+ * Rivers and lakes (`randomWater.ts`) come last, on their own random stream,
+ * so asking for water leaves the rest of a seed's world as it was.
+ *
  * Pure and deterministic; dependency-free. Placement on the ground is the
  * builder's: this module only lays out where things go.
  */
 import { DEFAULT_RELIEF_CLEAR, type BriefModel, type BriefRelief } from "./worldBrief";
 import type { RoadClass } from "./vocabulary";
+import { randomWater } from "./randomWater";
 
 /** Tile resolution per size; every size has 8 × 8 tiles 2 m apart (1, 2, 4 km). */
 export const WORLD_SIZES = { small: 64, medium: 128, large: 256 } as const;
@@ -70,6 +74,9 @@ export interface RandomWorldOptions {
   mountainHeight: MountainHeight;
   settlements: RandomSettlement[];
   roads: RoadNetwork;
+  /** Rivers and lakes, 0–3 each (`randomWater.ts`); none by default. */
+  rivers?: number;
+  lakes?: number;
   regionProfile?: string;
   models?: readonly BriefModel[];
 }
@@ -134,6 +141,8 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
     return [a.floor[0] + (b.floor[0] - a.floor[0]) * t, a.floor[1] + (b.floor[1] - a.floor[1]) * t];
   };
 
+  // A valley with a river: the side of the floor its settlements take, from the water's own stream.
+  const settlementSide = valley && (options.rivers ?? 0) > 0 ? (random((options.seed ^ 0x2545f491) >>> 0)() < 0.5 ? -1 : 1) : 0;
   // Settlements: random centres inside the map (and on the valley floor), kept apart.
   const placed: Array<{ id: string; at: Point; type: SettlementType; population: number; radius: number }> = [];
   options.settlements.forEach((settlement, index) => {
@@ -144,8 +153,10 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
     for (let attempt = 0; attempt < 400 && !at; attempt += 1) {
       const north = -half + margin + next() * (extent - 2 * margin);
       const [floorW, floorE] = valley ? floorAt(north) : [0, 0];
+      // With a river, a valley's settlements keep to one side of its floor and leave the other to the water.
+      const across = valley ? next() * 2 - 1 : 0;
       const east = valley
-        ? (floorW + floorE) / 2 + (next() * 2 - 1) * (floorE - floorW) * 0.25
+        ? (floorW + floorE) / 2 + (settlementSide === 0 ? across * 0.25 : settlementSide * (0.3 + 0.12 * Math.abs(across))) * (floorE - floorW)
         : -half + margin + next() * (extent - 2 * margin);
       const candidate: Point = [round(east), round(north)];
       if (placed.every((other) => distance(other.at, candidate) >= (other.radius + radius) * 0.9 + 60)) at = candidate;
@@ -270,5 +281,9 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
     props: [],
     models: structuredClone(options.models ?? DEFAULT_NATURE_MODELS),
   };
+  // Water last, on its own random stream: the same seed with water is the same world plus water.
+  if ((options.rivers ?? 0) > 0 || (options.lakes ?? 0) > 0) {
+    brief.water = randomWater(brief, { rivers: options.rivers ?? 0, lakes: options.lakes ?? 0, seed: options.seed, size: options.size }, notes);
+  }
   return { brief, notes };
 }

@@ -28,7 +28,7 @@ function maximalRecipe(): Record<string, unknown> {
     plan: {
       regions: [{ id: "ridge", source: "reference", observed: true, confidence: 0.8, kind: "mountain", polygon: [[0, 0], [100, 0], [50, 80]] }],
       water: [
-        { id: "river_01", source: "reference", observed: false, confidence: 0.4, kind: "river", path: [[-200, 0], [200, 10]] },
+        { id: "river_01", source: "reference", observed: false, confidence: 0.4, kind: "river", path: [[-200, 0], [200, 10]], width: 9 },
         { id: "lake_01", source: "manual", kind: "lake", polygon: [[10, 10], [30, 10], [20, 30]] },
       ],
       landmarks: [{ id: "depot_01", source: "manual", kind: "logistics.depot", position: [-120, 40], settlement: "village_01" }],

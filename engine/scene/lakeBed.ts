@@ -67,3 +67,16 @@ export function lakeBedDistance(poly: readonly BedPoint[], x: number, z: number)
   }
   return inside ? distance : -distance;
 }
+
+/**
+ * Bed height at `distance` from the shore (positive inside): falls at
+ * `slopeDegrees` to `depth` below `level`; outside, rises from `level` and
+ * reaches infinity (no change) `width` out.
+ */
+export function lakeBedTarget(level: number, depth: number, slopeDegrees: number, width: number, distance: number): number {
+  const m = Math.tan(slopeDegrees * Math.PI / 180);
+  if (distance >= 0) return level - Math.min(depth, distance * m);
+  const r = -distance; if (r >= width) return Infinity;
+  const t = r / width, blend = t * t * (3 - 2 * t);
+  return level + m * r / (1 - blend);
+}

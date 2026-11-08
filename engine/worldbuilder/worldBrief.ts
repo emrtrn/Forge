@@ -710,6 +710,7 @@ export function worldBriefRecipe(brief: WorldBrief): WorldRecipe {
       id: water.id, kind: water.kind,
       ...(water.line ? { path: water.line.map(world) } : {}),
       ...(water.polygon ? { polygon: water.polygon.map(world) } : {}),
+      ...(water.line && water.width !== undefined ? { width: water.width } : {}),
       ...planProvenance(water),
     });
   }

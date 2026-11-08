@@ -9,8 +9,10 @@
  *
  * - directional grade cost — gentle below `maxSlopeDeg`, sharply rising above
  *   it, so a climb becomes a traverse or a serpentine;
- * - water costs `WATER_COST`× per metre (a crossing stays possible: a bridge or
- *   ford candidate, T16), protected areas and off-terrain cells are walls;
+ * - river water and its carved bank (`BRIDGE_BANK_REACH`) cost `WATER_COST`×
+ *   per metre, so a road crosses square instead of running along the bank (a
+ *   crossing stays possible: the roads stage bridges it), protected areas, lakes with `LAKE_ROAD_CLEARANCE`
+ *   around them and off-terrain cells are walls;
  * - with a guide, cost grows with distance from it, so the corridor the plan
  *   drew is kept where the terrain allows.
  *
@@ -29,7 +31,8 @@
  *
  * Pure and deterministic; works on `field.ts` grids. Dependency-free.
  */
-import { bandMask, distanceField, gridSpecForBounds, heightField, type Field, type GridSpec } from "./field";
+import { bandMask, distanceField, gridSpecForBounds, heightField, maskOr, type DistanceSource, type Field, type GridSpec } from "./field";
+import { BRIDGE_BANK_REACH } from "./bridges";
 import { protectedMask, waterSources, type MaskInput } from "./masks";
 import type { WorldPoint } from "./normalize";
 
@@ -62,6 +65,8 @@ const SERPENTINE_GRADE_SHARE = 0.85;
 /** Cost per metre above the slope limit, per unit of overshoot ratio. */
 const STEEP_COST = 20;
 export const WATER_COST = 8;
+/** Roads keep this far from a lake's shore: past the ring its bed eases back over (16 m, `LAKE_TRANSITION`). */
+export const LAKE_ROAD_CLEARANCE = 20;
 
 export interface RouteContext extends MaskInput {
   readonly sampleHeight: (x: number, z: number) => number | null;
@@ -184,10 +189,13 @@ function obstacleGrid(context: RouteContext, control: readonly WorldPoint[], cel
   const bounds = { min: [minX - margin, minZ - margin] as WorldPoint, max: [maxX + margin, maxZ + margin] as WorldPoint };
   const area = (bounds.max[0] - bounds.min[0]) * (bounds.max[1] - bounds.min[1]);
   const spec = gridSpecForBounds(bounds, Math.max(cellSize, Math.sqrt(area / MAX_SOLVER_CELLS)));
+  const lakes = context.recipe.plan.water.flatMap((water): DistanceSource[] => (water.polygon ? [{ kind: "polygon", polygon: water.polygon }] : []));
   return {
     spec,
-    water: bandMask(distanceField(spec, waterSources(context).sources, halfWidth + spec.cellSize), { max: halfWidth }),
-    blocked: protectedMask(spec, context).field,
+    water: bandMask(distanceField(spec, waterSources(context, { riverMargin: BRIDGE_BANK_REACH }).sources, halfWidth + spec.cellSize), { max: halfWidth }),
+    blocked: lakes.length
+      ? maskOr(protectedMask(spec, context).field, bandMask(distanceField(spec, lakes, LAKE_ROAD_CLEARANCE + spec.cellSize), { max: LAKE_ROAD_CLEARANCE }))
+      : protectedMask(spec, context).field,
   };
 }
 

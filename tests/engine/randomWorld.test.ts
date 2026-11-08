@@ -18,7 +18,12 @@ import {
   worldExtent,
   type RandomWorldOptions,
 } from "../../engine/worldbuilder/randomWorld";
+import { RIVER_SIZES, SETTLEMENT_WATER_GAP } from "../../engine/worldbuilder/randomWater";
 import { normalizeRegionProfile } from "../../engine/worldbuilder/regionProfile";
+import type { LayoutLakeWaterBody } from "../../engine/scene/layout";
+import { buildLakeGeometry, prepareLakeSnapshot } from "../../engine/terrain/terrainLakeWater";
+import { CooperativeWork } from "../../engine/core/cooperativeWork";
+import { prepareLakePresentation } from "../../engine/render-three/lakePreparation";
 import { briefToWorld, normalizeWorldBrief, type WorldBrief } from "../../engine/worldbuilder/worldBrief";
 import { runRandomWorld } from "../../tools/world/randomWorldRun";
 import { buildWorldFromBrief } from "../../tools/world/worldBriefBuild";
@@ -44,7 +49,66 @@ function brief(options: Partial<RandomWorldOptions> = {}): WorldBrief {
   return normalized!;
 }
 
+/** Every water entry's points with the settlements' gap to it (negative inside the gap). */
+function waterGaps(world: WorldBrief): Array<{ id: string; gap: number }> {
+  return world.water.flatMap((water) => world.settlements.map((settlement) => {
+    const points = water.line ?? water.polygon!;
+    const nearest = Math.min(...points.map(([east, north]) => Math.hypot(east - settlement.center[0], north - settlement.center[1])));
+    const asked = SETTLEMENT_WATER_GAP.share * settlement.radius! + (water.line ? SETTLEMENT_WATER_GAP.river : SETTLEMENT_WATER_GAP.lake);
+    return { id: `${water.id}/${settlement.id}`, gap: nearest - asked };
+  }));
+}
+
 export async function registerRandomWorldTests(check: Check, checkSlowAsync: CheckAsync): Promise<void> {
+  check("random world water: none by default; asking for it leaves the rest of the world as it was", () => {
+    for (const landform of ["mountains", "hills", "plain"] as const) {
+      const dry = randomWorldBrief({ ...OPTIONS, landform, size: "medium" }).brief;
+      assert.deepEqual(dry, randomWorldBrief({ ...OPTIONS, landform, size: "medium", rivers: 0, lakes: 0 }).brief, "0 rivers and lakes: the same brief");
+      assert.deepEqual(dry.water, []);
+      const wet = randomWorldBrief({ ...OPTIONS, landform, size: "medium", rivers: 1, lakes: 1 }).brief;
+      assert.ok((wet.water as unknown[]).length > 0, `${landform}: water`);
+      assert.deepEqual({ ...wet, water: [] }, dry, `${landform}: the same world plus water`);
+    }
+    // A valley's settlements keep to one side of the floor; still the same roads and relief otherwise.
+    const valleyDry = randomWorldBrief({ ...OPTIONS, landform: "valley", size: "medium" }).brief;
+    const valleyWet = randomWorldBrief({ ...OPTIONS, landform: "valley", size: "medium", rivers: 1 }).brief;
+    assert.deepEqual(valleyWet.terrain, valleyDry.terrain);
+    assert.deepEqual(valleyWet.valleys, valleyDry.valleys);
+  });
+
+  check("random world water: rivers run downhill to the edge, a lake or another river; water keeps off the settlements", () => {
+    let lakes = 0;
+    for (const landform of LANDFORMS) {
+      for (const seed of [3, 7, 11]) {
+        const world = brief({ landform, seed, size: "medium", rivers: 2, lakes: 1 });
+        const terrain = createBriefTerrain(world);
+        // The rivers were drawn on the ground before the mountains kept off them.
+        const dry = createBriefTerrain({ ...world, water: [] });
+        const rivers = world.water.filter((water) => water.line);
+        assert.ok(rivers.length >= 1, `${landform} ${seed}: a river`);
+        for (const river of rivers) {
+          assert.equal(river.width, RIVER_SIZES.medium.width);
+          const line = river.line!;
+          const [first, last] = [line[0]!, line[line.length - 1]!];
+          const atEdge = Math.min(world.area.north - last[1], world.area.east - last[0], last[1] - world.area.south, last[0] - world.area.west) < 5;
+          const inLake = world.water.some((lake) => lake.polygon && lake.polygon.some((point) => Math.hypot(point[0] - last[0], point[1] - last[1]) < 250));
+          const intoRiver = rivers.some((other) => other !== river && other.line!.some((point) => Math.hypot(point[0] - last[0], point[1] - last[1]) < 50));
+          assert.ok(atEdge || inLake || intoRiver, `${landform} ${seed} ${river.id} ends at the edge, in a lake or a river`);
+          // Water level never rises downstream; on the ground it was drawn on, the source stands above the mouth.
+          const course = terrain.courses.find((entry) => entry.id === river.id)!;
+          course.surface.slice(1).forEach((level, index) => assert.ok(level <= course.surface[index]!));
+          const [sx, sz] = briefToWorld(world, first);
+          const [ex, ez] = briefToWorld(world, last);
+          assert.ok(dry.ground(sx, sz) >= dry.ground(ex, ez) - 1, `${landform} ${seed} ${river.id}: source above mouth`);
+        }
+        lakes += world.water.filter((water) => water.polygon).length;
+        for (const { id, gap } of waterGaps(world)) assert.ok(gap >= -1, `${landform} ${seed} ${id}: ${gap.toFixed(1)} m inside the settlement's gap`);
+      }
+    }
+    assert.ok(lakes >= 10, `${lakes} of 12 lakes found room`);
+  });
+
+
   check("random world: every landform and size gives a valid brief; the same seed the same brief", () => {
     for (const landform of LANDFORMS) {
       for (const size of ["small", "medium", "large"] as const) {
@@ -141,6 +205,26 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
       assert.ok(built.recipe.generated.parcels.some((parcel) => parcel.settlement === settlement.id), `${settlement.id} has parcels`);
     }
     assert.equal(built.layout.instances.some((group) => group.assetId === "marker:playerStart"), false);
+  });
+
+  await checkSlowAsync("random world water: a small world with a river and a lake builds; the lake fills and every crossing is bridged", async () => {
+    const world = brief({ landform: "hills", seed: 4, rivers: 1, lakes: 1 });
+    const profile = normalizeRegionProfile(JSON.parse(readFileSync(`public/${world.regionProfile}`, "utf8"))).profile;
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as { assets: Array<{ id: string; path: string }> };
+    const byPath = new Map(manifest.assets.map((asset) => [asset.path, asset.id]));
+    const built = buildWorldFromBrief({ brief: world, levelPath: "assets/trial/RandomWater.level.json", profile, assetIdForFile: (file) => byPath.get(file) ?? null });
+    for (const plan of built.stages) assert.deepEqual(plan.errors, [], plan.stageId);
+    assert.equal(built.ground.courses.length, 1);
+    assert.equal((built.layout.riverWaters ?? []).length, 1);
+    assert.ok(!built.warnings.some((warning) => warning.includes("without a bridge") || warning.includes("without one") || warning.includes("flood-prone")), built.warnings.join("; "));
+    const lakes = (built.layout.waterBodies ?? []) as LayoutLakeWaterBody[];
+    assert.equal(lakes.length, 1);
+    const geometry = await buildLakeGeometry(await prepareLakeSnapshot({ def: built.def, tiles: new Map(built.tiles) }, lakes[0]!));
+    assert.equal(geometry.status, "ready", geometry.message);
+    const staged = await prepareLakePresentation(lakes[0]!, geometry, new CooperativeWork({}));
+    staged.geometry.dispose();
+    staged.foam?.dispose();
+    staged.shore?.dispose();
   });
 
   await checkSlowAsync("random world: world:random writes the brief beside a new level and refuses to overwrite it", async () => {

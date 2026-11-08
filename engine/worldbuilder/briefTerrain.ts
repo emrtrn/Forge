@@ -18,8 +18,18 @@
  * Water lines (`water[].line`, listed downstream) carve a bed along a smoothed
  * centreline. The water level follows the ground under the centreline but never
  * rises downstream; the bed sits `bedDepth` and the surface `surfaceDepth`
- * below it. Carving only lowers the ground. Lakes (`water[].polygon`) are not
- * carved yet; they are listed in `deferred`.
+ * below it. Carving only lowers the ground.
+ *
+ * Lakes (`water[].polygon`) carve the editor's Lake bed shape
+ * (`lakeBedTarget`): the surface sits `surfaceDepth` (default
+ * `LAKE_SURFACE_DEPTH`) below the lowest ground on a ring `LAKE_TRANSITION`
+ * wide outside the shore, so the ring holds the water in; the bed falls at
+ * `LAKE_SHORE_SLOPE_DEG` from the shore to `bedDepth` (default `LAKE_DEPTH`)
+ * below the surface, and outside the shore the ground eases back over the
+ * ring. The ring is read with the river beds carved, so a river that runs
+ * into a lake holds its water too: the lake's level is at most the river
+ * bed where it crosses the ring, and that bed only rises upstream. (A river
+ * that leaves a lake falls away downstream and drains it.)
  *
  * Pure and deterministic in world coordinates (tile edges agree). Dependency-free.
  * Writing heights into tiles is the caller's job (`tools/world/worldBriefBuild.ts`);
@@ -29,6 +39,7 @@ import type { WorldPoint } from "./normalize";
 import type { DistanceSource } from "./field";
 import { createMacroRelief, type ReliefProtection } from "./macroRelief";
 import { fbm, ridged } from "./noise";
+import { lakeBedDistance, lakeBedTarget } from "../scene/lakeBed";
 import {
   briefElevationToWorld,
   briefToWorld,
@@ -48,6 +59,16 @@ export const WATER_BANK = 7;
 export const HILLS_KEPT_CLEAR = 0.35;
 /** Four-octave fbm rarely leaves ±0.4: this brings the hills to about ±`height`. */
 const HILLS_GAIN = 2.5;
+/** Lake depth below its surface when the brief gives no `bedDepth`, metres. */
+export const LAKE_DEPTH = 4;
+/** Lake surface below the lowest ground around it when the brief gives no `surfaceDepth`, metres. */
+export const LAKE_SURFACE_DEPTH = 0.4;
+/** Slope of a lake bed from its shore, degrees. */
+export const LAKE_SHORE_SLOPE_DEG = 14;
+/** Ring outside a lake's shore over which the ground eases back, metres. */
+export const LAKE_TRANSITION = 16;
+/** Spacing of the shore samples that set a lake's level, metres. */
+const LAKE_RING_SAMPLE = 4;
 /** Reach of a settlement without a radius, metres. */
 const SETTLEMENT_REACH = 150;
 /** Centreline sample spacing, metres. */
@@ -103,6 +124,28 @@ export interface WaterHit {
   bed: number;
 }
 
+export interface WaterLake {
+  id: string;
+  water: BriefWater;
+  /** Shore, world XZ. */
+  polygon: WorldPoint[];
+  /** World height of the water surface. */
+  surface: number;
+  /** Bed depth below the surface, metres. */
+  depth: number;
+  shoreSlopeDeg: number;
+  transition: number;
+  /** World XZ bounds of the shore. */
+  min: WorldPoint;
+  max: WorldPoint;
+}
+
+export interface LakeHit {
+  lake: WaterLake;
+  /** Distance from the shore: positive inside the lake, negative outside. */
+  inside: number;
+}
+
 export interface BriefTerrain {
   /** Valley ground, before the water beds. */
   ground(x: number, z: number): number;
@@ -113,6 +156,9 @@ export interface BriefTerrain {
   /** The closest water line within reach, or null. */
   water(x: number, z: number): WaterHit | null;
   courses: WaterCourse[];
+  lakes: WaterLake[];
+  /** The lake whose shore is closest, within `LAKE_TRANSITION` outside it, or null. */
+  lake(x: number, z: number): LakeHit | null;
   /** Brief content this step reads but does not build yet. */
   deferred: string[];
 }
@@ -298,10 +344,7 @@ export function createBriefTerrain(brief: WorldBrief): BriefTerrain {
 
   const courses: WaterCourse[] = [];
   for (const water of brief.water) {
-    if (!water.line) {
-      deferred.push(`water ${water.id}: lakes are not carved yet`);
-      continue;
-    }
+    if (!water.line) continue;
     if (water.width === undefined || water.bedDepth === undefined || water.surfaceDepth === undefined) {
       throw new Error(`terrain: water ${water.id} needs width, bedDepth and surfaceDepth to carve its bed`);
     }
@@ -361,7 +404,8 @@ export function createBriefTerrain(brief: WorldBrief): BriefTerrain {
     });
   };
 
-  const height = (x: number, z: number): number => {
+  /** Ground with the river beds carved in. */
+  const riverCarved = (x: number, z: number): number => {
     let result = ground(x, z);
     for (const hit of nearby(x, z)) {
       const halfBed = hit.course.width / 2 + WATER_BED_MARGIN;
@@ -370,8 +414,59 @@ export function createBriefTerrain(brief: WorldBrief): BriefTerrain {
     }
     return result;
   };
+  // A lake's ring is read on the carved ground: a river bed through it is where the water would leave.
+  const lakes: WaterLake[] = brief.water
+    .filter((water) => !water.line)
+    .map((water) => waterLake(water, water.polygon!.map((point) => briefToWorld(brief, point)), riverCarved));
+  const lakeHits = (x: number, z: number): LakeHit[] => lakes
+    .filter((lake) => x > lake.min[0] - lake.transition && x < lake.max[0] + lake.transition
+      && z > lake.min[1] - lake.transition && z < lake.max[1] + lake.transition)
+    .map((lake) => ({ lake, inside: lakeBedDistance(lake.polygon, x, z) }))
+    .filter((hit) => hit.inside > -hit.lake.transition);
+  const height = (x: number, z: number): number => {
+    let result = riverCarved(x, z);
+    for (const { lake, inside } of lakeHits(x, z)) {
+      result = Math.min(result, lakeBedTarget(lake.surface, lake.depth, lake.shoreSlopeDeg, lake.transition, inside));
+    }
+    return result;
+  };
+  const lake = (x: number, z: number): LakeHit | null =>
+    lakeHits(x, z).reduce<LakeHit | null>((best, hit) => (!best || hit.inside > best.inside ? hit : best), null);
   const water = (x: number, z: number): WaterHit | null =>
     nearby(x, z).reduce<WaterHit | null>((closest, hit) => (!closest || hit.distance < closest.distance ? hit : closest), null);
 
-  return { ground, height, valleyAt, water, courses, deferred };
+  return { ground, height, valleyAt, water, courses, lakes, lake, deferred };
+}
+
+/** A lake's level from the lowest ground (river beds carved) on the ring around its shore. */
+function waterLake(water: BriefWater, polygon: WorldPoint[], ground: (x: number, z: number) => number): WaterLake {
+  const xs = polygon.map(([x]) => x);
+  const zs = polygon.map(([, z]) => z);
+  const min: WorldPoint = [Math.min(...xs), Math.min(...zs)];
+  const max: WorldPoint = [Math.max(...xs), Math.max(...zs)];
+  const centre: WorldPoint = [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2];
+  let lowest = Infinity;
+  polygon.forEach((a, index) => {
+    const b = polygon[(index + 1) % polygon.length]!;
+    const steps = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / LAKE_RING_SAMPLE));
+    for (let step = 0; step < steps; step += 1) {
+      const [x, z] = [a[0] + (b[0] - a[0]) * step / steps, a[1] + (b[1] - a[1]) * step / steps];
+      // Out from the shore, away from the lake's centre, across the ring.
+      const out = Math.hypot(x - centre[0], z - centre[1]) || 1;
+      for (const reach of [0, LAKE_TRANSITION / 2, LAKE_TRANSITION]) {
+        lowest = Math.min(lowest, ground(x + (x - centre[0]) / out * reach, z + (z - centre[1]) / out * reach));
+      }
+    }
+  });
+  return {
+    id: water.id,
+    water,
+    polygon,
+    surface: lowest - (water.surfaceDepth ?? LAKE_SURFACE_DEPTH),
+    depth: water.bedDepth ?? LAKE_DEPTH,
+    shoreSlopeDeg: LAKE_SHORE_SLOPE_DEG,
+    transition: LAKE_TRANSITION,
+    min,
+    max,
+  };
 }

@@ -10,6 +10,7 @@ import type { WorldPoint } from "../../engine/worldbuilder/normalize";
 import { createWorldRecipe } from "../../engine/worldbuilder/recipe";
 import { roadsStage, roadSplineId } from "../../engine/worldbuilder/stages/roads";
 import {
+  LAKE_ROAD_CLEARANCE,
   MAX_ROUTE_POINTS,
   planRoute,
   resampleKeepingVertices,
@@ -94,22 +95,24 @@ export function registerWorldRouteTests(check: Check): void {
     assert.ok(sideAt100(west) < -20, `west guide passes west (${sideAt100(west)})`);
   });
 
-  check("world route: a lake is avoided, an unavoidable river is crossed once", () => {
+  check("world route: a lake is avoided with its clearance, an unavoidable river is crossed once", () => {
     const lake = planRoute(context(FLAT, (recipe) => {
       recipe.plan.water.push({ id: "lake", source: "manual", kind: "lake", polygon: [[-30, 80], [30, 80], [30, 120], [-30, 120]] });
     }), SOUTH_NORTH)!;
     assert.equal(lake.method, "solved");
-    assert.equal(lake.reason, "crosses water");
+    assert.equal(lake.reason, "crosses water, enters a protected area");
     assert.equal(lake.waterCrossings, 0);
+    assert.equal(lake.protectedHits, 0);
 
-    // The road surface counts, not just its centre line: 3 m from the shore is dry for a path, wet for a 9 m road.
-    const shore = context(FLAT, (recipe) => {
-      recipe.plan.water.push({ id: "pond", source: "manual", kind: "lake", polygon: [[3, 80], [40, 80], [40, 120], [3, 120]] });
+    // A lake keeps roads LAKE_ROAD_CLEARANCE off its shore (its bed's ring), not just off the water.
+    const pond = (west: number) => context(FLAT, (recipe) => {
+      recipe.plan.water.push({ id: "pond", source: "manual", kind: "lake", polygon: [[west, 80], [west + 40, 80], [west + 40, 120], [west, 120]] });
     });
-    assert.equal(planRoute(shore, SOUTH_NORTH)!.method, "direct");
-    const wide = planRoute(shore, { ...SOUTH_NORTH, halfWidth: 4.5 })!;
-    assert.equal(wide.method, "solved");
-    assert.equal(wide.waterCrossings, 0);
+    assert.equal(planRoute(pond(LAKE_ROAD_CLEARANCE + 6), SOUTH_NORTH)!.method, "direct");
+    const near = planRoute(pond(8), SOUTH_NORTH)!;
+    assert.equal(near.method, "solved");
+    assert.equal(near.protectedHits, 0);
+    assert.ok(near.points.every(([x, z]) => z < 80 - 10 || z > 120 + 10 || x < 8 - LAKE_ROAD_CLEARANCE + 5), "the route keeps off the pond");
 
     const river = planRoute(context(FLAT, (recipe) => {
       recipe.plan.water.push({ id: "river", source: "manual", kind: "river", path: [[-400, 100], [400, 100]] });

@@ -89,7 +89,20 @@ bağımlılıksız):
   altındaki zemini izler ama **akış yönünde hiç yükselmez**; yatak `bedDepth`, yüzey
   `surfaceDepth` kadar aşağıdadır. Oyma zemini yalnız alçaltır. Her çizgi bir terrain
   spline'ı ve bir nehir aktörü olur.
-- Göller oyulmaz, `ridgeElevation` kullanılmaz: ikisi de "not built yet" listesindedir.
+- Her göl (`polygon`) editörün göl yatağı biçimiyle oyulur (`lakeBedTarget`): su yüzü
+  kıyının 16 m dışına kadarki halkanın en alçak zemininin `surfaceDepth` (varsayılan
+  0,4 m) altındadır, böylece halka suyu tutar; yatak kıyıdan 14° eğimle `bedDepth`
+  (varsayılan 4 m) derinliğe iner. Kıyı çakılla (`riverbed`) boyanır ve level'a bir göl
+  aktörü (`waterBodies[]`, `fillExisting`) yazılır; aktör yatak tarifini (`bed`) taşır,
+  göl editörün Lake bed aracıyla yeniden oyulabilir. Halka nehir yatakları oyulmuş
+  haliyle okunur: göle dökülen nehrin yatağı suyu tutar (gölden çıkan nehir ise onu boşaltır).
+  Çerçevesi ~250 m'yi aşan gölde köpük ve ıslak kıyı şeritleri genişletilir (doku eksen
+  başına en çok 1024 piksel, şeridin metresine 4 piksel), yoksa editör yüzeyi kuramaz.
+- Yol bir nehri keserse köprüyle geçer (`engine/worldbuilder/bridges.ts`): açıklık oyulmuş
+  kıyının bittiği yerde (su kenarından 12 m) başlar ve biter, tabliye düzdür (yüksek
+  kıyı, en az yatağın 4 m üstü), altındaki arazi doldurulmaz ve boyanmaz, greybox tabliye
+  (`structure.bridge`) konur. Yollar gölleri kıyıdan 20 m uzaktan dolaşır.
+- `ridgeElevation` kullanılmaz: "not built yet" listesindedir.
 - Editör aşamaları araziye yazmaz (karar 19); bu adımları bugün yalnız `world:brief`
   çalıştırır, editörde arazi aşaması sonraki dilimdir.
 
@@ -99,7 +112,7 @@ kuralları, kaya sayıları, çit) pilotun `PILOT_TUNING`'idir; 3c–3e'de bölg
 
 Henüz level'a yazılmayanlar, çalıştırıcının "not built yet" çıktısında listelenir:
 `environment` (WES bağı; ışık ve renk kullanıcıdadır), `regions` (yalnız recipe planında),
-`ridgeElevation`, göller.
+`ridgeElevation`.
 
 ## Kayıt biçimi
 
@@ -115,7 +128,9 @@ hiçbir dosyayı değiştirmez:
 
 Doğrulama: `tests/engine/briefTerrain.test.ts` (iki vadi sırtta buluşur, eşit olmayan
 kesitler, kapanan vadi ucu, rölyefsiz yamaç tam formül, kesitlere hizasız dere yatağını
-oyar ve yokuş yukarı akmaz, göl raporlanır, belirlenimcilik, bilinmeyen alan reddi),
+oyar ve yokuş yukarı akmaz, gölün halkası suyu tutar, belirlenimcilik, bilinmeyen alan reddi),
+`tests/engine/worldBriefWater.test.ts` (göl aktörü taşmadan dolar, kıyı boyanır; nehri kesen
+yol düz tabliyeyle geçer, yatak açık kalır),
 `tests/engine/wbPilotValley.test.ts` (iki derleme bayt bayt aynı, partition'lı
 level geri okunup yeniden kaydedilince aynı dosyalar, dosya katmanı, `--force`) ve
 `tests/smoke/world-brief.spec.ts` (gerçek editörde aç + Save: partition'lı ve partition'sız
@@ -139,7 +154,7 @@ Kullanıcının pilot level'daki düzenlemeleri (World Partition, `forge.vehicle
 ## Sonraki adımlar
 
 3. Geçici adımlar genelleşir. ~~3a makro arazi + su yatakları~~ (`briefTerrain.ts`, 7 Kasım).
-   Sırada: 3b göl yatağı ve `ridgeElevation`; 3c boya, 3d bitki kuralları, 3e kaya/prop
+   ~~3b göl yatağı~~ (8 Kasım, rastgele dünya 3. adımıyla). Sırada: `ridgeElevation`; 3c boya, 3d bitki kuralları, 3e kaya/prop
    saçılımı bölge profiline (`PILOT_TUNING` kalkar); 3f editörde arazi aşaması + tek undo.
 4. T41 model listesi ve rol → model bağlama (`models` satırları, §13.7).
 

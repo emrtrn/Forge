@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { observeBrowserErrors } from "./browserErrors";
 
 const SOURCE_SCENE_NAME = "__playwright-smoke";
 const TARGET_SCENE_NAME = "__playwright-smoke-target";
@@ -22,17 +23,15 @@ test("runtime playflow smoke: boot, save/load UI, travel", async ({
   context,
 }) => {
   const consoleMessages: string[] = [];
-  const pageErrors: string[] = [];
+  const pageErrors = observeBrowserErrors(page);
 
   await context.addInitScript(() => {
     localStorage.clear();
   });
 
-  page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
     const text = message.text();
     consoleMessages.push(text);
-    if (message.type() === "error") pageErrors.push(text);
   });
 
   await page.goto(`/?debug&runtimeSmoke=${Date.now()}`);
@@ -61,5 +60,5 @@ test("runtime playflow smoke: boot, save/load UI, travel", async ({
   await expect(page.locator(".forge-loading")).toBeHidden({ timeout: 30_000 });
   await expect(page.locator('[data-ui-id="speed-label"]')).toContainText("Speed");
 
-  expect(pageErrors).toEqual([]);
+  expect(pageErrors()).toEqual([]);
 });

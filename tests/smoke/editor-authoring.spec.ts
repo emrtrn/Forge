@@ -1,14 +1,11 @@
 import { expect, test } from "./test";
+import { observeBrowserErrors } from "./browserErrors";
 
 test("editor authoring smoke: place, transform, undo, save, reload, play", async ({
   page,
   context,
 }) => {
-  const pageErrors: string[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
-  page.on("console", (message) => {
-    if (message.type() === "error") pageErrors.push(message.text());
-  });
+  const pageErrors = observeBrowserErrors(page);
 
   await page.goto("/?editor");
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 30_000 });
@@ -104,5 +101,5 @@ test("editor authoring smoke: place, transform, undo, save, reload, play", async
   await expect(runtime.locator("#ui-overlay")).toBeVisible();
   await runtime.close();
 
-  expect(pageErrors).toEqual([]);
+  expect(pageErrors()).toEqual([]);
 });

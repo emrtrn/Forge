@@ -456,8 +456,8 @@ export const TERRAIN_LIT_FIXED_SAMPLERS = [FRAGMENT_TERRAIN_PARS, fragmentColorP
  * and the terrain is not drawn at all, so the sun's cascade count is budgeted
  * against it.
  */
-export function terrainLitFragmentSamplers(textured: boolean, normalMapped = false, puddleCoverage = false): number {
-  return TERRAIN_LIT_FIXED_SAMPLERS - 1 + (puddleCoverage ? 1 : 0) + (textured ? 1 : 0) + (normalMapped ? 1 : 0);
+export function terrainLitFragmentSamplers(textured: boolean, normalMapped = false, puddleCoverage = false, oceanCaustics = false): number {
+  return TERRAIN_LIT_FIXED_SAMPLERS - 2 + (oceanCaustics ? 1 : 0) + (puddleCoverage ? 1 : 0) + (textured ? 1 : 0) + (normalMapped ? 1 : 0);
 }
 
 function injectVertex(shader: WebGLProgramParametersWithUniforms, lit = false): void {
@@ -575,6 +575,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
 
   const material = new MeshStandardMaterial({ color: new Color("#ffffff"), roughness: 1, metalness: 0 });
   (material.defines ??= {}).FORGE_TERRAIN_CAUSTIC_BODIES = 0;
+  material.defines.FORGE_TERRAIN_OCEAN_CAUSTICS = 0;
   material.defines.FORGE_TERRAIN_WET_SHORES = 0;
   material.defines.FORGE_TERRAIN_PUDDLES = 0;
   patch(material, litUniforms, `forge-terrain-cdlod-l${textured ? 1 : 0}${normalMapped ? "-n1" : ""}${detailMapped ? "-d1" : ""}`, (shader) => {
@@ -601,7 +602,7 @@ export function createTerrainMaterials(inputs: TerrainMaterialInputs): TerrainMa
   // a 16-unit GPU they do now that the layer textures share one sampler.
   const compile = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
-    const waterSupported = litFragmentSamplers + (material.defines?.FORGE_TERRAIN_PUDDLES ? 1 : 0) + 3 <= (renderer?.capabilities?.maxTextures ?? 16);
+    const waterSupported = litFragmentSamplers + (material.defines?.FORGE_TERRAIN_PUDDLES ? 1 : 0) + (material.defines?.FORGE_TERRAIN_OCEAN_CAUSTICS ? 1 : 0) + 3 <= (renderer?.capabilities?.maxTextures ?? 16);
     if (waterSupported) (shader.defines ??= {}).FORGE_TERRAIN_WATER = 1;
     compile(shader, renderer);
   };

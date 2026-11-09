@@ -1,5 +1,13 @@
+/** Linear-light spectral extinction shared by the Ocean interface and seabed sunlight. */
+export const WATER_EXTINCTION_GLSL = /* glsl */ `
+vec3 waterExtinction(vec3 deep, float distance) {
+  vec3 tint = deep / max(max(deep.r, deep.g), max(deep.b, 0.00001));
+  return (vec3(1.0) + (vec3(1.0) - tint) * 2.0) / max(distance, 0.01);
+}
+`;
 /** Shared optics, while river flow and lake motion remain separate. */
 export const WATER_OPTICS_GLSL = /* glsl */ `
+${WATER_EXTINCTION_GLSL}
 float waterHash(vec2 point) {
   point = fract(point * vec2(123.34, 456.21));
   point += dot(point, point + 45.32);

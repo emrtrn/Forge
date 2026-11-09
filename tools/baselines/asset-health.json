@@ -1,6 +1,11 @@
 {
   "schema": 1,
   "warnings": [
-    "asset-file-unregistered:assets/starter-content/UI/SaveLoadMenu.ui.json"
+    "asset-file-unregistered:assets/world-builder/covers/alpine.cover.json",
+    "asset-file-unregistered:assets/world-builder/covers/desert.cover.json",
+    "asset-file-unregistered:assets/world-builder/covers/farmland.cover.json",
+    "asset-file-unregistered:assets/world-builder/covers/forest.cover.json",
+    "asset-file-unregistered:assets/world-builder/covers/meadow.cover.json",
+    "asset-file-unregistered:assets/world-builder/covers/steppe.cover.json"
   ]
 }

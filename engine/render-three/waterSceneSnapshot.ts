@@ -1,9 +1,9 @@
 import { BufferGeometry, DepthTexture, Group, HalfFloatType, Matrix4, Mesh, MeshBasicMaterial, UnsignedIntType, Vector2, WebGLRenderTarget,
-  type Camera, type Scene, type WebGLRenderer } from "three";
+  type Camera, type Scene, type Texture, type WebGLRenderer } from "three";
 
 const snapshots = new WeakMap<Scene, WaterSceneSnapshot>();
 
-/** One colour/depth copy after opaque drawing, shared by Lake and River.
+/** One colour/depth copy after opaque drawing, shared by Lake, River and Ocean.
  * No second scene render. Nested planar cameras and direct/MSAA paths fall back
  * to the baked terrain depth instead of reading an unresolved/attached texture.
  */
@@ -91,7 +91,7 @@ export class WaterSceneSnapshot {
 }
 
 export function createWaterSceneUniforms() {
-  return { waterSceneColor: { value: null }, waterSceneDepth: { value: null },
+  return { waterSceneColor: { value: null as Texture | null }, waterSceneDepth: { value: null as DepthTexture | null },
     waterSceneSize: { value: new Vector2(1, 1) }, waterSceneInverseProjection: { value: new Matrix4() },
     waterSceneCameraWorld: { value: new Matrix4() },
     waterSceneEnabled: { value: 0 }, waterSceneReversed: { value: 0 } };

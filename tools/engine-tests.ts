@@ -1,3 +1,4 @@
+import { registerOceanWaterTests } from "../tests/engine/oceanWater.test";
 import { AoSurfaceMaterials } from "../engine/render-three/aoSurfaceMaterials";
 import { registerLakeUnderwaterTests } from "../tests/engine/lakeUnderwater.test";
 import { registerWaterWheelInteractionTests } from "../tests/engine/waterWheelInteraction.test";
@@ -1341,6 +1342,7 @@ registerTerrainWorldRendererTests(check);
 registerTerrainTrackDetailTests(check);
 await registerPuddlePreviewTests(checkAsync);
 await registerPuddlePersistenceTests(checkAsync);
+await registerOceanWaterTests(checkAsync);
 registerSurfaceResponseTests(check);
 registerTerrainSurfaceTests(check);
 registerWheelTrackTests(check);

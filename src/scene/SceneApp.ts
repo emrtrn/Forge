@@ -1,3 +1,5 @@
+import { OceanWaterController } from "./oceanWaterController";
+import { OCEAN_LIMITS, validateOceanWater, type OceanWaterBody } from "@engine/scene/oceanWater";
 import { validateWaterCrestFoam } from "@engine/scene/waterCrestFoam";
 import { LakeFoamStore } from "./lakeFoamStore";
 import { PuddlePreview } from "@/editor/puddlePreview";
@@ -1427,6 +1429,7 @@ export class SceneApp {
   private lakePick: { terrainRef: string; reseed: string | null; puddle?: boolean } | null = null;
   private puddlePreview: PuddlePreview | null = null;
   private puddles: PuddleWaterController | null = null;
+  private oceans: OceanWaterController | null = null;
   private lakeSeedAbort = new AbortController();
   private lakeDrag: { before: LayoutLakeWaterBody; edge: number; pointerId: number; draft: boolean } | null = null;
   private lakeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -2076,6 +2079,7 @@ export class SceneApp {
       const shadowLights = !this.renderer.shadowMap.enabled ? []
         : this.sunCascades?.isActive ? this.sunCascades.cascadeLights
           : this.sun?.castShadow ? [this.sun] : [];
+      this.oceans?.update(deltaSeconds, this.editorViewportCamera());
       this.puddles?.update();
       const puddleWind = resolveLevelWind(this.layout, this.worldEnvironmentState());
       this.puddles?.updateWind(puddleWind, now / 1000);
@@ -2184,6 +2188,7 @@ export class SceneApp {
     this.riverFoamAborter.abort(); this.riverFoam.clear(); this.riverFoamMessages.clear();
     this.lakeFoamJob?.controller.abort(); this.lakeFoamJob=null;
     this.lakes?.dispose();
+    this.oceans?.dispose(); this.oceans = null;
     this.puddles?.dispose();
     this.clearPuddlePreview();
     if (this.lakeTimer) clearTimeout(this.lakeTimer);
@@ -2383,6 +2388,7 @@ export class SceneApp {
   }
 
   renameSceneObject(id: string, name: string): void {
+    if (id.startsWith("ocean:")) { this.setOceanByIndex(Number(id.slice(6)), { name }); return; }
     if (id.startsWith("puddle:")) { this.setPuddleByIndex(Number(id.slice(7)), { name }); return; }
     if (id.startsWith("lake:")) { this.setLakeByIndex(Number(id.slice(5)), { name }); return; }
     const selection = parseSelectionId(id);
@@ -2419,6 +2425,7 @@ export class SceneApp {
   }
 
   setSceneObjectHidden(id: string, hidden: boolean): void {
+    if (id.startsWith("ocean:")) { this.setOceanByIndex(Number(id.slice(6)), { hidden }); return; }
     if (id.startsWith("puddle:")) { this.setPuddleByIndex(Number(id.slice(7)), { hidden }); return; }
     if (id.startsWith("lake:")) { this.setLakeByIndex(Number(id.slice(5)), { hidden }); return; }
     const selection = parseSelectionId(id);
@@ -2454,6 +2461,7 @@ export class SceneApp {
   }
 
   setSceneObjectLocked(id: string, locked: boolean): void {
+    if (id.startsWith("ocean:")) { this.setOceanByIndex(Number(id.slice(6)), { locked }); return; }
     if (id.startsWith("puddle:")) { this.setPuddleByIndex(Number(id.slice(7)), { locked }); return; }
     if (id.startsWith("lake:")) { this.setLakeByIndex(Number(id.slice(5)), { locked }); return; }
     const selection = parseSelectionId(id);
@@ -2873,7 +2881,9 @@ export class SceneApp {
     }
 
     const radius = box && !box.isEmpty() ? box.getSize(new Vector3()).length() * 0.5 : 0.8;
-    const distance = clamp(radius * 1.8, 1.25, 4.2);
+    // The usual small-prop cap would place an Ocean's camera inside its island.
+    const maxDistance = this.selection.kind === "ocean" ? Math.max(4.2, Math.min(camera.far * .5, radius * 2.5)) : 4.2;
+    const distance = clamp(radius * 1.8, 1.25, maxDistance);
     if (camera instanceof OrthographicCamera) {
       this.orthoViewHeight = clamp(radius * 4, ORTHO_MIN_VIEW_HEIGHT, ORTHO_MAX_VIEW_HEIGHT);
       this.updateOrthoProjection();
@@ -3251,6 +3261,8 @@ export class SceneApp {
     setTerrainSelfShadow(quality.terrainSelfShadow);
     setTerrainFarTiling(quality.terrainFarTiling);
     void this.lakes?.setQuality(lakeQuality(quality)).catch(error => console.warn("[lake-quality]", error));
+    this.oceans?.setReflectionQuality(lakeQuality(quality).reflectionQuality);
+    this.oceans?.setCausticsAllowed(lakeQuality(quality).causticsAllowed);
     this.puddleReflections.setQuality(lakeQuality(quality).reflectionQuality);
     if (!quality.lakeFoamAllowed) this.riverFoam.clearLoaded();
     for(const river of this.riverWaterObjects) {
@@ -3645,6 +3657,7 @@ export class SceneApp {
   }
 
   deleteSelected(): void {
+    if (this.selection?.kind === "ocean") { this.deleteOcean(); return; }
     if (this.selection?.kind === "puddle") { this.deletePuddle(); return; }
     if (this.selection?.kind === "lake") { this.deleteLake(); return; }
     // Environment singletons are outside the transform/
@@ -7442,6 +7455,7 @@ export class SceneApp {
   private async buildLandscapes(): Promise<void> {
     this.clearPuddlePreview();
     this.lakes?.dispose();
+    this.oceans?.dispose(); this.oceans = null;
     this.puddles?.dispose(); this.lakeDraft = null; this.lakePick = null; this.lakePendingSelection = null;
     if (this.lakeTimer) { clearTimeout(this.lakeTimer); this.lakeTimer = null; }
     this.riverWaterBuild += 1;
@@ -7503,6 +7517,7 @@ export class SceneApp {
   }
 
   private rebuildLakes(delay = 0): void {
+    this.rebuildOceans();
     this.rebuildPuddles();
     this.lakes?.invalidate();
     if (this.lakeTimer) clearTimeout(this.lakeTimer);
@@ -7518,6 +7533,7 @@ export class SceneApp {
   }
 
   private updateLakesForTerrainPatches(id: string, patches: readonly TerrainUndoPatch[]): void {
+    if (patches.some(p => p.before.heights.some((h, i) => h !== p.after.heights[i])) && this.layout?.oceanWaters?.some(o => o.terrainRef === id)) this.rebuildOceans(true);
     if (this.layout?.puddleWaters?.some(body => body.terrainRef === id)) this.rebuildPuddles(true);
     if (this.puddlePreview?.snapshot().terrainRef === id) void this.puddlePreview.rebuild();
     const document = this.lakeDocument(id); if (!document) return;
@@ -7696,7 +7712,7 @@ export class SceneApp {
   /** Context shared by the Landscape water panel and a selected Lake inspector. */
   getWaterSystemContext() {
     const lake = this.getLakeEditorState();
-    const terrainId = this.getSelectedPuddle()?.terrainRef ?? lake.source?.terrainRef ?? this.lakePick?.terrainRef;
+    const terrainId = this.getSelectedOcean()?.terrainRef ?? this.getSelectedPuddle()?.terrainRef ?? lake.source?.terrainRef ?? this.lakePick?.terrainRef;
     const index = this.selection?.kind === "landscape" ? this.selection.index
       : this.layout?.landscapes?.findIndex((actor) => actor.id === terrainId) ?? -1;
     const terrain = this.layout?.landscapes?.[index];
@@ -7707,6 +7723,8 @@ export class SceneApp {
       index, name: terrain.name ?? terrain.id, locked: !!terrain.locked,
       busy: lake.draft || lake.picking || !!this.lakePick?.puddle || !!this.puddlePreview?.snapshot().seed,
       bodies: [
+        ...(this.layout?.oceanWaters ?? []).filter(body => body.terrainRef === terrain.id)
+          .map(body => ({ id: body.id, name: body.name ?? body.id, kind: "ocean" as const, active: body.id === this.getSelectedOcean()?.id })),
         ...(this.layout?.puddleWaters ?? []).filter(body => body.terrainRef === terrain.id)
           .map(body => ({ id: body.id, name: body.name ?? body.id, kind: "puddle" as const, active: body.id === this.getSelectedPuddle()?.id })),
         ...rivers.map((water) => ({ id: water.id, name: water.name ?? water.id, kind: "river" as const,
@@ -7725,10 +7743,13 @@ export class SceneApp {
     return true;
   }
 
-  selectWaterSystemBody(kind: "river" | "lake" | "puddle", id: string): void {
+  selectWaterSystemBody(kind: "river" | "lake" | "puddle" | "ocean", id: string): void {
     const context = this.getWaterSystemContext();
     if (!context || context.busy || !context.bodies.some((body) => body.kind === kind && body.id === id)) return;
-    if (kind === "puddle") {
+    if (kind === "ocean") {
+      const index = this.layout?.oceanWaters?.findIndex(body => body.id === id) ?? -1;
+      if (index >= 0) this.select({ kind: "ocean", index });
+    } else if (kind === "puddle") {
       const index = this.layout?.puddleWaters?.findIndex(body => body.id === id) ?? -1;
       if (index >= 0) this.select({ kind: "puddle", index });
     } else if (kind === "river") {
@@ -7750,6 +7771,79 @@ export class SceneApp {
       available: this.getLakeEditorState().available && !this.lakeDraft };
   }
 
+  getSelectedOcean(): OceanWaterBody | null {
+    const body = this.selection?.kind === "ocean" ? this.layout?.oceanWaters?.[this.selection.index] : undefined;
+    return body ? structuredClone(body) : null;
+  }
+
+  getOceanEditorState() {
+    const source = this.getSelectedOcean(), context = this.getWaterSystemContext();
+    const actor = context ? this.layout?.landscapes?.[context.index] : undefined;
+    const document = actor ? this.lakeDocument(actor.id) : undefined;
+    const cells = document ? document.def.tilesX * document.def.tilesZ * document.def.tileQuads ** 2 : Infinity;
+    return { source, result: source ? this.oceans?.results.get(source.id) ?? null : null,
+      available: !!document && !context?.locked && !context?.busy && cells <= OCEAN_LIMITS.cells && !this.layout?.oceanWaters?.length };
+  }
+
+  private rebuildOceans(force = false): void {
+    if (!this.layout?.oceanWaters?.length && !this.oceans) return;
+    this.oceans ??= new OceanWaterController({ scene: this.scene, renderer: this.renderer,
+      reflections: this.waterReflections, reflectionQuality: lakeQuality(this.editorQuality).reflectionQuality,
+      causticsAllowed: lakeQuality(this.editorQuality).causticsAllowed,
+      environmentProbes: () => this.eligibleProbeBakes(),
+      document: id => this.layout?.landscapes?.some(a => a.id === id) ? this.lakeDocument(id) : undefined,
+      load: async (id, key, signal) => {
+        const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);
+        if (!actor || !document) throw new Error("Missing Ocean terrain");
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { ...(signal ? { signal } : {}), cache: "no-cache" });
+        if (!response.ok) throw new Error(`Ocean tile ${key}: HTTP ${response.status}`);
+        return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+      }, changed: () => { if (this.selection?.kind === "ocean") this.emitSelectionChanged(); },
+    });
+    void this.oceans.rebuild(this.layout?.oceanWaters ?? [], force).catch(error => this.onStatus?.(String(error), "warning"));
+  }
+
+  createOcean(): void {
+    const context = this.getWaterSystemContext();
+    const actor = context ? this.layout?.landscapes?.[context.index] : undefined;
+    const document = actor ? this.lakeDocument(actor.id) : undefined;
+    if (!this.layout || !actor || !document || !this.getOceanEditorState().available) return;
+    const d = document.def;
+    const body: OceanWaterBody = { schema: 1, kind: "ocean", coordinateSpace: "world", id: "ocean-1", name: "Ocean",
+      terrainRef: actor.id, bounds: { min: [d.origin[0], d.origin[2]],
+        max: [d.origin[0] + d.tilesX * d.tileQuads * d.spacing, d.origin[2] + d.tilesZ * d.tileQuads * d.spacing] },
+      openEdges: ["west", "east", "north", "south"], surfaceLevel: d.origin[1], offshoreDepth: 40 };
+    const before = structuredClone(this.layout.oceanWaters ?? []);
+    this.executeCommand({ label: "Create Ocean", redo: () => this.restoreOceans([body], body.id), undo: () => this.restoreOceans(before) });
+  }
+
+  editOcean(patch: Partial<OceanWaterBody>): void {
+    if (this.selection?.kind === "ocean") this.setOceanByIndex(this.selection.index, patch);
+  }
+
+  private setOceanByIndex(index: number, patch: Partial<OceanWaterBody>): void {
+    const source = this.layout?.oceanWaters?.[index];
+    if (!source || (source.locked && patch.locked === undefined)) return;
+    try {
+      const before = structuredClone(this.layout?.oceanWaters ?? []), after = structuredClone(before);
+      after[index] = validateOceanWater({ ...source, ...patch, id: source.id, terrainRef: source.terrainRef });
+      this.executeCommand({ label: "Edit Ocean", redo: () => this.restoreOceans(after, source.id), undo: () => this.restoreOceans(before, source.id) });
+    } catch (error) { this.onStatus?.(String(error), "warning"); this.emitSelectionChanged(); }
+  }
+
+  deleteOcean(): void {
+    const source = this.getSelectedOcean(); if (!source || source.locked) return;
+    const before = structuredClone(this.layout?.oceanWaters ?? []);
+    this.executeCommand({ label: "Delete Ocean", redo: () => this.restoreOceans([]), undo: () => this.restoreOceans(before, source.id) });
+  }
+
+  private restoreOceans(bodies: OceanWaterBody[], selectedId?: string): void {
+    if (!this.layout) return;
+    if (bodies.length) this.layout.oceanWaters = structuredClone(bodies); else delete this.layout.oceanWaters;
+    const index = bodies.findIndex(body => body.id === selectedId);
+    this.select(index >= 0 ? { kind: "ocean", index } : null); this.rebuildOceans(); this.emitSelectionChanged();
+  }
+
   getSelectedPuddle(): PuddleWaterBody | null {
     const body = this.selection?.kind === "puddle" ? this.layout?.puddleWaters?.[this.selection.index] : undefined;
     return body ? structuredClone(body) : null;
@@ -7765,7 +7859,7 @@ export class SceneApp {
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);
         if (!actor || !document) throw new Error("Missing Puddle terrain");
-        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { signal, cache: "no-cache" });
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { ...(signal ? { signal } : {}), cache: "no-cache" });
         if (!response.ok) throw new Error(`Puddle tile ${key}: HTTP ${response.status}`);
         return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
       }, changed: () => { if (this.selection?.kind === "puddle") this.emitSelectionChanged(); },
@@ -7859,7 +7953,7 @@ export class SceneApp {
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);
         if (!actor || !document) throw new Error("Missing Puddle terrain");
-        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { signal, cache: "no-cache" });
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { ...(signal ? { signal } : {}), cache: "no-cache" });
         if (!response.ok) throw new Error(`Puddle tile ${key}: HTTP ${response.status}`);
         return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
       }, changed: () => this.emitSelectionChanged(),
@@ -8042,7 +8136,7 @@ export class SceneApp {
       let hit = raycastTerrain(document.def, lookup, origin, direction, Infinity, document.globalAttributes?.map);
       for (let i = 0; hit?.approximate && i < 4; i++) {
         const key = tileKey(hit.tileX, hit.tileZ);
-        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { signal, cache: "no-cache" });
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { ...(signal ? { signal } : {}), cache: "no-cache" });
         if (!response.ok) throw new Error(`Lake seed tile ${key}: HTTP ${response.status}`);
         tiles.set(key, validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer())));
         hit = raycastTerrain(document.def, lookup, origin, direction, Infinity, document.globalAttributes?.map);
@@ -9810,7 +9904,7 @@ export class SceneApp {
       const streaming = new TerrainEditorStreaming(world, {
         fetch: async (key, signal) => {
           const tilePath = terrainTilePath(path, key);
-          const response = await fetch(projectFileUrl(tilePath), { signal, cache: "no-cache" });
+          const response = await fetch(projectFileUrl(tilePath), { ...(signal ? { signal } : {}), cache: "no-cache" });
           if (!response.ok) throw new Error(`${tilePath}: HTTP ${response.status}`);
           // Against the live definition: a Save may have widened its range since load.
           const tile = validateTerrainTile(world.def, key, new Uint8Array(await response.arrayBuffer()));
@@ -9881,11 +9975,12 @@ export class SceneApp {
     delete actor.rotation;
     const delta = worldTerrainMoveDelta(document.def, actor.position);
     if (isZeroMove(delta)) return;
-    const moved = moveWorldTerrain(document.def, actor.id, this.layout.waterBodies ?? [], delta, this.layout.riverWaters ?? [], this.layout.puddleWaters ?? []);
+    const moved = moveWorldTerrain(document.def, actor.id, this.layout.waterBodies ?? [], delta, this.layout.riverWaters ?? [], this.layout.puddleWaters ?? [], this.layout.oceanWaters ?? []);
     document.def.origin = moved.origin;
     if (moved.splines) document.def.splines = moved.splines;
     if (this.layout.waterBodies) this.layout.waterBodies = moved.lakes;
     if (this.layout.puddleWaters && moved.puddles) this.layout.puddleWaters = moved.puddles;
+    if (this.layout.oceanWaters && moved.oceans) this.layout.oceanWaters = moved.oceans;
     if (this.layout.riverWaters) this.layout.riverWaters = moved.rivers;
     actor.position = worldTerrainActorPosition(document.def);
     this.worldTerrainSessions.get(document)?.markDefinitionDirty();
@@ -10708,6 +10803,7 @@ export class SceneApp {
     }
     if (removed) {
       this.worldTerrains.delete(removed.id);
+      this.rebuildOceans();
     }
     this.refreshLandscapeIndices();
     this.rebuildFoliageRing();
@@ -12773,6 +12869,7 @@ export class SceneApp {
   }
 
   private isSelectionLocked(selection: Selection): boolean {
+    if (selection.kind === "ocean") return this.layout?.oceanWaters?.[selection.index]?.locked === true;
     if (selection.kind === "puddle") return this.layout?.puddleWaters?.[selection.index]?.locked === true;
     if (selection.kind === "lake") return this.layout?.waterBodies?.[selection.index]?.locked === true;
     return Boolean(this.getMutableTransform(selection)?.locked);
@@ -14676,6 +14773,10 @@ export class SceneApp {
       if (!options.includeHidden && actor.hidden) return;
       selections.push({ kind: "landscape", index });
     });
+    this.layout.oceanWaters?.forEach((body, index) => {
+      if (!options.includeHidden && body.hidden) return;
+      selections.push({ kind: "ocean", index });
+    });
     this.layout.puddleWaters?.forEach((body, index) => {
       if (!options.includeHidden && body.hidden) return;
       selections.push({ kind: "puddle", index });
@@ -14688,6 +14789,7 @@ export class SceneApp {
   }
 
   private getSelectionLabel(selection: Selection): string {
+    if (selection.kind === "ocean") return this.layout?.oceanWaters?.[selection.index]?.name ?? "Ocean";
     if (selection.kind === "puddle") return this.layout?.puddleWaters?.[selection.index]?.name ?? "Puddle";
     if (selection.kind === "lake") return this.layout?.waterBodies?.[selection.index]?.name ?? "Lake";
     if (selection.kind === "sky") {
@@ -14784,6 +14886,10 @@ export class SceneApp {
   }
 
   private getSelectionWorldBox(selection: Selection): Box3 | null {
+    if (selection.kind === "ocean") {
+      const body = this.layout?.oceanWaters?.[selection.index];
+      return body ? new Box3(new Vector3(body.bounds.min[0], body.surfaceLevel - 1, body.bounds.min[1]), new Vector3(body.bounds.max[0], body.surfaceLevel + 1, body.bounds.max[1])) : null;
+    }
     if (selection.kind === "puddle") {
       const body = this.layout?.puddleWaters?.[selection.index];
       return body ? new Box3(new Vector3(body.bounds.min[0], body.surfaceLevel - .1, body.bounds.min[1]), new Vector3(body.bounds.max[0], body.surfaceLevel + .1, body.bounds.max[1])) : null;
@@ -14885,7 +14991,7 @@ export class SceneApp {
   }
 
   private createSelectionOutlineTarget(selection: Selection): Object3D | null {
-    if (selection.kind === "lake" || selection.kind === "puddle") return null;
+    if (selection.kind === "lake" || selection.kind === "puddle" || selection.kind === "ocean") return null;
     if (!this.selectionOutline || !this.layout) return null;
     // The Sky Atmosphere + Cloud Layer are full-screen backdrops and Height Fog is scene-wide; none has an outline proxy.
     if (selection.kind === "sky" || selection.kind === "fog" || selection.kind === "cloud") {
@@ -15634,7 +15740,7 @@ export class SceneApp {
     clearGizmoGroup(this.gizmoGroup, this.gizmoPickables);
     this.refreshSplinePointOverlay();
     if (!this.selection) return;
-    if (this.selection.kind === "lake" || this.selection.kind === "puddle") return;
+    if (this.selection.kind === "lake" || this.selection.kind === "puddle" || this.selection.kind === "ocean") return;
     // The Sky Atmosphere, Height Fog, Cloud Layer and Post Process are scene-wide
     // environment singletons with no transform, so they never show a move gizmo.
     if (
@@ -15741,7 +15847,7 @@ export class SceneApp {
     | LayoutSplineActor
     | LayoutLandscape
     | null {
-    if (!this.layout || selection.kind === "lake" || selection.kind === "puddle") return null;
+    if (!this.layout || selection.kind === "lake" || selection.kind === "puddle" || selection.kind === "ocean") return null;
     if (selection.kind === "instance") {
       const instance = this.layout.instances.find((entry) => entry.assetId === selection.assetId);
       return instance?.placements[selection.placementIndex] ?? null;
@@ -15973,6 +16079,7 @@ export class SceneApp {
   }
 
   private hasSelection(selection: Selection): boolean {
+    if (selection.kind === "ocean") return Boolean(this.layout?.oceanWaters?.[selection.index]);
     if (selection.kind === "puddle") return Boolean(this.layout?.puddleWaters?.[selection.index]);
     if (selection.kind === "lake") return Boolean(this.layout?.waterBodies?.[selection.index]);
     if (!this.layout) return false;

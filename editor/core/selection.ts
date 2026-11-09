@@ -13,6 +13,7 @@ export type Selection =
   | { kind: "landscape"; index: number }
   | { kind: "lake"; index: number }
   | { kind: "puddle"; index: number }
+  | { kind: "ocean"; index: number }
   | { kind: "worldWidget"; index: number }
   | { kind: "sky" }
   | { kind: "fog" }
@@ -53,7 +54,7 @@ export type PostSelection = Extract<Selection, { kind: "post" }>;
 export type WorldEnvironmentSelection = Extract<Selection, { kind: "worldEnvironment" }>;
 
 export function cloneSelection(selection: Selection): Selection {
-  if (selection.kind === "lake" || selection.kind === "puddle") return { ...selection };
+  if (selection.kind === "lake" || selection.kind === "puddle" || selection.kind === "ocean") return { ...selection };
   if (selection.kind === "instance") {
     return {
       kind: "instance",
@@ -81,6 +82,7 @@ export function cloneSelection(selection: Selection): Selection {
 }
 
 export function selectionId(selection: Selection): string {
+  if (selection.kind === "ocean") return `ocean:${selection.index}`;
   if (selection.kind === "puddle") return `puddle:${selection.index}`;
   if (selection.kind === "lake") return `lake:${selection.index}`;
   if (selection.kind === "character") return `character:${selection.index}`;
@@ -105,6 +107,7 @@ export function selectionId(selection: Selection): string {
 
 export function parseSelectionId(id: string): Selection | null {
   const [kind, encodedAssetId, rawIndex] = id.split(":");
+  if (kind === "ocean") { const index = Number(encodedAssetId); return Number.isInteger(index) && index >= 0 ? { kind, index } : null; }
   if (kind === "puddle") { const index = Number(encodedAssetId); return Number.isInteger(index) && index >= 0 ? { kind, index } : null; }
   if (kind === "lake") { const index = Number(encodedAssetId); return Number.isInteger(index) && index >= 0 ? { kind, index } : null; }
   if (kind === "sky") return { kind: "sky" };
@@ -175,6 +178,7 @@ export function selectionsEqual(
   right: Selection | null,
 ): boolean {
   if (!left || !right || left.kind !== right.kind) return false;
+  if (left.kind === "ocean" && right.kind === "ocean") return left.index === right.index;
   if (left.kind === "puddle" && right.kind === "puddle") return left.index === right.index;
   if (left.kind === "lake" && right.kind === "lake") return left.index === right.index;
   if (left.kind === "character" && right.kind === "character") {

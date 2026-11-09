@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="tr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Forge · Ocean study</title><link rel="icon" href="data:,">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#243d4d;color:#f0f7f8;font:14px system-ui}canvas{display:block;width:100vw;height:100vh}
+aside{position:fixed;top:24px;left:24px;width:290px;padding:22px;background:#0c202be8;border:1px solid #cae8ed30;border-radius:14px;backdrop-filter:blur(14px)}
+.eyebrow{font-size:10px;letter-spacing:.18em;color:#91c5cf;text-transform:uppercase}h1{font-size:27px;font-weight:500;margin:10px 0}p{line-height:1.6;color:#b5ccd3;font-size:12px}button,select{background:#254653;color:#eaf8f9;border:1px solid #abcbd344;border-radius:6px;padding:9px 11px;cursor:pointer}button[aria-pressed=true]{background:#daeee8;color:#163b43}nav{display:flex;gap:6px;margin:16px 0}nav button{flex:1;font-size:11px}select{width:100%;margin:8px 0 14px}label{font-size:12px}output{display:block;color:#9ad3be;font-size:11px;line-height:1.8;margin-top:16px;border-top:1px solid #ffffff25;padding-top:12px}.foot{position:fixed;bottom:20px;right:24px;font-size:11px;color:#d4e6e9;background:#173540ac;padding:8px 12px;border-radius:6px}
+@media(max-width:600px){aside{top:12px;left:12px;width:245px;padding:16px}h1{font-size:23px}.foot{right:12px;bottom:12px}}
+</style></head><body><canvas aria-label="Ocean reference viewport"></canvas><aside>
+<div class="eyebrow">Forge · Ocean / O4</div><h1>Coast & open sea</h1>
+<p>Dalga, kıyı ve optik çalışma sahnesi. Sürükleyerek dön, tekerlekle yaklaş.</p>
+<nav aria-label="Camera"><button data-view="coast">Coast</button><button data-view="sea">Open sea</button><button data-view="aerial">Aerial</button><button data-view="reflection">Reflect</button></nav>
+<label for="backend">Wave model</label><select id="backend"><option value="fft">FFT · wind sea + swell</option><option value="analytic">Analytical · comparison</option></select>
+<label for="reflections">Reflections</label><select id="reflections"><option value="environment">Environment</option><option value="sharedPlanar">Planar</option><option value="off">Off</option></select>
+<button id="pause" aria-pressed="false">Pause</button> <button id="rebuild">Rebuild</button>
+<output id="status" role="status">Kıyı hazırlanıyor…</output>
+<p>Bu ilk prototip nihai optik, üç katmanlı köpük, su altı veya yüzdürme kabulü değildir.</p>
+</aside><div class="foot">World-space waves · dry islands · connected ocean</div>
+<script type="module" src="./ocean-reference.ts"></script></body></html>

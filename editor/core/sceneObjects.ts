@@ -50,7 +50,7 @@ import { selectionId, type Selection } from "./selection";
 
 const DEFAULT_LIGHT_COLOR = "#ffffff";
 
-function buildLakeSelection(lake: Pick<LayoutLakeWaterBody, "id" | "name" | "seed" | "surfaceLevel" | "locked">, index: number, kind: "lake" | "puddle" = "lake"): EditableSelection {
+function buildLakeSelection(lake: Pick<LayoutLakeWaterBody, "id" | "name" | "seed" | "surfaceLevel" | "locked">, index: number, kind: "lake" | "puddle" | "ocean" = "lake"): EditableSelection {
   return { id: `${kind}:${index}`, kind, assetId: `${kind}-water`, category: "terrain", label: lake.name ?? lake.id,
     position: [lake.seed[0], lake.surfaceLevel, lake.seed[1]], rotation: [0, 0, 0], scale: [1, 1, 1],
     pivot: [0, 0, 0], scaleLocked: true, locked: lake.locked ?? false, castShadow: false,
@@ -791,6 +791,10 @@ export function buildSceneObjects(
     });
   });
 
+  layout.oceanWaters?.forEach((ocean, index) => {
+    const seed: [number, number] = [(ocean.bounds.min[0] + ocean.bounds.max[0]) / 2, (ocean.bounds.min[1] + ocean.bounds.max[1]) / 2];
+    objects.push({ ...buildLakeSelection({ ...ocean, seed }, index, "ocean"), selected: deps.isSelected({ kind: "ocean", index }), hidden: ocean.hidden ?? false, locked: ocean.locked ?? false });
+  });
   layout.puddleWaters?.forEach((puddle, index) => {
     objects.push({ ...buildLakeSelection(puddle, index, "puddle"), selected: deps.isSelected({ kind: "puddle", index }), hidden: puddle.hidden ?? false, locked: puddle.locked ?? false });
   });
@@ -840,6 +844,10 @@ export function buildEditableSelection(
   selection: Selection,
   deps: SceneObjectDeps,
 ): EditableSelection | null {
+  if (selection.kind === "ocean") {
+    const ocean = layout.oceanWaters?.[selection.index];
+    return ocean ? buildLakeSelection({ ...ocean, seed: [(ocean.bounds.min[0] + ocean.bounds.max[0]) / 2, (ocean.bounds.min[1] + ocean.bounds.max[1]) / 2] }, selection.index, "ocean") : null;
+  }
   if (selection.kind === "puddle") {
     const puddle = layout.puddleWaters?.[selection.index];
     return puddle ? buildLakeSelection(puddle, selection.index, "puddle") : null;

@@ -49,3 +49,9 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+Ocean FFT adaptation (8 November 2026)
+Source: Humpalumps/Ultra-Water, commit 30ea65ecb0a66b137aa200d099965634bdd84d51
+File: src/water/OceanSim.js (FFT shader stages in engine/render-three/ocean/oceanSpectrum.ts).
+Forge provides its own validated parameters, target lifecycle and renderer-state handling.

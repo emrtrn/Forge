@@ -1,7 +1,7 @@
 import { PlanarReflectionSource, type PlanarReflectionQuality } from "./planarReflectionSource";
 import { Plane } from "three";
 
-/** Application-owned leases, shared across River and Lake rebuild lifetimes. */
+/** Application-owned leases, shared across River, Lake and Ocean lifetimes. */
 export class WaterReflectionRegistry {
   private entries = new Map<string, { source: PlanarReflectionSource; leases: number; budget?: string }>();
   /** Existing coplanar sources are free to borrow; only newly allocated sources count against this budget. */

@@ -1,3 +1,4 @@
+import type { OceanWaterBody } from "../scene/oceanWater";
 import type { LayoutLakeWaterBody, LayoutRiverWater, Vec3 } from "../scene/layout";
 import type { PuddleWaterBody } from "../scene/puddleWater";
 import type { TerrainSpline, WorldTerrainDef } from "./terrainTypes";
@@ -38,6 +39,7 @@ export interface WorldTerrainMove {
   /** Only this terrain's world-frame River Waters, shifted; others (and local ones) unchanged. */
   rivers: LayoutRiverWater[];
   puddles?: PuddleWaterBody[];
+  oceans?: OceanWaterBody[];
 }
 
 /** The moved state, never mutating its inputs. */
@@ -48,6 +50,7 @@ export function moveWorldTerrain(
   delta: Vec3,
   rivers: readonly LayoutRiverWater[] = [],
   puddles?: readonly PuddleWaterBody[],
+  oceans?: readonly OceanWaterBody[],
 ): WorldTerrainMove {
   const shift = (point: Vec3): Vec3 => [moved(point[0], delta[0]), moved(point[1], delta[1]), moved(point[2], delta[2])];
   const shiftXZ = ([x, z]: [number, number]): [number, number] => [moved(x, delta[0]), moved(z, delta[2])];
@@ -59,6 +62,8 @@ export function moveWorldTerrain(
   });
   return {
     origin: shift(def.origin),
+    ...(oceans ? { oceans: oceans.map(body => body.terrainRef !== terrainRef ? body : { ...structuredClone(body),
+      bounds: { min: shiftXZ(body.bounds.min), max: shiftXZ(body.bounds.max) }, surfaceLevel: moved(body.surfaceLevel, delta[1]) }) } : {}),
     splines,
     ...(puddles ? { puddles: puddles.map(body => body.terrainRef !== terrainRef ? body : {
       ...structuredClone(body), seed: shiftXZ(body.seed),

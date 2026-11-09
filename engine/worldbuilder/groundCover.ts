@@ -26,6 +26,7 @@
  */
 import type { BriefTerrain } from "./briefTerrain";
 import { WATER_BED_MARGIN } from "./briefTerrain";
+import { oceanBeachWeight } from "./island";
 import { fbm } from "./noise";
 import {
   type Ctx,
@@ -372,7 +373,7 @@ export function coverPaint(
     const river = hit ? 1 - smoothstep((hit.distance - (hit.course.width / 2 + WATER_BED_MARGIN)) / 3) : 0;
     const lake = terrain.lake(x, z);
     const shore = lake ? 1 - smoothstep((-lake.inside - 3) / 4) : 0;
-    const coast = terrain.ocean ? 1 - smoothstep((terrain.ocean.distance(x, z) - 18) / 14) : 0;
+    const coast = terrain.ocean ? oceanBeachWeight(terrain.ocean, x, z) : 0;
     const bed = Math.max(river, shore, coast);
     const snow = cover.snow && context.snowLine !== null && roles.snow
       ? smoothstep((height - context.snowLine + 12 * fbm(x / 70, z / 70, 3, brief.seed + 41)) / cover.snow.fade)

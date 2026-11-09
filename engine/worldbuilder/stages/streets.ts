@@ -24,6 +24,7 @@ import { sourceDistance } from "../field";
 import type { GeneratedSpline, StageInput, StageOutput, WorldStage } from "../stage";
 import { growInnerStreets, type InnerStreetPattern } from "../streets";
 import { PARCEL_VERGE } from "../parcels";
+import { oceanLandDistance } from "../island";
 import { hashSeed, protectedAreas } from "./parcels";
 
 export const STREETS_STAGE_ID = "streets";
@@ -110,7 +111,7 @@ export const streetsStage: WorldStage = {
         seed: (seedOf(recipe, settlement) ^ SEED_SALT) >>> 0,
         sampleHeight: input.sampleHeight,
         blockedAt: (point) => water.some((source) => sourceDistance(point, source) <= WATER_CLEARANCE + spec.width / 2)
-          || (input.ocean !== undefined && input.ocean.distance(...point) <= WATER_CLEARANCE + spec.width / 2)
+          || (input.ocean !== undefined && oceanLandDistance(input.ocean, ...point) <= WATER_CLEARANCE + spec.width / 2)
           || guarded.some((test) => test(point)),
       });
 

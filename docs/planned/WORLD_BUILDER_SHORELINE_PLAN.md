@@ -1,7 +1,7 @@
 # World Builder — Coast alan dağılımı, sığ kıyı ve ada biçimi
 
-9 Kasım 2026. Kullanıcıyla netleştirilen plan. **Durum: plan kaydedildi;
-uygulama başlamadı.** Small/Medium Island ve Coast tesliminin devamıdır;
+9 Kasım 2026; A1 güncellemesi 10 Kasım 2026. Kullanıcıyla netleştirilen plan.
+**Durum: A1 uygulandı; teknik ve browser doğrulamaları geçti. A2/A3/A4 bekliyor.** Small/Medium Island ve Coast tesliminin devamıdır;
 Large desteği veya Ocean'ın tam performans kabulü değildir.
 
 Dayanak: [Ocean ana planı](OCEAN_DEVELOPMENT_PLAN.md),
@@ -58,7 +58,18 @@ Plan kaydı sırasında kaynak incelemesi:
 
 ## Uygulama dilimleri
 
-### A1 — Coast alan oranı ve kuru kumsal (ilk iş; bekliyor)
+### A1 — Coast alan oranı ve kuru kumsal (uygulandı)
+
+[Ölçüm, uygulama ve kanıt raporu](../reports/WORLD_BUILDER_COAST_A1.md).
+Small/Medium × dört yön × seed 4/11/29 için native tile ölçümünde iç kara
+%69,994–70,032; kıyıya dik ortalama kuru kumsal 23,61–23,82 m'den
+60,32–60,82 m'ye çıktı (aynı senaryoda 2,548–2,555 kat). Boya eşiği %50'dir;
+kumsal %30'un içindedir. Nehir/göl içermeyen oran matrisi, iç su testlerinden
+ayrı tutulur. Kaynak alanı, gerçek tile boyası/yüksekliği, legacy brief ve
+Small/Medium Create–Save–Reload–Play/dar–geniş ağız kanıtları rapordadır.
+Yeni `coast.beachWidth` yalnız yeni üretimde yazılır; eski açık `shoreWidth`,
+Island ve su altı eğrisi korunur. A1'de bulunan harita kenarı inlet kesilmesi,
+yeni Coast drenajında canlı şeridin 10× genişliğini de içeride tutarak giderildi.
 
 Oran ve kumsal aynı sınırlı teslimde yapılır; böylece oran ayarlandıktan sonra
 kumsalı büyütmek %70 iç araziyi tekrar daraltmaz.
@@ -123,5 +134,5 @@ Her dilim kendi kontrolleriyle teslim edilir; bu son aşama birleşik sonucu kap
   `public/project.3dgame.json`, manifest, `Levels/S1*` ve diğer eşzamanlı kullanıcı
   verilerine dokunulmaz; güncel Git durumuyla sahiplik yeniden kontrol edilir.
   `docs/planned/FORGE_WEBGPU_EDITION_MASTER_PLAN.md` kapsam dışıdır.
-- Commit/push yapılmaz. Bu plan kaydında yalnız doküman değiştiği için
-  TypeScript/engine/build/browser testleri yeniden çalıştırılmadı.
+- Commit/push yapılmaz. İlk plan kaydı yalnız dokümandı; A1 kod, ölçüm ve
+  doğrulama sonuçları bağlantılı uygulama raporunda ayrıca kaydedilir.

@@ -15,7 +15,7 @@
  * builder's: this module only lays out where things go.
  */
 import { DEFAULT_RELIEF_CLEAR, type BriefModel, type BriefRelief, type CoverDensityLevel } from "./worldBrief";
-import { islandOcean, type SeaSide } from "./island";
+import { islandOcean, oceanLandDistance, type SeaSide } from "./island";
 import type { RoadClass } from "./vocabulary";
 import { randomWater } from "./randomWater";
 import { OCEAN_LIMITS } from "../scene/oceanBudget";
@@ -143,8 +143,21 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
   const extent = worldExtent(options.size);
   const half = extent / 2;
   const island = options.landform === "island" ? { center: [0, 0] as Point, radius: round(extent * .37), shoreWidth: 60, landHeight: 12 } : undefined;
-  const coastal = options.landform === "coast" ? { center: [0, 0] as Point, seaSide: options.seaSide ?? "west", shoreWidth: 60, landHeight: 12 } : undefined;
+  const coastal = options.landform === "coast" ? { center: [0, 0] as Point, seaSide: options.seaSide ?? "west", shoreWidth: 60, landHeight: 12, beachWidth: 62.5 } : undefined;
   const ocean = island || coastal ? { id: "ocean", surfaceElevation: 0, offshoreDepth: 40 } : undefined;
+  if (coastal) {
+    const reference = islandOcean({ terrain: { coast: coastal }, ocean: ocean!, frame: { east: 0, north: 0, elevation: 0 }, seed: options.seed })!;
+    const axis = coastal.seaSide === "west" ? [1, 0] : coastal.seaSide === "east" ? [-1, 0] : coastal.seaSide === "north" ? [0, 1] : [0, -1];
+    // Preserve every bay/cape; compensate the seed's mean oscillation within the map.
+    // The 50% beach boundary, not the waterline, leaves 70% interior land.
+    let mean = 0;
+    for (let i = 0; i < 1024; i++) {
+      const along = -half + (i + .5) * extent / 1024;
+      mean += reference.distance(-axis[1]! * along, axis[0]! * along) / 1024;
+    }
+    const shift = -.2 * extent - coastal.beachWidth + mean;
+    coastal.center = [round(axis[0]! * shift), round(-axis[1]! * shift)];
+  }
   const coast = ocean ? islandOcean({ terrain: { ...(island ? { island } : {}), ...(coastal ? { coast: coastal } : {}) }, ocean, frame: { east: 0, north: 0, elevation: 0 }, seed: options.seed }) : undefined;
   if (island && options.roads === "exits") notes.push("island: roads stay on the island; no off-map exits");
   // Smaller worlds get lower, tighter mountains so their slopes stay walkable.
@@ -192,7 +205,7 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
         ? (floorW + floorE) / 2 + (settlementSide === 0 ? across * 0.25 : settlementSide * (0.3 + 0.12 * Math.abs(across))) * (floorE - floorW)
         : -half + margin + next() * (extent - 2 * margin);
       const candidate: Point = [round(east), round(north)];
-      if (coast && coast.distance(candidate[0], -candidate[1]) < Math.max(90, radius * .6 + 30)) continue;
+      if (coast && oceanLandDistance(coast, candidate[0], -candidate[1]) < Math.max(90, radius * .6 + 30)) continue;
       if (placed.every((other) => distance(other.at, candidate) >= (other.radius + radius) * 0.9 + 60)) at = candidate;
     }
     if (!at) {
@@ -251,11 +264,11 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
     };
     // The valley's exits run along it, north and south.
     const largest = [...placed].sort((a, b) => b.population - a.population)[0]!;
-    const drySides = [0, 1, 2, 3].filter(side => !coast || coast.distance(border(largest.at, side)[0], -border(largest.at, side)[1]) > 80);
+    const drySides = [0, 1, 2, 3].filter(side => !coast || oceanLandDistance(coast, border(largest.at, side)[0], -border(largest.at, side)[1]) > 80);
     const nearest = sideNearest(largest.at);
     const first = valley ? (largest.at[1] >= 0 ? 0 : 2) : drySides.includes(nearest) ? nearest : drySides[0]!;
     const opposite = drySides.includes((first + 2) % 4) ? (first + 2) % 4 : drySides.find(side => side !== first) ?? first;
-    const second = placed.filter(entry => !coast || coast.distance(border(entry.at, opposite)[0], -border(entry.at, opposite)[1]) > 80)
+    const second = placed.filter(entry => !coast || oceanLandDistance(coast, border(entry.at, opposite)[0], -border(entry.at, opposite)[1]) > 80)
       .sort((a, b) => distance(a.at, border(a.at, opposite)) - distance(b.at, border(b.at, opposite)))[0]!;
     const exits: Array<[typeof largest, number]> = (placed.length === 1 && options.roads === "between") || opposite === first ? [[largest, first]] : [[largest, first], [second, opposite]];
     exits.forEach(([settlement, side], index) => {

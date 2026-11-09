@@ -577,6 +577,8 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   const canonicalRecipe = validateSaveWorldRecipePayload({ level: levelPath, recipe }).recipe as unknown as WorldRecipe;
   files.set(worldRecipePath(levelPath), json(canonicalRecipe));
   const landscapeRules = cover ? coverPlantRules(cover, terrain.id, densities, input.assetIdForFile) : plantRules(terrain.id);
+  // All non-bed layers together are at most 50% within the majority-sand beach.
+  if (brief.terrain.coast?.beachWidth !== undefined) for (const rule of landscapeRules) rule.minWeight = Math.max(Number(rule.minWeight), .51);
   const foliageData = normalizeFoliageData({ schema: 1, type: "foliage", groups: [], landscapeRules });
   const partition = normalizeWorldPartitionSettings(input.partition);
   const foliageIndex = partition.enabled ? partitionFoliageData(foliageData, partition.grids.foliage) : null;

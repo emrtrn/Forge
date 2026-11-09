@@ -130,3 +130,14 @@ Testler `.playwright-smoke/run-*` içinde çalışır. Çalışma sırasında ka
 `public/project.3dgame.json`, manifest ve `Levels/S1*` verileri değişmiştir;
 bu dosyalara dokunulmamış veya geri alınmamıştır. WebGPU master planı korunur.
 Codex Security diff incelemesi önerildi; tarama başlatılmadı.
+
+## A1 devamı — 10 Kasım 2026
+
+Coast alan dağılımı ve kuru kumsal, yalnız yeni Small/Medium üretim için
+güncellendi. [A1 raporu](WORLD_BUILDER_COAST_A1.md) ölçüm tanımını, üç seed ×
+dört yön sonuçlarını, native tile karşılaştırmasını ve yeni editör/Play
+görüntülerini içerir. İç kara %69,994–70,032; kıyıya dik ortalama kuru kumsal
+60,32–60,82 m (eskiye göre 2,548–2,555 kat). Kumsal %30 içinde sayılır.
+Coast Save/Reload, Width Scale 0,5/1,5, undo/redo ve gerçek Play yeniden geçti.
+Bu ek A2 sığ taban profili, A3 ada çeşitliliği veya tam Ocean performans
+kabulünü kapatmaz; yukarıdaki Medium atlas kanıtları kendi kapsamıyla korunur.

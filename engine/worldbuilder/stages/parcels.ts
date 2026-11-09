@@ -22,6 +22,7 @@ import type { WorldPoint } from "../normalize";
 import { parcelBox, subdivideStreets, type ParcelDropReason } from "../parcels";
 import type { GeneratedParcel, PlanSettlement, WorldRecipe } from "../recipe";
 import { resolveRoadClass } from "../roadClass";
+import { oceanLandDistance } from "../island";
 import type { GeneratedPlacement, StageInput, StageOutput, WorldStage } from "../stage";
 
 export const PARCELS_STAGE_ID = "parcels";
@@ -87,7 +88,7 @@ export const parcelsStage: WorldStage = {
           maxSlopeDeg,
           seed: settlement.seed ?? hashSeed(recipe.seed, settlement.id),
           sampleHeight: input.sampleHeight,
-          blockedAt: (point) => input.ocean && input.ocean.distance(...point) <= WATER_CLEARANCE ? "water"
+          blockedAt: (point) => input.ocean && oceanLandDistance(input.ocean, ...point) <= WATER_CLEARANCE ? "water"
             : blocked(point),
         });
         own = result.parcels.map((parcel): GeneratedParcel => ({

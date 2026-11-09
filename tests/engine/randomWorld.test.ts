@@ -29,11 +29,14 @@ import { runRandomWorld } from "../../tools/world/randomWorldRun";
 import { buildWorldFromBrief } from "../../tools/world/worldBriefBuild";
 import { prepareOceanTerrain } from "../../engine/terrain/oceanPreparation";
 import { sampleOceanCoverage } from "../../engine/terrain/oceanCoverage";
-import { normalizeGroundCover } from "../../engine/worldbuilder/groundCover";
+import { coverPaint, normalizeGroundCover } from "../../engine/worldbuilder/groundCover";
 import { readRoomLayout } from "../../engine/scene/layoutValidation";
 import { validateSavePayload } from "../../tools/saveValidator";
 import { terrainTileLayerWeight } from "../../engine/terrain/terrainTypes";
-import { SEA_SIDES } from "../../engine/worldbuilder/island";
+import { islandOcean, oceanBeachWeight, oceanLandDistance, SEA_SIDES } from "../../engine/worldbuilder/island";
+import { paintWeights } from "../../tools/world/worldBriefTemporarySteps";
+import { oceanMask } from "../../engine/worldbuilder/masks";
+import { splineToPolyline } from "../../engine/scene/landscape";
 import { prepareTerrainRiverWaterSource } from "../../engine/terrain/terrainRiverWater";
 import { resolveRiverWater } from "../../engine/scene/riverWater";
 import { buildRiverWaterRibbon } from "../../engine/render-three/riverWater";
@@ -72,6 +75,55 @@ function waterGaps(world: WorldBrief): Array<{ id: string; gap: number }> {
 }
 
 export async function registerRandomWorldTests(check: Check, checkSlowAsync: CheckAsync): Promise<void> {
+  check("random world coast A1: 70% interior and 2–3x measured painted beach across sizes, directions and seeds", () => {
+    const cover = normalizeGroundCover(JSON.parse(readFileSync("public/assets/world-builder/covers/forest.cover.json", "utf8"))).cover!;
+    const bed = cover.layers.findIndex(layer => layer.id === cover.roles.bed);
+    for (const size of ["small", "medium"] as const) for (const seaSide of SEA_SIDES) for (const seed of [4, 11, 29]) {
+      const world = brief({ size, seaSide, seed, landform: "coast", settlements: [], roads: "between" });
+      const terrain = createBriefTerrain(world), ocean = terrain.ocean!, extent = worldExtent(size), half = extent / 2;
+      const paint = coverPaint(cover, world, terrain, { forest: "medium", rocks: "medium", fields: "medium" }, { clearings: [], snowLine: null });
+      const pilot = paintWeights(world, terrain);
+      let interior = 0;
+      for (let j = 0; j < 128; j++) for (let i = 0; i < 128; i++) {
+        const x = -half + (i + .5) * extent / 128, z = -half + (j + .5) * extent / 128;
+        const weights = paint(x, z, 0, terrain.height(x, z));
+        const sand = weights[bed]! / weights.reduce((a, b) => a + b, 0);
+        assert.equal(sand, pilot(x, z, 0)[4], "preview/cover and fallback paint agree");
+        if (ocean.distance(x, z) >= 0 && sand < .5) interior++;
+      }
+      assert.ok(Math.abs(interior / 128 ** 2 - .7) < .02, `${size}/${seaSide}/${seed}: interior ratio`);
+      // Cross the actual paint, rather than equating shoreWidth with visible sand.
+      const axis = seaSide === "west" ? [1, 0] : seaSide === "east" ? [-1, 0] : seaSide === "north" ? [0, 1] : [0, -1];
+      const [cx, cz] = briefToWorld(world, world.terrain.coast!.center);
+      for (const along of [-half * .7, 0, half * .7]) {
+        const origin = [cx - axis[1]! * along, cz + axis[0]! * along] as const;
+        const d = ocean.distance(...origin), shore = [origin[0] - axis[0]! * d, origin[1] - axis[1]! * d];
+        let width = 0;
+        while (paint(shore[0]! + axis[0]! * (width + .25), shore[1]! + axis[1]! * (width + .25), 0, 0)[bed]! >= .5) width += .25;
+        assert.ok(width / 25 >= 2 && width / 25 <= 3);
+        const sea = [shore[0]! - axis[0]! * 10, shore[1]! - axis[1]! * 10] as const;
+        assert.ok(Math.abs(terrain.height(...sea) + 40 * (1 - Math.exp(-10 / 60))) < 1e-8, "A2 submerged profile is unchanged");
+        const beach = [shore[0]! + axis[0]! * 60, shore[1]! + axis[1]! * 60] as const;
+        assert.ok(oceanLandDistance(ocean, ...beach) < 0);
+        const mask = oceanMask({ origin: [beach[0] - 1, beach[1] - 1], cellSize: 2, width: 1, depth: 1 }, { ocean } as Parameters<typeof oceanMask>[1]);
+        assert.equal(mask.values[0], 1, "roads/scatter masks protect the dry beach too");
+      }
+      const legacy = structuredClone(world);
+      delete legacy.terrain.coast!.beachWidth;
+      legacy.terrain.coast!.center = [0, 0];
+      const roundTrip = normalizeWorldBrief(legacy);
+      assert.deepEqual(roundTrip.issues, []); assert.deepEqual(roundTrip.brief, legacy);
+      const old = islandOcean(legacy)!;
+      assert.equal(old.landClearance, undefined);
+      const d0 = old.distance(0, 0), x = axis[0]! * (25 - d0), z = axis[1]! * (25 - d0);
+      assert.ok(Math.abs(oceanBeachWeight(old, x, z) - .5) < 1e-9, "legacy midpoint stays 25 m");
+    }
+    for (const beachWidth of [0, -1, Infinity, "wide"]) {
+      const raw = randomWorldBrief({ ...OPTIONS, landform: "coast" }).brief;
+      (raw.terrain as { coast: Record<string, unknown> }).coast.beachWidth = beachWidth;
+      assert.ok(normalizeWorldBrief(raw).issues.some(issue => issue.includes("beachWidth")));
+    }
+  });
   check("random world coast: four sea directions keep settlements and exits dry; rivers drain to sea", () => {
     for (const size of ["small", "medium"] as const) for (const seaSide of SEA_SIDES) {
       let mouths = 0;
@@ -85,13 +137,15 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
         assert.equal(world.settlements.length, 1);
         for (const node of world.roads.nodes) {
           const [x, z] = briefToWorld(world, node.at);
-          assert.ok(ground.ocean!.distance(x, z) > 75, `${seaSide} ${seed} ${node.id} is on land`);
+          assert.ok(oceanLandDistance(ground.ocean!, x, z) > 75, `${seaSide} ${seed} ${node.id} is beyond the beach`);
         }
         for (const course of ground.courses) if (course.water.outlet === "ocean") {
           mouths++;
           assert.equal(course.surface.at(-1), 0);
           assert.ok(Math.abs(ground.ocean!.distance(...course.points.at(-1)!) - 4) < .15, "the mouth joins inside its shore channel");
           assert.ok(ground.ocean!.distance(...course.points.at(-2)!) >= 79);
+          for (const [x, z] of course.points.slice(-2)) assert.ok(Math.min(x + worldExtent(size) / 2, worldExtent(size) / 2 - x,
+            z + worldExtent(size) / 2, worldExtent(size) / 2 - z) > course.width * 10, "terminal live-width ribbon stays on terrain");
           course.surface.slice(1).forEach((height, i) => assert.ok(height <= course.surface[i]!));
         }
       }
@@ -107,6 +161,23 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
     const byPath = new Map(manifest.assets.map(asset => [asset.path, asset.id]));
     const built = buildWorldFromBrief({ brief: world, levelPath: "assets/trial/Coast.level.json", profile, cover, assetIdForFile: file => byPath.get(file) ?? null });
     const sea = built.layout.oceanWaters![0]!;
+    const ground = createBriefTerrain(world);
+    const rules = built.foliage.landscapeRules as Array<{ minWeight: number }>;
+    assert.ok(rules.length > 0 && rules.every(rule => rule.minWeight > .5), "no plant qualifies on majority-sand paint");
+    let sandVertices = 0;
+    for (const tile of built.tiles.values()) for (let j = 0; j < tile.size; j += 8) for (let i = 0; i < tile.size; i += 8) {
+      const x = built.def.origin[0] + (tile.x * built.def.tileQuads + i) * built.def.spacing;
+      const z = built.def.origin[2] + (tile.z * built.def.tileQuads + j) * built.def.spacing;
+      const d = ground.ocean!.distance(x, z);
+      if (d > 5 && d < 60) {
+        sandVertices++;
+        assert.ok(terrainTileLayerWeight(tile, 4, j * tile.size + i) >= .5 - 1 / 255, "native tile has the widened dry sand");
+      }
+    }
+    assert.ok(sandVertices > 50);
+    for (const spline of built.def.splines!.filter(spline => !spline.id.startsWith("river"))) for (const sub of splineToPolyline(spline, 24)) {
+      for (const p of [sub.start, sub.end]) assert.ok(oceanLandDistance(ground.ocean!, p.position[0], p.position[2]) > 0, "built roads/streets stay beyond beach");
+    }
     assert.equal(sea.offshorePolicy, "connectedBoundary");
     assert.equal(sea.inlets?.length, 1, JSON.stringify(world.water));
     const coverage = await prepareOceanTerrain({ def: built.def, tiles: built.tiles }, sea);
@@ -130,7 +201,7 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
       const z = inlet.start[1] + dz / length * along + dx / length * across;
       const sample = river.sampleAt(x, z);
       if (sample) { wetRiver++; assert.equal(sampleOceanCoverage(coverage, x, z).status, "dry", "no duplicate surfaces across the mouth width"); }
-      else if ((built.sampleHeight(x, z) ?? Infinity) < sea.surfaceLevel) assert.equal(sampleOceanCoverage(coverage, x, z).status, "wet", "no water gap beside the ribbon");
+      else if ((built.sampleHeight(x, z) ?? Infinity) < sea.surfaceLevel) assert.equal(sampleOceanCoverage(coverage, x, z).status, "wet", `no water gap beside the ribbon ${JSON.stringify({ x, z, along, across, inlet, height: built.sampleHeight(x, z) })}`);
     }
     assert.ok(wetRiver > 30);
     assert.equal(sampleOceanCoverage(coverage, inlet.end[0] + dx / length * 2, inlet.end[1] + dz / length * 2).status, "wet", "Ocean starts immediately beyond the river end");
@@ -139,13 +210,18 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
     assert.deepEqual(validateSavePayload({ layout: built.layout }).layout.oceanWaters, [sea]);
     // Rescale the actual ribbon, not a test-only rectangle: Ocean must fill the
     // uncovered channel when narrow and keep out of the widened wet surface.
-    for (const widthScale of [.25, .5, 2]) {
+    for (const widthScale of [.05, .5, 1.5, 2, 10]) {
       const waters = structuredClone(built.layout.riverWaters!); waters[0]!.widthScale = widthScale;
       coverage.inlets = resolveOceanInlets(built.def, sea, waters);
       const changed = await prepareTerrainRiverWaterSource({ def: built.def, tiles: built.tiles }, resolveRiverWater(waters[0]));
-      const data = buildRiverWaterRibbon(changed.spline, { surfaceLevel: changed.surfaceLevel, widthScale, heightAt: changed.heightAt, sampleSpacing: changed.sampleSpacing });
+      // At 10x, isolate the real terminal segment: this tests inlet ownership,
+      // without turning A1 into an increase of the full River effects triangle cap.
+      const spline = widthScale === 10 ? { ...changed.spline, points: changed.spline.points.slice(-2), segments: changed.spline.segments.slice(-1) } : changed.spline;
+      const surfaceLevel = changed.surfaceLevel + spline.points[0]!.position[1] - changed.spline.points[0]!.position[1];
+      const data = buildRiverWaterRibbon(spline, { surfaceLevel, widthScale, heightAt: changed.heightAt, sampleSpacing: changed.sampleSpacing });
       const query = new RiverSurfaceQuery(data, changed.position);
-      for (let along = length - 25; along < length - .5; along += 2) for (let across = -inlet.width * 2 + .25; across < inlet.width * 2; across += .5) {
+      const reach = inlet.width * Math.max(1, widthScale) + 2;
+      for (let along = length - 25; along < length - .5; along += 2) for (let across = -reach + .25; across < reach; across += .5) {
         const x = inlet.start[0] + dx / length * along - dz / length * across;
         const z = inlet.start[1] + dz / length * along + dx / length * across;
         if (query.sampleAt(x, z)) assert.equal(sampleOceanCoverage(coverage, x, z).status, "dry", `${widthScale}: no double surface`);

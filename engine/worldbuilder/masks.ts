@@ -19,6 +19,7 @@ import type { WorldPoint } from "./normalize";
 import type { StageInput } from "./stage";
 import { roadClassWidth } from "./roadClass";
 import type { RoadClass } from "./vocabulary";
+import { oceanLandDistance } from "./island";
 
 export type MaskInput = Pick<StageInput, "recipe" | "profile" | "terrains" | "ocean">;
 
@@ -27,7 +28,7 @@ export function oceanMask(spec: GridSpec, input: MaskInput, clearance = 0): Fiel
   const field = createField(spec);
   if (input.ocean) for (let j = 0; j < spec.depth; j++) for (let i = 0; i < spec.width; i++) {
     const [x, z] = cellCenter(spec, i, j);
-    field.values[j * spec.width + i] = input.ocean.distance(x, z) <= clearance + spec.cellSize * Math.SQRT1_2 ? 1 : 0;
+    field.values[j * spec.width + i] = oceanLandDistance(input.ocean, x, z) <= clearance + spec.cellSize * Math.SQRT1_2 ? 1 : 0;
   }
   return field;
 }

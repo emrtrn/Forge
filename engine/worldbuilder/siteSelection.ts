@@ -35,6 +35,7 @@ import type { PlanSettlement } from "./recipe";
 import type { RegionProfile } from "./regionProfile";
 import { resolveRoadClass } from "./roadClass";
 import type { RouteContext } from "./route";
+import { oceanLandDistance } from "./island";
 
 export const DEFAULT_SEARCH_RADIUS = 150;
 export const DEFAULT_FLOOD_MARGIN = 3;
@@ -305,7 +306,7 @@ export function waterLevels(spec: GridSpec, context: RouteContext): WaterLevel[]
     const distance = createField(spec);
     for (let j = 0; j < spec.depth; j++) for (let i = 0; i < spec.width; i++) {
       const [x, z] = cellCenter(spec, i, j);
-      distance.values[j * spec.width + i] = context.ocean.distance(x, z) - spec.cellSize * Math.SQRT1_2;
+      distance.values[j * spec.width + i] = oceanLandDistance(context.ocean, x, z) - spec.cellSize * Math.SQRT1_2;
     }
     result.push({ distance, level: new Float32Array(spec.width * spec.depth).fill(context.ocean.surfaceLevel), reach: FLOOD_REACH, margin: DEFAULT_FLOOD_MARGIN });
   }

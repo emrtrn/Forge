@@ -25,6 +25,7 @@ import { insidePolygon } from "./field";
 import type { WorldPoint } from "./normalize";
 import { briefToWorld, briefWorldBounds, normalizeWorldBrief, type WorldBrief } from "./worldBrief";
 import { worldToMetric } from "./metricFrame";
+import { oceanLandDistance } from "./island";
 
 /** River width, bed and water depth by world size (1 / 2 / 4 km), metres. */
 export const RIVER_SIZES = {
@@ -172,6 +173,9 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
   for (let index = 0; index < count; index += 1) {
     const point = at(index);
     if (settlementGap(point, "river") < 0 || exits.some(([x, z]) => Math.hypot(point[0] - x, point[1] - z) < EXIT_GAP)) blocked[index] = 1;
+    // A new Coast's mouth must keep its full live-width ribbon on native terrain,
+    // including the supported 10x edit. Otherwise edge clipping leaves an inlet hole.
+    if (brief.terrain.coast?.beachWidth !== undefined && edgeGap(index) < RIVER_SIZES[options.size].width * 10 + 2) blocked[index] = 1;
   }
 
   // 2. Drainage: a priority flood from the edge; `down` is the cell each one drains to.
@@ -234,7 +238,7 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
   };
   const lakeFits = (centre: WorldPoint, radius: number): boolean =>
     settlementGap(centre, "lake") >= radius
-    && (!terrain.ocean || terrain.ocean.distance(...centre) > radius * 1.3 + LAKE_TRANSITION + 40)
+    && (!terrain.ocean || oceanLandDistance(terrain.ocean, ...centre) > radius * 1.3 + LAKE_TRANSITION + 40)
     && Math.min(centre[0] - bounds.min[0], bounds.max[0] - centre[0], centre[1] - bounds.min[1], bounds.max[1] - centre[1]) >= radius + 0.08 * extent
     && lakes.every((lake) => Math.hypot(lake.centre[0] - centre[0], lake.centre[1] - centre[1]) >= lake.radius + radius + 80)
     && brief.roads.nodes.every((node) => {
@@ -301,7 +305,7 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
   const riverCells = new Map<number, number>();
   const courses: Array<{ cells: number[]; endsIn: "edge" | "lake" | "river" | "ocean"; joins?: number }> = [];
   if (rivers > 0) {
-    const open = order.filter((index) => !blocked[index] && edgeGap(index) >= 0.15 * extent && (!terrain.ocean || terrain.ocean.distance(...at(index)) > 100));
+    const open = order.filter((index) => !blocked[index] && edgeGap(index) >= 0.15 * extent && (!terrain.ocean || oceanLandDistance(terrain.ocean, ...at(index)) > 100));
     const heights = open.map((index) => height[index]!).sort((a, b) => a - b);
     const high = heights[Math.floor(0.65 * heights.length)] ?? Infinity;
     const sources = open.filter((index) => height[index]! >= high && length[index]! >= (terrain.ocean ? 0.18 : 0.4) * extent).sort((a, b) => a - b);

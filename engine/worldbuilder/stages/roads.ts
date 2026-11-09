@@ -32,6 +32,7 @@
  */
 import { SHAPE_PRIMITIVE_SIZE, shapeAssetId } from "../../scene/shapes";
 import type { LayoutPlacement } from "../../scene/layout";
+import { oceanLandDistance } from "../island";
 import { bridgeRoute, type BridgeRiver, type BridgeSpan } from "../bridges";
 import { resolveJunctions, type JunctionRoad } from "../junctions";
 import { DEFAULT_RIVER_HALF_WIDTH } from "../masks";
@@ -95,7 +96,7 @@ export const roadsStage: WorldStage = {
         warnings.push(`road ${edge.id} has zero length; skipped`);
         continue;
       }
-      if (input.ocean && route.points.some(([x, z]) => input.ocean!.distance(x, z) <= spec.width / 2 + 20)) {
+      if (input.ocean && route.points.some(([x, z]) => oceanLandDistance(input.ocean!, x, z) <= spec.width / 2 + 20)) {
         warnings.push(`road ${edge.id} has no safe route clear of the Ocean; skipped`);
         continue;
       }

@@ -104,7 +104,7 @@ export interface BriefTerrain {
   relief?: BriefRelief;
   /** Star-shaped island; the coast is shared by all generators. */
   island?: { center: BriefPoint; radius: number; shoreWidth: number; landHeight: number };
-  coast?: { center: BriefPoint; seaSide: "west" | "east" | "north" | "south"; shoreWidth: number; landHeight: number };
+  coast?: { center: BriefPoint; seaSide: "west" | "east" | "north" | "south"; shoreWidth: number; landHeight: number; beachWidth?: number };
 }
 
 export interface BriefOcean {
@@ -441,13 +441,15 @@ function normalizeTerrain(ctx: Ctx, value: unknown): BriefTerrain | null {
   if (value.coast !== undefined) {
     if (!isRecord(value.coast)) return reject(ctx, "terrain.coast", "must be an object");
     const raw = value.coast;
-    for (const key of Object.keys(raw)) if (!["center", "seaSide", "shoreWidth", "landHeight"].includes(key)) issue(ctx, `terrain.coast.${key}`, "is not a coast field");
+    for (const key of Object.keys(raw)) if (!["center", "seaSide", "shoreWidth", "landHeight", "beachWidth"].includes(key)) issue(ctx, `terrain.coast.${key}`, "is not a coast field");
     const center = requirePoint(ctx, "terrain.coast.center", raw.center);
     const seaSide = isOneOf(["west", "east", "north", "south"] as const, raw.seaSide) ? raw.seaSide : reject(ctx, "terrain.coast.seaSide", "must be west, east, north or south");
     const shoreWidth = positive(ctx, "terrain.coast.shoreWidth", raw.shoreWidth, 1000);
     const landHeight = positive(ctx, "terrain.coast.landHeight", raw.landHeight, 1000);
     if (!center || !seaSide || shoreWidth === null || landHeight === null) return null;
-    coast = { center, seaSide, shoreWidth, landHeight };
+    const beachWidth = raw.beachWidth === undefined ? undefined : positive(ctx, "terrain.coast.beachWidth", raw.beachWidth, 1000);
+    if (beachWidth === null) return null;
+    coast = { center, seaSide, shoreWidth, landHeight, ...(beachWidth !== undefined ? { beachWidth } : {}) };
   }
   if (island && coast) issue(ctx, "terrain", "choose island or coast, not both");
   if (id === null || name === null || tileQuads === null || spacing === null || heightRange === null || relief === null) return null;

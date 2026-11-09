@@ -363,8 +363,10 @@ ve replacement tepe kabulü dördüncü adımda açıktır; Large desteği açı
 
 #### O9-C — Kara payı, kumsal, sığ kıyı ve ada biçimi
 
-9 Kasım 2026. [Onaylanan kıyı planı](WORLD_BUILDER_SHORELINE_PLAN.md) kaydedildi;
-uygulama başlamadı. İlk iş A1: Coast'ta yaklaşık %70 iç arazi, %30 kuru kumsal
+10 Kasım 2026. [Onaylanan kıyı planı](WORLD_BUILDER_SHORELINE_PLAN.md) A1 uygulandı;
+[ölçüm ve doğrulama raporu](../reports/WORLD_BUILDER_COAST_A1.md). Native tile
+matrisinde iç kara %69,994–70,032; ortalama kuru kumsal 60,32–60,82 m,
+aynı senaryonun eski genişliğinin 2,548–2,555 katıdır. A1: Coast'ta yaklaşık %70 iç arazi, %30 kuru kumsal
 ve deniz; görünen kuru kumsal mevcut genişliğinin 2–3 katı (başlangıç 2,5 kat).
 Oran ve kumsal birlikte uygulanır. Sonraki A2, Island/Coast sığ taban profili;
 A3, toplam kara oranını koruyan, seed'e göre daha çeşitli koy/burun/yarımadalarla

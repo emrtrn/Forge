@@ -285,11 +285,31 @@ for (const size of ["small", "medium"] as const) test(`World Builder coast ${siz
   const ocean = saved.oceanWaters[0];
   expect(ocean.offshorePolicy).toBe("connectedBoundary"); expect(ocean.inlets).toHaveLength(1);
   expect(saved.riverWaters).toHaveLength(1);
+  const briefPath = path.replace(/\.level\.json$/, ".worldbrief.json");
+  const generatedBrief = JSON.parse(await readFile(smokePublicPath(briefPath), "utf8"));
+  expect(generatedBrief.terrain.coast).toMatchObject({ beachWidth: 62.5, shoreWidth: 60 });
+  // User controls exercise both bird's-eye shoreline and the local live-width mouth.
+  const capturePlay = async (image: string) => {
+    const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
+    errors.push(observeBrowserErrors(runtime, true));
+    const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
+    await runtime.waitForLoadState("domcontentloaded");
+    await expect.poll(() => messages.some(message => message.includes(saved.name)), { timeout: 90_000 }).toBe(true);
+    await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+    await runtime.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await runtime.screenshot({ path: info.outputPath(image) }); await runtime.close();
+  };
   await page.locator('[data-object-id="ocean:0"]').click();
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
   expect(JSON.parse(await readFile(smokePublicPath(path), "utf8")).oceanWaters).toEqual([ocean]);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator('[data-object-id="ocean:0"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  expect(JSON.parse(await readFile(smokePublicPath(briefPath), "utf8"))).toEqual(generatedBrief);
+  await page.screenshot({ path: info.outputPath("coast-editor.png") });
+  await capturePlay("coast-runtime.png");
   // Stage a repeatable mouth camera; the user flow still uses real Create/Save/Reload/Play controls.
   const def = JSON.parse(await readFile(smokePublicPath(saved.landscapes[0].dataRef), "utf8"));
   const river = def.splines.find((spline: { id: string }) => spline.id === ocean.inlets[0]);
@@ -310,16 +330,6 @@ for (const size of ["small", "medium"] as const) test(`World Builder coast ${siz
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await page.screenshot({ path: info.outputPath("coast-mouth-narrow.png") });
   // Both widths must survive real Play, including the local optical transition.
-  const capturePlay = async (image: string) => {
-    const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
-    errors.push(observeBrowserErrors(runtime, true));
-    const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
-    await runtime.waitForLoadState("domcontentloaded");
-    await expect.poll(() => messages.some(message => message.includes(saved.name)), { timeout: 90_000 }).toBe(true);
-    await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
-    await runtime.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-    await runtime.screenshot({ path: info.outputPath(image) }); await runtime.close();
-  };
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
   expect(JSON.parse(await readFile(smokePublicPath(path), "utf8")).riverWaters[0].widthScale).toBe(.5);

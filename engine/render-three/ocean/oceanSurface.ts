@@ -1,12 +1,14 @@
-import { Color, DataTexture, FloatType, GLSL3, Mesh, NearestFilter, NoBlending, RGBAFormat,
+import { Box3, Color, DataTexture, FloatType, GLSL3, Matrix4, Mesh, NearestFilter, NoBlending, RGBAFormat,
   ShaderMaterial, UniformsLib, UniformsUtils, Vector2, Vector3, Vector4, type Camera, type WebGLRenderer } from "three";
-import { OCEAN_APPEARANCE } from "../../scene/oceanWater";
+import { resolveOceanAppearance, type OceanWaterBody } from "../../scene/oceanWater";
 import { OCEAN_OFFSHORE_TRANSITION, type OceanCoverage } from "../../terrain/oceanCoverage";
 import { OceanFft } from "./oceanFft";
 import { createOceanGrid } from "./oceanGrid";
 import { WATER_OPTICS_GLSL } from "../waterOptics";
 import type { WaterEnvironmentProbes } from "../waterEnvironment";
 import { createOceanOpticsUniforms, updateOceanOptics, OCEAN_NORMAL_GLSL, OCEAN_OPTICS_GLSL } from "./oceanOptics";
+import type { PlanarReflectionBinding, PlanarReflectionSource } from "../planarReflectionSource";
+import { createOceanReflectionUniforms, OCEAN_PLANAR_GLSL } from "./oceanReflection";
 
 const COVERAGE = /* glsl */ `
 uniform sampler2D coverageMap;
@@ -68,19 +70,24 @@ const VERTEX = /* glsl */ `
 attribute float gridStep; attribute float edgeBlend;
 uniform vec2 anchor;
 varying vec3 vWorld; varying float vFoam;
+uniform mat4 reflectionMatrix; varying vec4 vReflection;
 ${COVERAGE}${WAVES}
 void main(){
   vec2 world=position.xz+anchor;
-  vec3 direct=shallowDisplacement(world,gridStep);
-  float step2=gridStep*2.;vec2 grid=floor((world-anchor)/step2)*step2+anchor,f=fract((world-anchor)/step2);
-  // Same b-c diagonal as the coarse ring. Fine edge midpoint lies exactly on its edge.
-  vec3 a=shallowDisplacement(grid,step2),b=shallowDisplacement(grid+vec2(step2,0.),step2);
-  vec3 c=shallowDisplacement(grid+vec2(0.,step2),step2),d=shallowDisplacement(grid+vec2(step2),step2);
-  vec3 coarse=f.x+f.y<=1.?a*(1.-f.x-f.y)+b*f.x+c*f.y:d*(f.x+f.y-1.)+c*(1.-f.x)+b*(1.-f.y);
-  vec3 wave=mix(direct,coarse,edgeBlend);
+  vec3 wave=shallowDisplacement(world,gridStep);
+  // Interior vertices have no morph contribution. Avoid four full coverage/FFT
+  // samples there; keep the identical b-c triangle interpolation at ring edges.
+  if(edgeBlend>0.){
+    float step2=gridStep*2.;vec2 grid=floor((world-anchor)/step2)*step2+anchor,f=fract((world-anchor)/step2);
+    vec3 a=shallowDisplacement(grid,step2),b=shallowDisplacement(grid+vec2(step2,0.),step2);
+    vec3 c=shallowDisplacement(grid+vec2(0.,step2),step2),d=shallowDisplacement(grid+vec2(step2),step2);
+    vec3 coarse=f.x+f.y<=1.?a*(1.-f.x-f.y)+b*f.x+c*f.y:d*(f.x+f.y-1.)+c*(1.-f.x)+b*(1.-f.y);
+    wave=mix(wave,coarse,edgeBlend);
+  }
   vWorld=vec3(world.x+wave.x,seaLevel+wave.y,world.y+wave.z);
   vFoam=displacement(world,gridStep).w;
   vec4 worldPosition=vec4(vWorld,1.);
+  vReflection=reflectionMatrix*worldPosition;
   vec4 mvPosition=viewMatrix*worldPosition;
   vec3 transformedNormal=normalMatrix*vec3(0.,1.,0.);
   gl_Position=projectionMatrix*mvPosition;
@@ -94,7 +101,7 @@ uniform float roughness; uniform float foamStrength;
 out vec4 oceanColor;
 #define gl_FragColor oceanColor
 varying vec3 vWorld; varying float vFoam;
-${COVERAGE}${WAVES}${WATER_OPTICS_GLSL}${OCEAN_NORMAL_GLSL}${OCEAN_OPTICS_GLSL}
+${COVERAGE}${WAVES}${WATER_OPTICS_GLSL}${OCEAN_NORMAL_GLSL}${OCEAN_OPTICS_GLSL}${OCEAN_PLANAR_GLSL}
 void main(){
   vec2 cover=waterCoverage(vWorld.xz);if(cover.y<.5||cover.x<=.002)discard;
   vec2 p=vWorld.xz;
@@ -109,8 +116,14 @@ void main(){
   vec3 base=mix(shallowColor,deepColor,1.-exp(-cover.x/absorptionDistance))*illumination;
   vec3 direction=reflect(-eye,normal);direction.y=abs(direction.y);
   float reflectedCoverage=waterEnvironmentCoverage(vWorld);
-  vec3 reflected=waterReflectedEnvironment(vWorld,direction,filteredRoughness)/max(reflectedCoverage,.00001);
-  float reflectionAmount=fresnel*reflectedCoverage*step(0.,eye.y);
+  vec3 reflected=waterReflectedEnvironment(vWorld,direction,filteredRoughness);
+  if(reflectionStrength>0.&&eye.y>=0.){
+    vec4 planar=oceanPlanar(normal,filteredRoughness);float coverage=clamp(planar.a,0.,1.);
+    reflected=reflected*(1.-coverage)+planar.rgb;
+    reflectedCoverage=reflectedCoverage*(1.-coverage)+coverage;
+  }
+  reflected/=max(reflectedCoverage,.00001);
+  float reflectionAmount=clamp(reflectionStrength*fresnel*reflectedCoverage,0.,1.)*step(0.,eye.y);
   vec3 glint=waterSunGlint(normal,eye,filteredRoughness,sunVisibility);
   float path=waterPath(cover.x,abs(eye.y)),edgeDepth=cover.x;
   vec2 screenUv=gl_FragCoord.xy/waterSceneSize;
@@ -163,6 +176,10 @@ void main(){
 export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, ShaderMaterial> {
   private readonly coverageTexture: DataTexture;
   private disposed = false;
+  private source: PlanarReflectionSource | null = null;
+  private readonly emptyReflectionMatrix = new Matrix4();
+  readonly reflectionBounds = new Box3();
+  private readonly depthBound: number;
   private readonly waveOverrides = new Map<"normal" | "depth", Mesh<ReturnType<typeof createOceanGrid>, ShaderMaterial>>();
   constructor(readonly coverage: OceanCoverage, readonly simulation: OceanFft, probes?: WaterEnvironmentProbes) {
     if (coverage.status !== "ready") throw new Error("Cannot publish Ocean from missing terrain");
@@ -172,10 +189,11 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
       packed[i * 4 + 1] = x < nx && z < nz ? triangles[z * nx + x]! : 0; });
     const texture = new DataTexture(packed, nx + 1, nz + 1, RGBAFormat, FloatType);
     texture.minFilter = texture.magFilter = NearestFilter; texture.needsUpdate = true;
-    const a = { ...OCEAN_APPEARANCE, ...body.appearance };
+    const a = resolveOceanAppearance(body);
     const material = new ShaderMaterial({ glslVersion: GLSL3, vertexShader: VERTEX, fragmentShader: FRAGMENT,
       transparent: true, depthWrite: false, fog: true, lights: true, uniforms: {
         ...UniformsUtils.clone(UniformsLib.fog), ...UniformsUtils.clone(UniformsLib.lights), ...createOceanOpticsUniforms(),
+        ...createOceanReflectionUniforms(),
         coverageMap: { value: texture }, domain: { value: new Vector4(...body.bounds.min, coverage.spacing, 0) },
         cells: { value: new Vector2(nx, nz) }, seaLevel: { value: body.surfaceLevel }, offshoreDepth: { value: body.offshoreDepth },
         anchor: { value: new Vector2() }, lengths: { value: new Vector4(...simulation.lengths) },
@@ -186,11 +204,17 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
         absorptionDistance: { value: a.absorptionDistance }, roughness: { value: a.roughness }, foamStrength: { value: a.foamStrength },
       } });
     super(createOceanGrid(), material); this.coverageTexture = texture;
+    let maxDepth = body.offshoreDepth;
+    for (const height of heights) maxDepth = Math.max(maxDepth, body.surfaceLevel - height);
+    this.depthBound = Math.max(1, maxDepth * .7);
+    this.geometry.computeBoundingBox(); this.syncReflectionBounds(); this.applyAppearance(body);
     this.name = `Ocean:${body.id}`; this.frustumCulled = false; this.renderOrder = 1; this.visible = !body.hidden;
     this.receiveShadow = true; this.layers.enable(31);
     this.userData.waterSceneTransmission = this.userData.aoWaterSurface = true;
     this.onBeforeRender = (renderer, scene, camera) => {
       if (scene.overrideMaterial) return;
+      this.source?.update(renderer, scene, camera, this.reflectionBounds);
+      this.material.uniforms.planarReflectionEnabled!.value = this.source?.hasCapture ? 1 : 0;
       this.userData.compositedWaterSurface = updateOceanOptics(this.material.uniforms as ReturnType<typeof createOceanOpticsUniforms>, renderer, scene, camera, probes);
     };
   }
@@ -199,8 +223,33 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
     const point = camera.getWorldPosition(new Vector3()), u = this.material.uniforms;
     u.waveClock!.value = this.simulation.stats.time;
     u.anchor!.value.set(Math.floor(point.x / .75) * .75, Math.floor(point.z / .75) * .75);
+    this.syncReflectionBounds();
     for (let i = 0; i < 3; i++) u[`disp${i}`]!.value = this.simulation.displacement[i];
     for (let i = 0; i < 4; i++) u[`slope${i}`]!.value = this.simulation.slopes[i];
+  }
+  private syncReflectionBounds(): void {
+    const anchor = this.material.uniforms.anchor!.value as Vector2, box = this.geometry.boundingBox!;
+    const sea = this.coverage.body.surfaceLevel, margin = this.depthBound;
+    this.reflectionBounds.min.set(box.min.x + anchor.x - margin, sea - margin, box.min.z + anchor.y - margin);
+    this.reflectionBounds.max.set(box.max.x + anchor.x + margin, sea + margin, box.max.z + anchor.y + margin);
+  }
+  applyAppearance(body: OceanWaterBody): void {
+    const a = resolveOceanAppearance(body), u = this.material.uniforms;
+    u.shallowColor!.value.set(a.shallowColor); u.deepColor!.value.set(a.deepColor);
+    u.absorptionDistance!.value = a.absorptionDistance; u.roughness!.value = a.roughness; u.foamStrength!.value = a.foamStrength;
+    u.reflectionStrength!.value = a.reflectionMode === "off" ? 0 : a.reflectionStrength;
+  }
+  setReflectionSource(source: PlanarReflectionSource | null): void {
+    if (this.source === source) return;
+    this.source?.removeConsumer(this); this.source = source;
+    this.setPlanarReflectionBinding(null); source?.addConsumer(this);
+  }
+  setPlanarReflectionBinding(binding: PlanarReflectionBinding | null): void {
+    const u = this.material.uniforms, image = binding?.texture.image as { width: number; height: number } | undefined;
+    u.reflectionTexture!.value = binding?.texture ?? null;
+    u.reflectionMatrix!.value = binding?.textureMatrix ?? this.emptyReflectionMatrix;
+    u.reflectionTexelSize!.value.set(1 / (image?.width || 1), 1 / (image?.height || 1));
+    u.planarReflectionEnabled!.value = binding && this.source?.hasCapture ? 1 : 0;
   }
   /** AO/DoF draw the same displaced, connected surface without stepping FFT. */
   renderWaveOverride(renderer: WebGLRenderer, camera: Camera, kind: "normal" | "depth"): void {
@@ -218,6 +267,7 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
   }
   override dispose(): void {
     if (this.disposed) return; this.disposed = true; this.removeFromParent();
+    this.setReflectionSource(null);
     for (const proxy of this.waveOverrides.values()) proxy.material.dispose(); this.waveOverrides.clear();
     this.geometry.dispose(); this.material.dispose(); this.coverageTexture.dispose();
   }

@@ -2,6 +2,7 @@
 
 Durum: O4'ün ilk ara teslimi. [Ana plan](../planned/OCEAN_DEVELOPMENT_PLAN.md)
 ve [native entegrasyon](OCEAN_EDITOR_RUNTIME_INTEGRATION.md) üzerine devam eder.
+Sonraki teslim: [ortak planar yansıma](OCEAN_PLANAR_REFLECTIONS.md).
 
 ## Davranış
 
@@ -73,8 +74,8 @@ tam CI/production kabulü bu nedenle hâlâ açıktır.
 
 ## Açık işler
 
-O4 tamamlanmış değildir. Sıradaki parça ortak planar reflection registry'ye
-katılım ve aynı kamera ile environment/planar karşılaştırmasıdır. SSR kararı,
+O4 tamamlanmış değildir. Ortak planar reflection registry bağlantısı ve
+environment/planar karşılaştırması sonraki teslimde izlenir. SSR kararı,
 Ocean caustics, tropikal/fırtınalı/ay ışıklı profiller ve hedef donanımda GPU
 bütçesi/görsel kabulü açık. Üç bağımsız köpük katmanı O5'te; su altı, buoyancy,
 wake ve masking sonraki aşamalardadır. İlk crest köpüğü nihai görsel kabul

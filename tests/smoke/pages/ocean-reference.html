@@ -9,8 +9,9 @@ aside{position:fixed;top:24px;left:24px;width:290px;padding:22px;background:#0c2
 </style></head><body><canvas aria-label="Ocean reference viewport"></canvas><aside>
 <div class="eyebrow">Forge · Ocean / O4</div><h1>Coast & open sea</h1>
 <p>Dalga, kıyı ve optik çalışma sahnesi. Sürükleyerek dön, tekerlekle yaklaş.</p>
-<nav aria-label="Camera"><button data-view="coast">Coast</button><button data-view="sea">Open sea</button><button data-view="aerial">Aerial</button></nav>
+<nav aria-label="Camera"><button data-view="coast">Coast</button><button data-view="sea">Open sea</button><button data-view="aerial">Aerial</button><button data-view="reflection">Reflect</button></nav>
 <label for="backend">Wave model</label><select id="backend"><option value="fft">FFT · wind sea + swell</option><option value="analytic">Analytical · comparison</option></select>
+<label for="reflections">Reflections</label><select id="reflections"><option value="environment">Environment</option><option value="sharedPlanar">Planar</option><option value="off">Off</option></select>
 <button id="pause" aria-pressed="false">Pause</button> <button id="rebuild">Rebuild</button>
 <output id="status" role="status">Kıyı hazırlanıyor…</output>
 <p>Bu ilk prototip nihai optik, üç katmanlı köpük, su altı veya yüzdürme kabulü değildir.</p>

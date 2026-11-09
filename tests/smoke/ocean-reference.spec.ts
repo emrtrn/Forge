@@ -57,7 +57,9 @@ test("ocean: FFT, shared optics, darkness, depth/normal overrides and safe rebui
   const after = await page.evaluate(() => window.__oceanLab.stats());
   expect(after.textures).toBeLessThanOrEqual(before.textures + 1);
   expect(after.geometries).toBeLessThanOrEqual(before.geometries + 1);
-  expect(after.errors).toEqual([]); expect(errors).toEqual([]);
+  expect(after.errors).toEqual([]);
   await page.getByRole("button", { name: "Resume", exact: true }).click();
-  await expect.poll(() => page.evaluate(() => window.__oceanLab.stats().time)).toBeGreaterThan(0);
+  // Three fresh FFTs leave a cold mip/render queue on software GPUs.
+  await expect.poll(() => page.evaluate(() => window.__oceanLab.stats().time), { timeout: 60_000 }).toBeGreaterThan(0);
+  expect(errors).toEqual([]);
 });

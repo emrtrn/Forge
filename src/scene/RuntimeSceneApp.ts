@@ -2456,6 +2456,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     setTerrainFarTiling(settings.terrainFarTiling);
     setTerrainWaterQuality(settings.terrainWaterQuality);
     void this.lakes?.setQuality(lakeQuality(settings)).catch(error => console.warn("[lake-quality]", error));
+    this.oceans?.setReflectionQuality(lakeQuality(settings).reflectionQuality);
     this.puddleReflections.setQuality(lakeQuality(settings).reflectionQuality);
     if (!settings.lakeFoamAllowed) this.riverFoam.clearLoaded();
     for(const river of this.riverWaterObjects) {
@@ -6208,6 +6209,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeOcean(): Promise<void> {
     if (!this.layout?.oceanWaters?.length && !this.oceans) return;
     this.oceans ??= new OceanWaterController({ scene: this.scene, renderer: this.renderer,
+      reflections: this.waterReflections, reflectionQuality: lakeQuality(this.qualitySettings).reflectionQuality,
       environmentProbes: () => this.eligibleProbeBakes(),
       document: id => this.worldTerrainDocuments.get(id),
       load: async (id, key, signal) => {

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { validateOceanWater, validateOceanWaters, type OceanWaterBody } from "../../engine/scene/oceanWater";
+import { oceanPlanarSettings, validateOceanWater, validateOceanWaters, type OceanWaterBody } from "../../engine/scene/oceanWater";
 import { buildOceanCoverage, prepareOceanCoverage, sampleOceanCoverage } from "../../engine/terrain/oceanCoverage";
 import { CooperativeWork } from "../../engine/core/cooperativeWork";
 import { createOceanGrid } from "../../engine/render-three/ocean/oceanGrid";
@@ -19,14 +19,66 @@ import { renderSceneWithLakeOverride } from "../../engine/render-three/lakeWater
 import { SceneApp } from "../../src/scene/SceneApp";
 import { cloneSelection, parseSelectionId, selectionId, selectionsEqual, type Selection } from "../../editor/core/selection";
 import { moveWorldTerrain } from "../../engine/terrain/worldTerrainMove";
+import { OceanReflectionLease } from "../../engine/render-three/ocean/oceanReflection";
+import { WaterReflectionRegistry } from "../../engine/render-three/waterReflectionRegistry";
+import type { PlanarReflectionSource } from "../../engine/render-three/planarReflectionSource";
 
 const body = (): OceanWaterBody => ({ schema: 1, kind: "ocean", coordinateSpace: "world", id: "sea",
   name: "Reference", hidden: false, locked: false, terrainRef: "terrain", bounds: { min: [-8, -8], max: [8, 8] },
   openEdges: ["west", "east", "north", "south"], surfaceLevel: 7, offshoreDepth: 40,
   waves: { windSpeed: 9, windDirection: 20, fetchKm: 120, swellStrength: .7, swellDirection: 345, choppiness: .85, seed: 42 },
-  appearance: { shallowColor: "#28b5ac", deepColor: "#073448", absorptionDistance: 9, roughness: .16, foamStrength: .75 } });
+  appearance: { shallowColor: "#28b5ac", deepColor: "#073448", absorptionDistance: 9, roughness: .16, foamStrength: .75,
+    reflectionMode: "sharedPlanar", reflectionGroup: "water", reflectionQuality: "medium", reflectionStrength: .8 } });
 
 export async function registerOceanWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("ocean: planar leases share coplanar Lake/River sources, obey quality and release only their own references", async () => {
+    const registry = new WaterReflectionRegistry(), sea = body(), other = registry.acquire("water", sea.surfaceLevel, "medium");
+    let bound: PlanarReflectionSource | null = null, fail = false, disposed = 0;
+    const dispose = other.dispose.bind(other); other.dispose = () => { disposed++; dispose(); };
+    const lease = new OceanReflectionLease({ setReflectionSource: source => {
+      bound = source; if (fail && source !== other) throw new Error("binding failed");
+    } }, registry);
+    try {
+      lease.update(sea, "high"); assert.equal(lease.source, other); assert.equal(bound, other); assert.equal(registry.size, 1);
+      lease.update({ ...sea, name: "renamed" }, "high"); assert.equal(registry.size, 1);
+      const high: OceanWaterBody = { ...sea, appearance: { ...sea.appearance, reflectionQuality: "high" } };
+      lease.update(high, "high"); assert.notEqual(lease.source, other); assert.equal(registry.size, 2); assert.equal(disposed, 0);
+      lease.update(high, "medium"); assert.equal(lease.source, other); assert.equal(registry.size, 1);
+      fail = true;
+      assert.throws(() => lease.update({ ...sea, surfaceLevel: 8 }, "high"), /binding failed/);
+      fail = false; assert.equal(lease.source, other); assert.equal(bound, other);
+      assert.equal(registry.size, 1, "failed replacement releases its new lease");
+      lease.update(sea, "off"); assert.equal(lease.source, null); assert.equal(bound, null); assert.equal(registry.size, 1);
+      lease.update(sea, "high"); lease.update({ ...sea, hidden: true }, "high"); assert.equal(lease.source, null);
+      lease.update(sea, "high");
+      lease.dispose(); lease.dispose(); assert.equal(registry.size, 1); assert.equal(disposed, 0, "the other water owner still holds the target");
+      registry.release(other); assert.equal(registry.size, 0); assert.equal(disposed, 1);
+      assert.equal(oceanPlanarSettings({ ...sea, appearance: { reflectionMode: "environment" } }, "high"), null);
+      assert.equal(oceanPlanarSettings({ ...sea, appearance: { reflectionMode: "off" } }, "high"), null);
+      assert.equal(oceanPlanarSettings({ ...sea, appearance: { reflectionMode: "sharedPlanar", reflectionStrength: 0 } }, "high"), null);
+    } finally { fail = false; lease.dispose(); }
+  });
+  await check("ocean: optical edits, visibility and quality reuse the live simulation; geometric edits rebuild it", async () => {
+    const document = createLakeFixture(), scene = new Scene(), sea: OceanWaterBody = { ...body(), bounds: { min: [-64,-64], max: [64,64] }, surfaceLevel: 17 };
+    let made = 0, freed = 0; const applied: { body: OceanWaterBody; quality: string }[] = [];
+    const controller = new OceanWaterController({ scene, renderer: {} as WebGLRenderer, document: () => document,
+      load: async () => { throw new Error("unexpected read"); }, create: () => {
+        made++; return { object: new Object3D(), update() {}, dispose: () => { freed++; },
+          applyAppearance: (body, quality) => applied.push({ body, quality }) };
+      } });
+    try {
+      await controller.rebuild([sea]); const original = controller.object;
+      const edited: OceanWaterBody = { ...sea, appearance: { ...sea.appearance, reflectionMode: "off", roughness: .5 } };
+      await controller.rebuild([edited]); assert.equal(made, 1); assert.equal(controller.object, original);
+      assert.equal(applied.at(-1)!.body.appearance!.reflectionMode, "off");
+      controller.setReflectionQuality("off"); assert.equal(applied.at(-1)!.quality, "off"); assert.equal(made, 1);
+      await controller.rebuild([{ ...edited, hidden: true, locked: true, name: "Renamed" }]);
+      assert.equal(original!.visible, false); assert.equal(made, 1);
+      await controller.rebuild([{ ...sea, surfaceLevel: 18 }]); assert.equal(made, 2); assert.equal(freed, 1);
+      await controller.rebuild([sea], true); assert.equal(made, 3); assert.equal(freed, 2);
+    } finally { controller.dispose(); }
+    assert.equal(freed, made);
+  });
   await check("ocean: optics borrows live environment/probes and follows daylight, darkness and hidden ambient", async () => {
     const scene = new Scene(), camera = new PerspectiveCamera(), u = createOceanOpticsUniforms();
     const renderer = { getRenderTarget: () => null } as unknown as WebGLRenderer;
@@ -59,6 +111,13 @@ export async function registerOceanWaterTests(check: (label: string, fn: () => P
     camera.position.set(3, 10, 5); camera.updateMatrixWorld(true); surface.updateView(camera); scene.add(surface);
     assert.equal(surface.material.uniforms.waveClock!.value, 12);
     const anchor = surface.material.uniforms.anchor!.value.clone(), before = surface.material.uniforms;
+    camera.position.set(10000, 10, -20000); camera.updateMatrixWorld(true); surface.updateView(camera);
+    assert.ok(surface.reflectionBounds.containsPoint(camera.position), "coverage gate follows the camera's world-space grid, not origin geometry");
+    camera.position.set(3, 10, 5); camera.updateMatrixWorld(true); surface.updateView(camera);
+    const source = new WaterReflectionRegistry().acquire("test", 0, "medium");
+    surface.setReflectionSource(source); assert.equal(before.reflectionTexture!.value, source.binding.texture);
+    surface.setReflectionSource(null); assert.equal(before.reflectionTexture!.value, null);
+    assert.equal(before.planarReflectionEnabled!.value, 0); source.dispose();
     let draws = 0, materialsFreed = 0, previousCalls = 0;
     const previous = scene.onAfterRender = () => { previousCalls++; };
     const renderer = { autoClear: true, render: (object: Object3D) => {
@@ -96,7 +155,10 @@ export async function registerOceanWaterTests(check: (label: string, fn: () => P
     for (const patch of [{ surfaceLevel: Infinity }, { offshoreDepth: 0 }, { id: "" }, { terrainRef: " " },
       { openEdges: ["west", "west"] }, { openEdges: ["elsewhere"] }, { openEdges: [] },
       { bounds: { min: [0, 0], max: [-1, 2] } }, { waves: { seed: 1.5 } }, { waves: { windSpeed: 0 } },
-      { waves: { choppiness: 10 } }, { appearance: { roughness: NaN } }, { hidden: 1 }, { appearance: { deepColor: "blue" } }]) {
+      { waves: { choppiness: 10 } }, { appearance: { roughness: NaN } }, { hidden: 1 }, { appearance: { deepColor: "blue" } },
+      { appearance: { reflectionMode: "unknown" } }, { appearance: { reflectionQuality: "low" } },
+      { appearance: { reflectionGroup: " " } }, { appearance: { reflectionGroup: "a".repeat(257) } },
+      { appearance: { reflectionStrength: 1.1 } }, { appearance: { reflectionStrength: NaN } }]) {
       const bad = { schema: 1, name: "Coast", loadGroups: [], instances: [], characters: [], oceanWaters: [{ ...body(), ...patch }] };
       assert.throws(() => validateLayout(bad)); assert.throws(() => readRoomLayout(bad, "coast"));
     }

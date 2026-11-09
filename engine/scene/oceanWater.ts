@@ -1,5 +1,8 @@
 /** Ocean authoring contract. Runtime simulation/coverage never lives in a layout. */
 export type OceanEdge = "west" | "east" | "north" | "south";
+export type OceanReflectionMode = "off" | "environment" | "sharedPlanar";
+export type OceanReflectionQuality = "medium" | "high";
+export type OceanReflectionCeiling = "off" | OceanReflectionQuality;
 export interface OceanWaterBody {
   schema: 1;
   kind: "ocean";
@@ -17,13 +20,26 @@ export interface OceanWaterBody {
   waves?: { windSpeed?: number; windDirection?: number; fetchKm?: number;
     swellStrength?: number; swellDirection?: number; choppiness?: number; seed?: number };
   appearance?: { shallowColor?: string; deepColor?: string; absorptionDistance?: number;
-    roughness?: number; foamStrength?: number };
+    roughness?: number; foamStrength?: number; reflectionMode?: OceanReflectionMode;
+    reflectionGroup?: string; reflectionQuality?: OceanReflectionQuality; reflectionStrength?: number };
 }
 export const OCEAN_LIMITS = { bodies: 1, cells: 262144, axisCells: 2048 } as const;
 export const OCEAN_WAVES = { windSpeed: 9, windDirection: 20, fetchKm: 120,
   swellStrength: .7, swellDirection: 345, choppiness: .85, seed: 1337 };
 export const OCEAN_APPEARANCE = { shallowColor: "#28b5ac", deepColor: "#073448",
-  absorptionDistance: 9, roughness: .16, foamStrength: .75 };
+  absorptionDistance: 9, roughness: .16, foamStrength: .75,
+  reflectionMode: "environment" as OceanReflectionMode, reflectionGroup: "water",
+  reflectionQuality: "medium" as OceanReflectionQuality, reflectionStrength: 1 };
+
+export function resolveOceanAppearance(body: OceanWaterBody) { return { ...OCEAN_APPEARANCE, ...body.appearance }; }
+
+/** Runtime ceiling changes neither authored values nor the FFT. */
+export function oceanPlanarSettings(body: OceanWaterBody, ceiling: OceanReflectionCeiling) {
+  const a = resolveOceanAppearance(body);
+  if (body.hidden || a.reflectionMode !== "sharedPlanar" || a.reflectionStrength <= 0 || ceiling === "off") return null;
+  return { group: a.reflectionGroup, planeY: body.surfaceLevel,
+    quality: (a.reflectionQuality === "high" && ceiling === "high" ? "high" : "medium") as OceanReflectionQuality };
+}
 const EDGES: readonly OceanEdge[] = ["west", "east", "north", "south"];
 const record = (v: unknown): Record<string, unknown> => {
   if (!v || typeof v !== "object" || Array.isArray(v)) throw new Error("Ocean requires an object");
@@ -73,7 +89,17 @@ export function validateOceanWater(value: unknown): OceanWaterBody {
       if (typeof source[key] !== "string" || !/^#[\da-f]{6}$/i.test(source[key])) throw new Error(`Invalid Ocean ${key}`);
       appearance[key] = source[key];
     }
-    const ranges = { absorptionDistance: [.1, 100], roughness: [.04, 1], foamStrength: [0, 2] } as const;
+    for (const [key, choices] of [["reflectionMode", ["off", "environment", "sharedPlanar"]],
+      ["reflectionQuality", ["medium", "high"]]] as const) if (source[key] !== undefined) {
+      if (!(choices as readonly unknown[]).includes(source[key])) throw new Error(`Invalid Ocean ${key}`);
+      Object.assign(appearance, { [key]: source[key] });
+    }
+    if (source.reflectionGroup !== undefined) {
+      if (typeof source.reflectionGroup !== "string" || !source.reflectionGroup.trim() || source.reflectionGroup.length > 256)
+        throw new Error("Invalid Ocean reflectionGroup");
+      appearance.reflectionGroup = source.reflectionGroup.trim();
+    }
+    const ranges = { absorptionDistance: [.1, 100], roughness: [.04, 1], foamStrength: [0, 2], reflectionStrength: [0, 1] } as const;
     for (const key of Object.keys(ranges) as (keyof typeof ranges)[]) if (source[key] !== undefined)
       appearance[key] = number(source[key], ranges[key][0], ranges[key][1]);
     out.appearance = appearance;

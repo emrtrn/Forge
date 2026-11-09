@@ -6,13 +6,16 @@ import { createFlatTerrainTile, terrainTilePath, type WorldTerrainDef } from "..
 import { encodeTerrainTile } from "../../engine/terrain/terrainTileCodec";
 import { observeBrowserErrors } from "./browserErrors";
 
-test.use({ viewport: { width: 1100, height: 760 }, launchOptions: {
+test.use({ viewport: { width: 1100, height: 760 },
+  trace: { mode: "retain-on-failure", screenshots: false, snapshots: true, sources: true }, launchOptions: {
   ...(process.env.FORGE_CHROMIUM_EXECUTABLE ? { executablePath: process.env.FORGE_CHROMIUM_EXECUTABLE } : {}),
   args: ["--enable-unsafe-swiftshader"],
 } });
 
 test("ocean: native editor create/edit/undo/save/reload and runtime Play render the same body", async ({ page, context }, info) => {
-  test.setTimeout(300_000);
+  // Full FFT + planar rendering on SwiftShader makes each real UI action slow.
+  // This is a functional workflow check; hardware frame-time acceptance is separate.
+  test.setTimeout(600_000);
   const dataRef = "landscapes/__playwright-ocean.terrain.json";
   const def: WorldTerrainDef = { schema: 1, type: "worldTerrain", name: "Ocean coast", tileQuads: 32, spacing: 2,
     tilesX: 1, tilesZ: 1, origin: [-32, 0, -32], heightMin: -10, heightMax: 10, collision: false,
@@ -37,6 +40,24 @@ test("ocean: native editor create/edit/undo/save/reload and runtime Play render 
     graphics: { selectedQualityLevel: "custom", manuallySelected: true, adaptiveOptimizationEnabled: false,
       customSettings: { renderScale: .5, maxPixelRatio: 1, shadowsEnabled: false, aoAllowed: false, bloomAllowed: false, dofAllowed: false, smaaAllowed: false, particleDensity: 0, grassDensity: 0 } },
   } })));
+  if (process.env.FORGE_CHROMIUM_EXECUTABLE) await context.addInitScript((delayMs: number) => {
+    // Keep the real render loop/FFT, with idle time for DOM input on software
+    // GPUs. This test checks authoring/persistence; GPU timing is a separate gate.
+    const requestFrame = window.requestAnimationFrame.bind(window), cancelFrame = window.cancelAnimationFrame.bind(window);
+    const pending = new Map<number, () => void>(); let sequence = 0;
+    window.requestAnimationFrame = callback => {
+      const id = ++sequence;
+      const timer = window.setTimeout(() => {
+        const frame = requestFrame(time => { pending.delete(id); callback(time); });
+        pending.set(id, () => cancelFrame(frame));
+      }, delayMs);
+      pending.set(id, () => clearTimeout(timer)); return id;
+    };
+    window.cancelAnimationFrame = id => {
+      const cancelPending = pending.get(id);
+      if (cancelPending) { pending.delete(id); cancelPending(); }
+    };
+  }, 250);
   const errors: (() => string[])[] = [];
   const observe = (target: typeof page) => { errors.push(observeBrowserErrors(target)); };
   observe(page);
@@ -51,15 +72,29 @@ test("ocean: native editor create/edit/undo/save/reload and runtime Play render 
   await expect(levelInput).toHaveValue("1");
   await page.getByTestId("editor-undo").click(); await expect(levelInput).toHaveValue("0");
   await page.getByTestId("editor-redo").click(); await expect(levelInput).toHaveValue("1");
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 60_000 });
+  const reflectionMode = page.getByRole("combobox", { name: "Reflection Mode", exact: true });
+  await reflectionMode.selectOption("sharedPlanar");
+  await page.getByTestId("editor-undo").click(); await expect(reflectionMode).toHaveValue("environment");
+  await page.getByTestId("editor-redo").click(); await expect(reflectionMode).toHaveValue("sharedPlanar");
+  await page.getByRole("combobox", { name: "Reflection Quality", exact: true }).selectOption("medium");
+  await page.getByRole("textbox", { name: "Reflection Group", exact: true }).fill("native-ocean");
+  await page.getByRole("textbox", { name: "Reflection Group", exact: true }).press("Tab");
+  await page.getByRole("spinbutton", { name: "Reflection Strength", exact: true }).fill("0.6");
+  await page.getByRole("spinbutton", { name: "Reflection Strength", exact: true }).press("Tab");
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
   const saved = JSON.parse(await readFile(smokePublicPath(SMOKE_SCENE), "utf8"));
   expect(saved.oceanWaters).toHaveLength(1); expect(saved.oceanWaters[0].surfaceLevel).toBe(1);
+  expect(saved.oceanWaters[0].appearance).toMatchObject({ reflectionMode: "sharedPlanar", reflectionGroup: "native-ocean", reflectionQuality: "medium", reflectionStrength: .6 });
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('[data-object-id="ocean:0"]').click();
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole("spinbutton", { name: "Sea Level", exact: true })).toHaveValue("1");
+  await expect(reflectionMode).toHaveValue("sharedPlanar");
+  await expect(page.getByRole("textbox", { name: "Reflection Group", exact: true })).toHaveValue("native-ocean");
   await page.keyboard.press("f");
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await page.screenshot({ path: info.outputPath("ocean-editor.png") });
   const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]); observe(runtime);
   const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
@@ -67,6 +102,7 @@ test("ocean: native editor create/edit/undo/save/reload and runtime Play render 
   await expect(runtime.locator("#game-canvas")).toBeVisible({ timeout: 60_000 });
   await expect.poll(() => messages.some(message => message.includes(String(level.name))), { timeout: 60_000 }).toBe(true);
   await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  await runtime.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await runtime.screenshot({ path: info.outputPath("ocean-runtime.png") }); await runtime.close();
   await page.getByRole("button", { name: "Delete Ocean", exact: true }).click();
   await expect(page.locator('[data-object-id="ocean:0"]')).toHaveCount(0);

@@ -183,11 +183,13 @@ Water Pro hedefinin karşılandığı anlamına gelmez.
 WES ortam/probe, canlı directional ışık ve gölge, renderer sisi, tek sahne
 renk/depth kopyası üzerinden soğurulma ve kontrollü kırılmayı kullanıyor.
 AO/DoF normal/depth çizimleri aynı FFT deplasmanı ve deniz kapsamını izliyor.
-Bu ara teslim aşağıdaki maddelerin tamamını kapatmaz: shared planar, SSR
-karşılaştırması, caustics ve ortam profillerinin görsel kabulü açık.
+Ortak planar registry bağlantısı, authored mod/grup/kalite ve FFT'yi koruyan
+optik güncellemeler de eklendi: [Planar yansıma](../reports/OCEAN_PLANAR_REFLECTIONS.md).
+Bu ara teslim aşağıdaki maddelerin tamamını kapatmaz: SSR karşılaştırması,
+caustics ve ortam profillerinin görsel kabulü açık.
 Detay ve doğrulama: [Ortak Ocean optiği](../reports/OCEAN_SHARED_OPTICS.md).
 
-- [ ] Ortak Fresnel/soğurulma, depth kontrollü kırılma, ortam ve planar yansıma.
+- [x] Ortak Fresnel/soğurulma, depth kontrollü kırılma, ortam ve planar yansıma.
 - [ ] R01 ürün kartındaki SSR'yi değerlendir: mevcut ortam/planar ile
   aynı kamera karşılaştırması; ekran dışı nesne, occlusion, kenar kaybı ve
   temporal kararlılık. Eklenirse ayrı bütçe ve fallback; görünüm hedefi ile

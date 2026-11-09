@@ -1,0 +1,180 @@
+import assert from "node:assert/strict";
+import { validateOceanWater, validateOceanWaters, type OceanWaterBody } from "../../engine/scene/oceanWater";
+import { buildOceanCoverage, prepareOceanCoverage, sampleOceanCoverage } from "../../engine/terrain/oceanCoverage";
+import { CooperativeWork } from "../../engine/core/cooperativeWork";
+import { createOceanGrid } from "../../engine/render-three/ocean/oceanGrid";
+import { readRoomLayout } from "../../engine/scene/layoutValidation";
+import { validateLayout } from "../../tools/saveValidator";
+import { collectDroppedFields } from "../../tools/droppedFields";
+import { partitionLayout, DEFAULT_WORLD_PARTITION } from "../../engine/world/worldPartition";
+import type { RoomLayout } from "../../engine/scene/layout";
+import { prepareOceanTerrain } from "../../engine/terrain/oceanPreparation";
+import { createLakeFixture } from "./fixtures/lakeFixture";
+import { OceanWaterController } from "../../src/scene/oceanWaterController";
+import { Object3D, PerspectiveCamera, Scene, type WebGLRenderer } from "three";
+import { SceneApp } from "../../src/scene/SceneApp";
+import { cloneSelection, parseSelectionId, selectionId, selectionsEqual, type Selection } from "../../editor/core/selection";
+import { moveWorldTerrain } from "../../engine/terrain/worldTerrainMove";
+
+const body = (): OceanWaterBody => ({ schema: 1, kind: "ocean", coordinateSpace: "world", id: "sea",
+  name: "Reference", hidden: false, locked: false, terrainRef: "terrain", bounds: { min: [-8, -8], max: [8, 8] },
+  openEdges: ["west", "east", "north", "south"], surfaceLevel: 7, offshoreDepth: 40,
+  waves: { windSpeed: 9, windDirection: 20, fetchKm: 120, swellStrength: .7, swellDirection: 345, choppiness: .85, seed: 42 },
+  appearance: { shallowColor: "#28b5ac", deepColor: "#073448", absorptionDistance: 9, roughness: .16, foamStrength: .75 } });
+
+export async function registerOceanWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("ocean: real layout save/read and partition keep the complete sparse Ocean contract", async () => {
+    const ocean = body(), layout: RoomLayout = { schema: 1, name: "Coast", loadGroups: [], instances: [], characters: [], oceanWaters: [ocean] };
+    const saved = validateLayout(layout) as RoomLayout;
+    assert.deepEqual(saved.oceanWaters, [ocean]); assert.deepEqual(collectDroppedFields(layout, saved).paths, []);
+    assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(saved)), "coast").oceanWaters, [ocean]);
+    assert.deepEqual(partitionLayout(layout, { ...DEFAULT_WORLD_PARTITION, enabled: true }).persistent.oceanWaters, [ocean]);
+    const sparse = body(); delete sparse.waves; delete sparse.appearance;
+    assert.deepEqual(validateOceanWater(sparse), sparse, "validation must not write resolved defaults into authored data");
+    assert.ok(!("oceanWaters" in validateLayout({ ...layout, oceanWaters: undefined })));
+    assert.deepEqual(validateOceanWaters([]), []);
+    const dirty = { ...layout, oceanWaters: [{ ...ocean, simulationTextures: "not authored data" }] };
+    assert.ok(collectDroppedFields(dirty, validateLayout(dirty)).paths.some(p => p.includes("simulationTextures")));
+  });
+  await check("ocean: read and save reject unsafe dimensions, invalid wave parameters and excess bodies", async () => {
+    for (const patch of [{ surfaceLevel: Infinity }, { offshoreDepth: 0 }, { id: "" }, { terrainRef: " " },
+      { openEdges: ["west", "west"] }, { openEdges: ["elsewhere"] }, { openEdges: [] },
+      { bounds: { min: [0, 0], max: [-1, 2] } }, { waves: { seed: 1.5 } }, { waves: { windSpeed: 0 } },
+      { waves: { choppiness: 10 } }, { appearance: { roughness: NaN } }, { hidden: 1 }, { appearance: { deepColor: "blue" } }]) {
+      const bad = { schema: 1, name: "Coast", loadGroups: [], instances: [], characters: [], oceanWaters: [{ ...body(), ...patch }] };
+      assert.throws(() => validateLayout(bad)); assert.throws(() => readRoomLayout(bad, "coast"));
+    }
+    assert.throws(() => validateOceanWaters([body(), { ...body(), id: "other" }]));
+  });
+  await check("ocean: open sea floods around an island but never into its disconnected below-sea basin", async () => {
+    const sea = body();
+    const coverage = buildOceanCoverage(sea, .25, (x, z) => {
+      const r = Math.hypot(x, z); return sea.surfaceLevel + (r > 1 && r < 3 ? 2 : -2);
+    });
+    assert.equal(coverage.status, "ready"); assert.ok(coverage.wetFaces > 0);
+    assert.equal(sampleOceanCoverage(coverage, 6, 0).status, "wet");
+    assert.equal(sampleOceanCoverage(coverage, 2, 0).status, "dry");
+    assert.equal(sampleOceanCoverage(coverage, 0, 0).status, "dry", "the lower crater isn't connected to the sea");
+    assert.deepEqual(sampleOceanCoverage(coverage, 100, 0), { status: "wet", depth: 40, bed: -33, offshore: true });
+    const near = sampleOceanCoverage(coverage, 8.001, 0);
+    assert.equal(near.status, "wet"); if (near.status === "wet") assert.ok(Math.abs(near.depth - 2) < .001, "offshore joins without a depth/colour discontinuity");
+    assert.equal(sampleOceanCoverage(coverage, NaN, 0).status, "unknown");
+  });
+  await check("ocean: world-space sea level, exact b-c triangles and selected open edges control coverage", async () => {
+    const sea = { ...body(), bounds: { min: [20, 40] as [number, number], max: [24, 44] as [number, number] }, openEdges: ["west"] as const };
+    const coverage = buildOceanCoverage({ ...sea, openEdges: [...sea.openEdges] }, 1, x => x - 16);
+    const sample = sampleOceanCoverage(coverage, 21.4, 41.2);
+    assert.equal(sample.status, "wet"); if (sample.status === "wet") assert.ok(Math.abs(sample.depth - 1.6) < 1e-6);
+    assert.equal(sampleOceanCoverage(coverage, 23.1, 41.2).status, "dry");
+    const blocked = buildOceanCoverage({ ...body(), openEdges: ["west"] }, .5, x => x < -6 ? 9 : 3);
+    assert.equal(blocked.wetFaces, 0, "east wet edge is not an authored sea source");
+    const diagonal = buildOceanCoverage({ ...body(), bounds: { min: [0, 0], max: [1, 1] } }, 1,
+      (x, z) => x === 0 && z === 0 ? 3 : x === 1 && z === 1 ? 3 : 9);
+    assert.equal(sampleOceanCoverage(diagonal, .1, .1).status, "wet");
+    assert.equal(sampleOceanCoverage(diagonal, .5, .5).status, "dry", "the dry shared diagonal never leaks connectivity");
+  });
+  await check("ocean: missing terrain remains unknown and cooperative preparation cancels instead of publishing", async () => {
+    const incomplete = buildOceanCoverage(body(), .5, x => x > 0 ? null : 3);
+    assert.equal(incomplete.status, "missing-data"); assert.equal(incomplete.wetFaces, 0);
+    assert.equal(sampleOceanCoverage(incomplete, -6, 0).status, "unknown");
+    assert.throws(() => buildOceanCoverage(body(), 1e-6, () => 3));
+    assert.throws(() => buildOceanCoverage(body(), .3, () => 3));
+    const aborter = new AbortController(); let slices = 0;
+    const work = new CooperativeWork({ signal: aborter.signal, budgetMs: 0,
+      yieldTask: async () => { if (++slices === 3) aborter.abort(); } });
+    await assert.rejects(prepareOceanCoverage(body(), .5, () => 3, work), error => (error as Error).name === "AbortError");
+  });
+  await check("ocean: nested grid rings face upward, avoid overlap and have an explicit memory bound", async () => {
+    const grid = createOceanGrid(16, 3, 1);
+    try {
+      const p = grid.getAttribute("position"), index = grid.index!; let area = 0;
+      for (let i = 0; i < index.count; i += 3) {
+        const a = index.getX(i), b = index.getX(i + 1), c = index.getX(i + 2);
+        const up = (p.getZ(b) - p.getZ(a)) * (p.getX(c) - p.getX(a)) - (p.getX(b) - p.getX(a)) * (p.getZ(c) - p.getZ(a));
+        assert.ok(up > 0); area += up / 2;
+      }
+      assert.equal(area, 64 ** 2, "rings tile the outer square exactly once");
+      assert.throws(() => createOceanGrid(1024, 20));
+    } finally { grid.dispose(); }
+  });
+  await check("ocean: native multi-tile snapshots respect world origin, missing cells and bounded nonresident reads", async () => {
+    const doc = createLakeFixture([1000, 20, 2000]);
+    const sea = { ...body(), bounds: { min: [1000, 2000] as [number, number], max: [1128, 2128] as [number, number] }, surfaceLevel: 30 };
+    const quick = () => new CooperativeWork({ yieldTask: async () => {} });
+    const full = await prepareOceanTerrain(doc, sea, undefined, quick());
+    assert.equal(full.status, "ready"); assert.equal(full.wetFaces, 128 * 128 * 2);
+    assert.equal(sampleOceanCoverage(full, 1064, 2064).status, "wet");
+    const missing = doc.tiles.get("1_1")!; doc.tiles.delete("1_1"); let reads = 0;
+    const loaded = await prepareOceanTerrain(doc, sea, async key => { reads++; assert.equal(key, "1_1"); return missing; }, quick());
+    assert.equal(reads, 1); assert.equal(doc.tiles.has("1_1"), false, "temporary reads must not alter streaming residency");
+    assert.deepEqual(loaded.triangles, full.triangles);
+    await assert.rejects(prepareOceanTerrain(doc, sea, undefined, quick()), /requires tile/);
+    doc.def.tiles = doc.def.tiles.filter(t => t.key !== "1_1");
+    assert.equal((await prepareOceanTerrain(doc, sea, undefined, quick())).status, "missing-data");
+    await assert.rejects(prepareOceanTerrain(doc, { ...sea, bounds: { min: [1000, 2000], max: [1064, 2064] } }, undefined, quick()), /full terrain bounds/);
+  });
+  await check("ocean: shared controller preserves valid water on failed rebuild and releases hidden/deleted bodies", async () => {
+    const document = createLakeFixture(), scene = new Scene(), camera = new PerspectiveCamera();
+    const sea: OceanWaterBody = { ...body(), bounds: { min: [-64, -64], max: [64, 64] }, surfaceLevel: 17 };
+    let made = 0, freed = 0, updates = 0; const deltas: number[] = [];
+    const controller = new OceanWaterController({ scene, renderer: {} as WebGLRenderer, document: () => document,
+      load: async () => { throw new Error("missing tile"); },
+      create: () => { made++; return { object: new Object3D(), update: delta => { updates++; deltas.push(delta); }, dispose: () => { freed++; } }; } });
+    try {
+      await controller.rebuild([sea]); assert.equal(controller.results.get(sea.id)?.status, "ready");
+      const original = controller.object; assert.equal(scene.children.length, 1);
+      controller.update(1 / 60, camera); assert.equal(updates, 1);
+      controller.update(.1, camera); assert.equal(deltas.at(-1), .1, "slow frames must not silently halve simulation time");
+      controller.update(NaN, camera); assert.equal(deltas.at(-1), 0, "invalid clock values cannot enter the simulation");
+      await controller.rebuild([sea]); assert.equal(made, 1, "unchanged source must not reallocate FFT targets");
+      document.tiles.delete("1_1"); await controller.rebuild([sea], true);
+      assert.equal(controller.object, original); assert.equal(controller.results.get(sea.id)?.status, "error"); assert.equal(freed, 0);
+      await controller.rebuild([sea]);
+      assert.equal(controller.results.get(sea.id)?.status, "error", "a cached old surface cannot turn a failed terrain rebuild into Ready");
+      await controller.rebuild([{ ...sea, hidden: true }]);
+      assert.equal(original!.visible, false, "hidden takes effect even while replacement cannot prepare");
+      controller.update(1 / 60, camera); assert.equal(updates, 3);
+      await controller.rebuild([]); assert.equal(scene.children.length, 0); assert.equal(freed, 1);
+    } finally { controller.dispose(); controller.dispose(); }
+    assert.equal(freed, made);
+  });
+  await check("ocean: delete/travel during an uncooperative tile read never resurrects a stale surface", async () => {
+    const document = createLakeFixture(), missing = document.tiles.get("1_1")!; document.tiles.delete("1_1");
+    const scene = new Scene(); let created = 0, complete: (() => void) | undefined;
+    const controller = new OceanWaterController({ scene, renderer: {} as WebGLRenderer, document: () => document,
+      load: () => new Promise(resolve => { complete = () => resolve(missing); }),
+      create: () => { created++; return { object: new Object3D(), update() {}, dispose() {} }; } });
+    const pending = controller.rebuild([{ ...body(), bounds: { min: [-64, -64], max: [64, 64] }, surfaceLevel: 17 }]);
+    for (let i = 0; !complete && i < 500; i++) await new Promise(resolve => setTimeout(resolve, 1));
+    assert.ok(complete, "fixture reaches the delayed tile read");
+    await controller.rebuild([]); controller.dispose(); complete(); await pending;
+    assert.equal(created, 0); assert.equal(scene.children.length, 0); assert.equal(controller.results.size, 0);
+  });
+  await check("ocean: editor create/edit/delete are undoable, locked bodies resist edits, selection ids and terrain moves agree", async () => {
+    const doc = createLakeFixture(), layout: RoomLayout = { schema: 1, name: "Coast", instances: [], characters: [], loadGroups: [],
+      landscapes: [{ id: "terrain", dataRef: "terrain.terrain.json", position: [0, 10, 0] }] };
+    const commands: { label: string; redo(): void; undo(): void }[] = [];
+    const app = Object.create(SceneApp.prototype) as SceneApp;
+    const state = { layout, selection: { kind: "landscape", index: 0 } as Selection | null,
+      landscapeSculptSettings: { activeRiverWaterId: null },
+      lakeDocument: () => doc, rebuildOceans() {}, emitSelectionChanged() {},
+      select(selection: Selection | null) { state.selection = selection; Object.assign(app, { selection }); },
+      executeCommand(command: typeof commands[number]) { commands.push(command); command.redo(); } };
+    Object.defineProperty(app, "selection", { value: state.selection, writable: true, configurable: true });
+    Object.assign(app, state);
+    app.createOcean(); assert.equal(layout.oceanWaters?.length, 1);
+    const initial = structuredClone(layout.oceanWaters![0]!);
+    assert.equal(selectionId(state.selection!), "ocean:0");
+    assert.ok(selectionsEqual(cloneSelection(state.selection!), parseSelectionId("ocean:0")));
+    assert.equal(parseSelectionId("ocean:-1"), null);
+    app.editOcean({ surfaceLevel: 17 }); assert.equal(layout.oceanWaters![0]!.surfaceLevel, 17);
+    commands.at(-1)!.undo(); assert.deepEqual(layout.oceanWaters, [initial]); commands.at(-1)!.redo();
+    app.editOcean({ locked: true }); const count = commands.length;
+    app.editOcean({ name: "not allowed" }); app.deleteOcean(); assert.equal(commands.length, count);
+    app.editOcean({ locked: false }); app.deleteOcean(); assert.equal(layout.oceanWaters, undefined);
+    commands.at(-1)!.undo(); assert.equal(layout.oceanWaters?.length, 1);
+    const shifted = moveWorldTerrain(doc.def, "terrain", [], [3, 2, -4], [], [], [initial]);
+    assert.deepEqual(shifted.oceans![0]!.bounds.min, [-61, -68]); assert.equal(shifted.oceans![0]!.surfaceLevel, 12);
+    assert.deepEqual(initial.bounds.min, [-64, -64], "moving the terrain does not mutate history snapshots");
+  });
+}

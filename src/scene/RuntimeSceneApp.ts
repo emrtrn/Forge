@@ -1,3 +1,4 @@
+import { OceanWaterController } from "./oceanWaterController";
 import { resolveLakeUnderwater } from "@engine/scene/lakeUnderwater";
 import { LakeFoamStore } from "./lakeFoamStore";
 import { fetchTerrainActorDocument, type TerrainActorDocument } from "./terrainDocument";
@@ -1024,6 +1025,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private riverWaterBuild = 0;
   private lakes: LakeWaterController | null = null;
   private puddles: PuddleWaterController | null = null;
+  private oceans: OceanWaterController | null = null;
   private readonly riverFoam = new LakeFoamStore();
   private riverFoamAborter = new AbortController();
   private readonly waterReflections = new WaterReflectionRegistry();
@@ -2019,6 +2021,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       this.updateFollowShadow();
       mark = this.perfMark();
       const shadowLights = this.terrainShadowLights();
+      this.oceans?.update(simulationMs / 1000, this.camera);
       this.puddles?.update();
       this.puddles?.updateWind(resolveLevelWind(this.layout, this.worldEnvironmentState()), this.simulationClockMs / 1000);
       for (const object of this.landscapeObjects) updateLandscapeLod(object, this.camera, shadowLights);
@@ -2141,6 +2144,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.riverWaterBuild += 1;
     this.riverFoamAborter.abort(); this.riverFoam.clear();
     this.lakes?.dispose();
+    this.oceans?.dispose(); this.oceans = null;
     this.puddles?.dispose();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
@@ -3690,6 +3694,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.riverWaterBuild += 1;
     this.riverFoamAborter.abort(); this.riverFoam.clear();
     this.lakes?.dispose();
+    this.oceans?.dispose(); this.oceans = null;
     this.puddles?.dispose();
     this.terrainSurfaceSamplers.clear();
     for (const object of this.riverWaterObjects) {
@@ -6130,6 +6135,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
     this.riverWaterBuild += 1;
     this.riverFoamAborter.abort(); this.riverFoam.clear();
     this.lakes?.dispose();
+    this.oceans?.dispose(); this.oceans = null;
     this.puddles?.dispose();
     this.terrainSurfaceSamplers.clear();
     for (const actor of landscapes) {
@@ -6199,6 +6205,22 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
    * never touches the physics scene document. Bodies that share a plane and a
    * reflection group also share one planar-reflection render.
    */
+  private async buildRuntimeOcean(): Promise<void> {
+    if (!this.layout?.oceanWaters?.length && !this.oceans) return;
+    this.oceans ??= new OceanWaterController({ scene: this.scene, renderer: this.renderer,
+      document: id => this.worldTerrainDocuments.get(id),
+      load: async (id, key, signal) => {
+        const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.worldTerrainDocuments.get(id);
+        if (!actor || !document) throw new Error("Missing Ocean terrain");
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { ...(signal ? { signal } : {}), cache: "no-cache" });
+        if (!response.ok) throw new Error(`Ocean tile ${key}: HTTP ${response.status}`);
+        return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
+      },
+    });
+    await this.oceans.rebuild(this.layout?.oceanWaters ?? []);
+    for (const [id, result] of this.oceans.results) if (result.status === "error") console.warn(`[ocean-water] ${id}: ${result.message}`);
+  }
+
   private async buildRuntimeLakes(): Promise<void> {
     const terrain = (id: string): WorldTerrainDocument | undefined => this.worldTerrainDocuments.get(id);
     this.lakes ??= new LakeWaterController({ scene: this.scene, editor: false, document: terrain, reflections: this.waterReflections,
@@ -6220,11 +6242,12 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = terrain(id);
         if (!actor || !document) throw new Error("Missing Puddle terrain");
-        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { signal, cache: "no-cache" });
+        const response = await fetch(projectFileUrl(terrainTilePath(actor.dataRef, key)), { ...(signal ? { signal } : {}), cache: "no-cache" });
         if (!response.ok) throw new Error(`Puddle tile ${key}: HTTP ${response.status}`);
         return validateTerrainTile(document.def, key, new Uint8Array(await response.arrayBuffer()));
       },
     });
+    await this.buildRuntimeOcean();
     await this.puddles.rebuild(this.layout?.puddleWaters ?? []);
     for (const [id, result] of this.puddles.results) if (result.status !== "ready") console.warn(`[puddle-water] ${id}: ${result.message}`);
     await this.lakes.rebuild(this.layout?.waterBodies ?? []);

@@ -1,5 +1,19 @@
 # Forge Su Sistemi — Görsel Gelişim ve Entegrasyon Planı
 
+**8 Kasım — Ocean planlaması:** Kullanıcı River/Lake/Puddle sonrasında Ocean'a
+geçilmesini ve yeni Water Pro kaydının görsel hedef alınmasını istedi.
+[Ocean geliştirme planı](OCEAN_DEVELOPMENT_PLAN.md) W4-O'nun ayrıntılı devamıdır;
+[güncel araştırma ve erişim sınırları](../reports/OCEAN_RESEARCH_2026-11-08.md)
+ayrıdır. Kullanıcının ardından paylaştığı ürün görselleriyle FFT, üç köpük
+katmanı, clipmap, su altı/caustics ve yüzdürme/wake/masking kapsamı plana eklendi.
+Yeni videonun hareket incelemesi 32 MiB aktarım sınırı nedeniyle açık;
+Ocean O1–O3 ilk izole prototipi ve ardından ana editör/runtime bağlantısı
+uygulandı; tam görsel/donanım kabulü açık.
+[İlk prototip](../reports/OCEAN_O1_O3_PROTOTYPE_2026-11-08.md) ·
+[Native editör/Play ve doğrulama](../reports/OCEAN_EDITOR_RUNTIME_INTEGRATION.md).
+Aşağıdaki eski W3/Puddle durum satırları tarihsel
+kayıttır; güncel durum [Puddle planındadır](PUDDLE_DEVELOPMENT_PLAN.md).
+
 Tarih: 29 Ekim 2026 · Durum: V1b ve V1c + güneş parıltısı uygulandı; son Lake görünümü kullanıcı tarafından kabul edildi. Teknik doğrulama ve yeni GPU maliyeti açık.
 
 **3 Kasım — W3 Puddle başlangıcı:** Gerçek tekerlek deformasyonu ile ayrı yatay
@@ -489,6 +503,9 @@ E_yeni(x) = clamp(E_eski(x - akış * dt) * exp(-dt / ömür)
 | W4-O — Ocean | Deniz seviyesi, kara/ada maskesi, yakın yüzey ve uzak LOD için izole prototip | FFT, su altı ve yüzdürmenin her biri ayrı performans/görsel kabul alır |
 
 ### W4-O prototip sırası
+
+8 Kasım ayrıntılı devamı: [Ocean geliştirme ve kabul planı](OCEAN_DEVELOPMENT_PLAN.md).
+FFT/analitik, LOD ve veri kararları bu yeni planın O0–O3 aşamalarında izlenir.
 
 1. Su kotu/dünya dönüşümü, çok tile'lı terrain, değişen Sculpt verisi, kıyı maskesi ve ufuk gereksinimini yaz.
 2. Basit analitik geniş yüzey ile Ultra-Water FFT seçeneğini aynı Forge fixture'ında karşılaştır. Kamerayı izleyen polar grid, clipmap veya başka LOD seçimi prototip sonucuna bağlıdır.

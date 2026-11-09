@@ -48,7 +48,8 @@ varlıklarla ve renkli boyayla çalışır.
    **Takip işi:** köy/kasaba yollarında araç geçişi ve dönüş alanı
    ([uygulama planı](#takip-işi-yerleşim-yollarında-araç-geçişi)).
 6. **Rol → model bağlama:** Blender / Tripo modelleri rolün yerine geçer.
-7. **Ada ve kıyı:** Ocean aracı yapıldıktan sonra.
+7. **Ada ve kıyı:** Ocean aracı yapıldıktan sonra;
+   [Ocean planı O9](../planned/OCEAN_DEVELOPMENT_PLAN.md) ile bağlanır.
 
 Plan modu (Derekavak, sabit koordinatlı özet) aynı kurucunun üstüne sonra devam eder.
 

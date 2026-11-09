@@ -818,7 +818,10 @@ Bu sıra görüşme önerisidir; her dilimin kapsamı uygulama öncesinde netle�
   undo komutuyla çok tile'a uygulama; isteğe bağlı kıyı boyası. Onaylı tasarım ve kabul kaydı §14.
 - [ ] **W3 — Puddle:** Küçük alan aracı, sığ su/ıslaklık görünümü; terrain
   çözünürlüğü sınırına göre yerel detay yaklaşımı.
-- [ ] **W4 — Ocean:** Deniz seviyesi, kara/ada sınırı, yakın yüzey, uzak LOD.
+- [~] **W4 — Ocean:** Deniz seviyesi, kara/ada sınırı, yakın yüzey, uzak LOD.
+  8 Kasım 2026 ayrıntılı devamı: [Ocean geliştirme planı](OCEAN_DEVELOPMENT_PLAN.md).
+  İlk FFT prototipi, native editör/Play bağlantısı ve kayıt/undo akışı uygulandı;
+  ortak optik, tam köpük/kıyı ve donanım kabulleri açık.
 - [ ] **W5 — River ortaklaşması:** World Terrain spline/nehir aktarımıyla ortak
   Water Body veri/görünüm altyapısını ve göl/deniz birleşimlerini bağla.
 

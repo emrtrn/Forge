@@ -1213,6 +1213,8 @@ export interface RoomLayout {
   waterBodies?: LayoutWaterBody[];
   /** Shallow, native-terrain-clipped Puddles; persistent source parameters. */
   puddleWaters?: LayoutPuddleWaterBody[];
+  /** Ocean is a distinct body, not a fill-existing Lake. At most one per level. */
+  oceanWaters?: import("./oceanWater").OceanWaterBody[];
   instances: LayoutModelInstances[];
   characters: LayoutCharacter[];
   /** Placed Actor Script class instances (resolved + spawned at runtime). */

@@ -119,6 +119,9 @@ Level ve üretilmiş dünya verilerinin silinmesi:
   Ocean kayıtları `oceanWaters` üzerinden mevcut editör/runtime yolunu kullanır.
   Nehir ağzı entegrasyonu gelene kadar Ada'da nehir isteği reddedilir.
   Orta/büyük Ocean hazırlığı bu dilime dahil değildir.
+  Medium/Large devamı [Ocean planı O9-B](../planned/OCEAN_DEVELOPMENT_PLAN.md)
+  altında dört dilime ayrıldı; ilk hücre/bellek/hazırlık incelemesi
+  [bütçe raporunda](../reports/OCEAN_MEDIUM_LARGE_BUDGET.md) izlenir.
   İkinci dilim: `coast` ile Small kıyı, West/East/North/South deniz yönü,
   karada kalan yol çıkışları ve kıyı kanalında Ocean'a ulaşan nehirler eklendi.
   `--landform coast --size small --sea-side west --rivers 1 --seed 11` aynı

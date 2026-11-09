@@ -315,6 +315,42 @@ Detaylar: [Random World planı](../world-builder/RANDOM_WORLD_PLAN.md).
 - [ ] Denizden bağlantı, yerleşim/yol güvenliği ve nehir ağzı kapsamı.
 - [ ] Aynı seed ile tekrar üretim; var olan dünya seçeneklerinde regresyon yok.
 
+#### O9-B — Medium/Large Island ve Coast
+
+9 Kasım 2026. Boyut desteği aşağıdaki bağımsız dilimlerle ilerler. Small ve
+mevcut River genişlik/geçiş işi korunur; Ada'da nehir bu işin kapsamı değildir.
+Medium/Large düğmelerini açmak tek başına teslim sayılmaz.
+
+1. **Hücre, bellek ve hazırlık maliyeti — tamamlandı (tanı ölçümü).** Small/Medium/Large'ın
+   native çözünürlüğünü; terrain okuma, Ocean snapshot/flood-fill, CPU geçici
+   ve kalıcı buffer'ları, coverage GPU dokusu ve replacement tepesini çıkar.
+   Island/Coast için tekrar üretilebilir ölçüm al. Bugün reddedilen boyutlarda
+   hesaplanan tahmin ile yalnız tanı amacıyla çalıştırılan deneyleri ayır;
+   production limitlerini değiştirme. Çıkış: ölçüm raporu, ham sonuçlar ve
+   ikinci adımın kararını destekleyen kaynak bütçesi.
+2. **Bütçeli kapsam hazırlama tasarımı — bekliyor.** Ölçümlere göre tam native
+   domain, parçalara bölünmüş/streaming veya uzak bağlantı + yakın kesin kıyı
+   seçeneklerini karşılaştır. Kuru/eksik/denize bağlı su ayrımı, tile sınırları,
+   iptal/revision ve eski geçerli yüzeyin korunmasını tasarla. Çözünürlük
+   düşürülerek gerçek kıyı veya kapalı çukur doğruluğu gizlice değiştirilmez.
+   Çıkış: seçilen yaklaşım, bütçeler ve uygulama/kabul sınırları.
+3. **Önce Medium, sonra Large — bekliyor.** Seçilen yaklaşımı engine ve ortak
+   editör/runtime controller'a uygula; üretici ve istek doğrulamasıyla birlikte
+   yalnız kabulü geçen boyutu aç. Island ve dört deniz yönlü Coast ayrı
+   doğrulanır; önceki Small kayıtları ve River inlet eşlemesi korunur.
+4. **İşlev, görsel ve performans kabulü — bekliyor.** Kıyı/kapalı çukur/eksik
+   tile, nehir ağzı, undo/redo, Save/Reload/Play, streaming/replacement döngüleri
+   ve üretim paketi kontrol edilir. Hedef donanımda hazırlık dilimleri, transient
+   tepe ve Ocean GPU bütçesi ayrıca ölçülür. Ada'da nehir ve kalan River/Ocean
+   tam optik eşleşmesi bu boyut desteğine kendiliğinden dahil olmaz.
+
+İlk adımın kanıtları: [Medium/Large bütçe incelemesi](../reports/OCEAN_MEDIUM_LARGE_BUDGET.md).
+İlk bulgu: mevcut biçimde Medium temel/replacement GPU hesabı 39,52/79,04 MiB,
+Large 87,55/175,10 MiB'dir; diğer su kaynakları hariçtir. Senkron CPU kurucusu
+da büyür. İkinci adımda kayıpsız kapsam formatı ve paketleme maliyeti,
+streaming/yakın kıyı seçenekleriyle birlikte karşılaştırılmalıdır. Boyut desteği
+ve gerçek browser/GPU kabulü henüz açılmamıştır.
+
 ## 5. Önerilen modül yerleşimi
 
 Controller `src/scene/oceanWaterController.ts` ve Details

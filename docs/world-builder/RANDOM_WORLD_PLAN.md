@@ -124,6 +124,8 @@ Level ve üretilmiş dünya verilerinin silinmesi:
   `--landform coast --size small --sea-side west --rivers 1 --seed 11` aynı
   kurucuyu kullanır. Ocean yalnız bağlı ıslak sınır bölümlerinden harita dışına
   devam eder. Son düz nehir kesiti River'a ayrılır; Ocean aynı yüzeyi çizmez.
+  River aktöründe Width Scale değişince bu kesit canlı eşlenir; daraltılan,
+  gizlenen veya silinen suyun bıraktığı denize bağlı alan Ocean'a döner.
   Bu, sonsuz anakara üretimi veya akışkan simülasyonu değildir. Ada'da nehir
   seçeneği bu ikinci dilimde de kapalıdır. Ayrıntılar: [Kıyı raporu](../reports/WORLD_BUILDER_COAST.md).
 

@@ -2,7 +2,9 @@ import type { Camera, Object3D, Scene, WebGLRenderer } from "three";
 import { validateOceanWaters, type OceanReflectionCeiling, type OceanWaterBody } from "@engine/scene/oceanWater";
 import { CooperativeWork } from "@engine/core/cooperativeWork";
 import { prepareOceanTerrain } from "@engine/terrain/oceanPreparation";
-import type { OceanCoverage } from "@engine/terrain/oceanCoverage";
+import type { OceanCoverage, OceanInlet } from "@engine/terrain/oceanCoverage";
+import { oceanInletRiverInputs, resolveOceanInlets } from "@engine/terrain/oceanInlets";
+import type { LayoutRiverWater } from "@engine/scene/layout";
 import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import type { TerrainTileData } from "@engine/terrain/terrainTypes";
 import { OceanFft } from "@engine/render-three/ocean/oceanFft";
@@ -17,11 +19,13 @@ export interface OceanPresentation {
   update(delta: number, camera: Camera): void;
   dispose(): void;
   applyAppearance?(body: OceanWaterBody, ceiling: OceanReflectionCeiling, causticsAllowed: boolean): void;
+  applyInlets?(inlets: readonly OceanInlet[]): void;
 }
 export interface OceanWaterHost {
   scene: Scene;
   renderer: WebGLRenderer;
   document(id: string): WorldTerrainDocument | undefined;
+  rivers?: () => readonly LayoutRiverWater[];
   load(id: string, key: string, signal?: AbortSignal): Promise<TerrainTileData>;
   changed?: () => void;
   environmentProbes?: WaterEnvironmentProbes;
@@ -37,7 +41,7 @@ export interface OceanResult { status: "preparing" | "ready" | "error"; message:
  * prevents stale results from replacing the previous valid presentation. */
 export class OceanWaterController {
   readonly results = new Map<string, OceanResult>();
-  private current: { id: string; source: OceanWaterBody; signature: string; preparation: string;
+  private current: { id: string; source: OceanWaterBody; signature: string; preparation: string; inletSignature: string;
     document: WorldTerrainDocument; visual: OceanPresentation } | null = null;
   private generation = 0;
   private aborter = new AbortController();
@@ -69,7 +73,10 @@ export class OceanWaterController {
     const generation = ++this.generation; this.aborter.abort(); this.aborter = new AbortController();
     const signal = this.aborter.signal;
     if (!source) { this.releaseCurrent(); this.results.clear(); this.host.changed?.(); return; }
-    const document = this.host.document(source.terrainRef), signature = JSON.stringify(source);
+    const document = this.host.document(source.terrainRef);
+    const rivers = oceanInletRiverInputs(source, this.host.rivers?.());
+    const inletSignature = JSON.stringify(rivers ?? null);
+    const signature = JSON.stringify([source, inletSignature]);
     const { appearance: _appearance, caustics: _caustics, name: _name, hidden: _hidden, locked: _locked, ...geometrySource } = source;
     const preparation = JSON.stringify(geometrySource);
     if (this.current?.id === source.id) {
@@ -82,11 +89,16 @@ export class OceanWaterController {
       && this.results.get(source.id)?.status === "ready") {
       this.results.set(source.id, { status: "ready", message: source.hidden ? "Hidden" : "Ready" }); return;
     }
-    if (!force && this.current?.preparation === preparation && this.current.document === document
-      && this.current.visual.applyAppearance && this.results.get(source.id)?.status === "ready") {
-      this.current.visual.applyAppearance(source, this.reflectionQuality, this.causticsAllowed);
-      this.current.source = source; this.current.signature = signature;
-      this.results.set(source.id, { status: "ready", message: source.hidden ? "Hidden" : "Ready" }); this.host.changed?.(); return;
+    if (!force && document && this.current?.preparation === preparation && this.current.document === document
+      && this.current.visual.applyAppearance && this.results.get(source.id)?.status === "ready"
+      && (this.current.inletSignature === inletSignature || this.current.visual.applyInlets)) {
+      try {
+        if (this.current.inletSignature !== inletSignature) this.current.visual.applyInlets!(resolveOceanInlets(document.def, source, rivers));
+        this.current.visual.applyAppearance(source, this.reflectionQuality, this.causticsAllowed);
+        this.current.source = source; this.current.signature = signature; this.current.inletSignature = inletSignature;
+        this.results.set(source.id, { status: "ready", message: source.hidden ? "Hidden" : "Ready" });
+      } catch (error) { this.results.set(source.id, { status: "error", message: String(error) }); }
+      this.host.changed?.(); return;
     }
     if (this.current?.id !== source.id) { this.releaseCurrent(); this.results.clear(); }
     this.results.set(source.id, { status: "preparing", message: "Preparing Ocean…" }); this.host.changed?.();
@@ -94,14 +106,14 @@ export class OceanWaterController {
     try {
       if (!document) { this.releaseCurrent(); throw new Error("Ocean terrain is unavailable"); }
       const coverage = await prepareOceanTerrain(document, source, (key, readSignal) => this.host.load(source.terrainRef, key, readSignal),
-        new CooperativeWork({ signal }), signal);
+        new CooperativeWork({ signal }), signal, rivers);
       if (signal.aborted || generation !== this.generation || this.host.document(source.terrainRef) !== document) return;
       if (coverage.status !== "ready") throw new Error("Ocean terrain is incomplete; previous surface preserved");
       next = this.host.create ? this.host.create(coverage) : this.create(coverage);
       if (signal.aborted || generation !== this.generation) { next.dispose(); next = undefined; return; }
       next.object.visible = !source.hidden;
       this.releaseCurrent(); this.host.scene.add(next.object);
-      this.current = { id: source.id, source, signature, preparation, document, visual: next }; next = undefined;
+      this.current = { id: source.id, source, signature, preparation, inletSignature, document, visual: next }; next = undefined;
       this.results.set(source.id, { status: "ready", message: source.hidden ? "Hidden" : "Ready" });
     } catch (error) {
       next?.dispose();
@@ -122,6 +134,7 @@ export class OceanWaterController {
       seabed.update(coverage.body, this.causticsAllowed, this.current?.visual.object);
       surface.userData.oceanWaterId = coverage.body.id;
       return { object, update: (delta, camera) => { simulation.update(delta); object.updateView(camera); },
+        applyInlets: inlets => { object.applyInlets(inlets); },
         applyAppearance: (body, quality, allowed) => { seabed.update(body, allowed); reflections.update(body, quality); object.applyAppearance(body); },
         dispose: () => { seabed.dispose(); reflections.dispose(); object.dispose(); simulation.dispose(); } };
     } catch (error) { caustics?.dispose(); lease?.dispose(); surface?.dispose(); simulation.dispose(); throw error; }

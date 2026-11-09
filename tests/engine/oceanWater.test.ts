@@ -12,8 +12,9 @@ import { readRoomLayout } from "../../engine/scene/layoutValidation";
 import { validateLayout } from "../../tools/saveValidator";
 import { collectDroppedFields } from "../../tools/droppedFields";
 import { partitionLayout, DEFAULT_WORLD_PARTITION } from "../../engine/world/worldPartition";
-import type { RoomLayout } from "../../engine/scene/layout";
+import type { RoomLayout, LayoutRiverWater } from "../../engine/scene/layout";
 import { prepareOceanTerrain } from "../../engine/terrain/oceanPreparation";
+import { resolveOceanInlets } from "../../engine/terrain/oceanInlets";
 import { createLakeFixture } from "./fixtures/lakeFixture";
 import { OceanWaterController } from "../../src/scene/oceanWaterController";
 import { AmbientLight, DirectionalLight, HemisphereLight, Object3D, PerspectiveCamera, Scene, Texture, WebGLCubeRenderTarget, type WebGLRenderer } from "three";
@@ -36,7 +37,106 @@ const body = (): OceanWaterBody => ({ schema: 1, kind: "ocean", coordinateSpace:
   appearance: { shallowColor: "#28b5ac", deepColor: "#073448", absorptionDistance: 9, roughness: .16, foamStrength: .75,
     reflectionMode: "sharedPlanar", reflectionGroup: "water", reflectionQuality: "medium", reflectionStrength: .8 } });
 
+function inletFixture() {
+  const document = createLakeFixture();
+  for (const tile of document.tiles.values()) tile.heights.fill(5);
+  document.def.splines = [{ id: "mouth", coordinateSpace: "world", smooth: false,
+    points: [{ id: "a", position: [-30, 25, 0], width: 8, falloff: 2 }, { id: "b", position: [20, 17, 0], width: 8, falloff: 2 }],
+    segments: [{ id: "ab", startPointId: "a", endPointId: "b" }] }];
+  const sea: OceanWaterBody = { ...body(), bounds: { min: [-64, -64], max: [64, 64] }, surfaceLevel: 17, inlets: ["mouth"] };
+  const rivers: LayoutRiverWater[] = [{ id: "river", landscapeRef: "terrain", splineRef: "mouth", coordinateSpace: "world", surfaceLevel: 25, widthScale: 1 }];
+  return { document, sea, rivers };
+}
+
 export async function registerOceanWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("ocean inlet: live widths, hidden/deleted owners, local coordinates and terrain movement resolve consistently", async () => {
+    const { document, sea, rivers } = inletFixture();
+    const original = structuredClone({ sea, rivers, def: document.def });
+    for (const widthScale of [.05, .5, 1, 2, 10]) {
+      const inputs = [{ ...rivers[0]!, widthScale }];
+      const inlet = resolveOceanInlets(document.def, sea, inputs)[0]!;
+      assert.equal(inlet.width, 8 * widthScale);
+      const coverage = await prepareOceanTerrain(document, sea, undefined, undefined, undefined, inputs);
+      assert.equal(sampleOceanCoverage(coverage, 10, Math.min(60, 8 * widthScale * .9)).status, "dry");
+      assert.equal(sampleOceanCoverage(coverage, 10, 8 * widthScale + .1).status, "wet");
+    }
+    for (const inputs of [[], [{ ...rivers[0]!, hidden: true }]]) {
+      const coverage = await prepareOceanTerrain(document, sea, undefined, undefined, undefined, inputs);
+      assert.equal(sampleOceanCoverage(coverage, 10, 0).status, "wet", "inactive River releases its exclusion");
+    }
+    const local: LayoutRiverWater = { ...rivers[0]!, surfaceLevel: 15 }; delete local.coordinateSpace;
+    assert.deepEqual(resolveOceanInlets(document.def, sea, [local]), resolveOceanInlets(document.def, sea, rivers));
+    const moved = moveWorldTerrain(document.def, "terrain", [], [100, 3, -200], rivers, [], [sea]);
+    const shifted = resolveOceanInlets({ ...document.def, origin: moved.origin, splines: moved.splines! }, moved.oceans![0]!, moved.rivers)[0]!;
+    assert.deepEqual(shifted.start, [70, -200]); assert.deepEqual(shifted.end, [120, -200]); assert.equal(shifted.width, 8);
+    for (const widthScale of [0, NaN, Infinity, 11]) assert.throws(() => resolveOceanInlets(document.def, sea, [{ ...rivers[0]!, widthScale }]), /width scale/);
+    assert.throws(() => resolveOceanInlets(document.def, sea, [...rivers, { ...rivers[0]!, id: "duplicate" }]), /multiple visible/);
+    assert.throws(() => resolveOceanInlets(document.def, sea, [{ ...rivers[0]!, surfaceLevel: 26 }]), /end at sea level/);
+    assert.deepEqual({ sea, rivers, def: document.def }, original, "resolution never writes authored data");
+  });
+
+  await check("ocean inlet: controller updates width ownership in place without a terrain read or simulation restart", async () => {
+    const { document, sea, rivers } = inletFixture();
+    let made = 0, reads = 0, updates = 0;
+    let coverage: Awaited<ReturnType<typeof prepareOceanTerrain>> | undefined;
+    const scene = new Scene();
+    const controller = new OceanWaterController({ scene, renderer: {} as WebGLRenderer, document: () => document,
+      rivers: () => rivers, load: async () => { reads++; throw new Error("unexpected tile read"); },
+      create: next => { made++; coverage = next; return { object: new Object3D(), update() {}, dispose() {}, applyAppearance() {},
+        applyInlets: inlets => { updates++; next.inlets = inlets; } }; } });
+    try {
+      await controller.rebuild([sea]); const object = controller.object, textureSource = coverage!.heights;
+      for (const widthScale of [.5, 2, .05, 1]) {
+        rivers[0]!.widthScale = widthScale;
+        await controller.rebuild([sea]);
+        assert.equal(controller.results.get(sea.id)?.status, "ready");
+        assert.equal(coverage!.inlets![0]!.width, widthScale * 8);
+        assert.equal(controller.object, object); assert.equal(coverage!.heights, textureSource);
+      }
+      assert.equal(made, 1); assert.equal(updates, 4); assert.equal(reads, 0);
+      rivers.push({ id: "unrelated", landscapeRef: "other", splineRef: "mouth", widthScale: 2 });
+      await controller.rebuild([sea]); assert.equal(updates, 4, "unrelated rivers do not invalidate Ocean");
+      rivers[0]!.hidden = true; await controller.rebuild([sea]);
+      assert.equal(sampleOceanCoverage(coverage!, 10, 0).status, "wet");
+      rivers[0]!.hidden = false; await controller.rebuild([sea]);
+      assert.equal(sampleOceanCoverage(coverage!, 10, 0).status, "dry");
+      const owner = rivers.shift()!; await controller.rebuild([sea]);
+      assert.equal(sampleOceanCoverage(coverage!, 10, 0).status, "wet");
+      rivers.unshift(owner); await controller.rebuild([sea]);
+      assert.equal(made, 1, "visibility and removal also retain the simulation");
+      const last = coverage!.inlets;
+      rivers[0]!.widthScale = NaN; await controller.rebuild([sea]);
+      assert.equal(controller.results.get(sea.id)?.status, "error"); assert.equal(controller.object, object);
+      assert.equal(coverage!.inlets, last, "invalid input keeps the last valid mask"); assert.equal(made, 1);
+    } finally { controller.dispose(); }
+  });
+
+  await check("ocean inlet: live surface and caustics reuse buffers and share active-width uniforms", async () => {
+    const { document, sea, rivers } = inletFixture();
+    const coverage = await prepareOceanTerrain(document, sea, undefined, undefined, undefined, rivers), scene = new Scene();
+    const textures = Array.from({ length: 7 }, () => new Texture());
+    const simulation = { lengths: [600,85,12,2.1], displacement: textures.slice(0,3), slopes: textures.slice(3), stats: { time: 12 } } as unknown as OceanFft;
+    const surface = new OceanSurface(coverage, simulation); scene.add(surface);
+    const binding = new OceanCausticsBinding(scene, coverage, surface.coverageTexture, surface, () => simulation.stats.time);
+    const texture = surface.coverageTexture, geometry = surface.geometry, material = surface.material, u = createTerrainCausticsUniforms();
+    try {
+      binding.update(sea, true); updateTerrainCaustics(u, scene, "terrain");
+      const pattern = u.uCausticMask.value;
+      for (const widthScale of [.5, 2, .05, 1]) {
+        rivers[0]!.widthScale = widthScale;
+        surface.applyInlets(resolveOceanInlets(document.def, sea, rivers));
+        binding.update(sea, true); updateTerrainCaustics(u, scene, "terrain");
+        assert.equal(surface.material.uniforms.oceanInletStart!.value[0].z, widthScale * 8);
+        assert.equal(u.oceanInletStart.value[0]!.z, widthScale * 8);
+        assert.equal(u.uCausticMask.value, pattern); assert.equal(simulation.stats.time, 12);
+      }
+      rivers[0]!.hidden = true; surface.applyInlets(resolveOceanInlets(document.def, sea, rivers));
+      binding.update(sea, true); updateTerrainCaustics(u, scene, "terrain");
+      assert.equal(surface.material.uniforms.oceanInletCount!.value, 0); assert.equal(u.oceanInletCount.value, 0);
+      assert.equal(surface.coverageTexture, texture); assert.equal(surface.geometry, geometry); assert.equal(surface.material, material);
+      assert.equal(sampleOceanCoverage(coverage, 10, 0).status, "wet");
+    } finally { binding.dispose(); surface.dispose(); textures.forEach(texture => texture.dispose()); }
+  });
   await check("ocean: coastal offshore follows wet boundary portions, while old Oceans keep all-offshore behavior", async () => {
     const sea = { ...body(), surfaceLevel: 0, offshorePolicy: "connectedBoundary" as const };
     const coast = buildOceanCoverage(sea, 1, x => x);

@@ -244,8 +244,8 @@ test("World Builder island: bounded choices, sea preview, Create, Save/Reload an
   expect(errors.flatMap(read => read())).toEqual([]);
 });
 
-test("World Builder coast: sea direction, river mouth, Save/Reload and Play", async ({ page, context, request }, info) => {
-  test.setTimeout(600_000);
+test("World Builder coast: sea direction, live mouth width, undo, Save/Reload and Play", async ({ page, context, request }, info) => {
+  test.setTimeout(900_000);
   const path = `${FOLDER}/GeneratedCoast.level.json`;
   const errors: Array<() => string[]> = [observeBrowserErrors(page)];
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -293,6 +293,26 @@ test("World Builder coast: sea direction, river mouth, Save/Reload and Play", as
   const camera = new PerspectiveCamera(); camera.position.set(x + 65, y + 50, z + 70); camera.lookAt(x, y, z);
   const pose = { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), up: [0, 1, 0] };
   await page.evaluate(({ key, pose }) => localStorage.setItem(key, JSON.stringify(pose)), { key: `forge.editor.cameraPose.${encodeURIComponent(path)}`, pose });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator('[data-object-id="ocean:0"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  await page.locator('[data-water-kind="river"]').click();
+  const width = page.locator('[data-river-water-number="widthScale"]');
+  await width.fill("0.5"); await width.press("Tab"); await expect(width).toHaveValue("0.5");
+  await page.getByTestId("editor-undo").click(); await expect(width).toHaveValue("1");
+  await page.getByTestId("editor-redo").click(); await expect(width).toHaveValue("0.5");
+  await page.locator('[data-water-kind="ocean"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await page.screenshot({ path: info.outputPath("coast-mouth-narrow.png") });
+  await page.locator('[data-water-kind="river"]').click();
+  await width.fill("1.5"); await width.press("Tab"); await expect(width).toHaveValue("1.5");
+  await page.locator('[data-water-kind="ocean"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
+  const resized = JSON.parse(await readFile(smokePublicPath(path), "utf8"));
+  expect(resized.riverWaters[0].widthScale).toBe(1.5); expect(resized.oceanWaters).toEqual([ocean]);
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('[data-object-id="ocean:0"]').click();
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });

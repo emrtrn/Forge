@@ -7792,6 +7792,7 @@ export class SceneApp {
       causticsAllowed: lakeQuality(this.editorQuality).causticsAllowed,
       environmentProbes: () => this.eligibleProbeBakes(),
       document: id => this.layout?.landscapes?.some(a => a.id === id) ? this.lakeDocument(id) : undefined,
+      rivers: () => this.layout?.riverWaters ?? [],
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.lakeDocument(id);
         if (!actor || !document) throw new Error("Missing Ocean terrain");
@@ -8256,6 +8257,8 @@ export class SceneApp {
       }
     }
     this.refreshAllRiverWaterFoamOverlays();
+    // The published ribbon and Ocean's exclusion must use the same authored width.
+    if (this.layout?.oceanWaters?.some(body => body.inlets?.length)) this.rebuildOceans();
     this.emitSelectionChanged(); // Calculate becomes available only after the async surface is published.
   }
 

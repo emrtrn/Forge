@@ -2,9 +2,22 @@ import { Vector4 } from "three";
 import type { OceanInlet } from "../../terrain/oceanCoverage";
 
 export function createOceanInletUniforms(inlets: readonly OceanInlet[] = []) {
-  return { oceanInletCount: { value: inlets.length },
-    oceanInletStart: { value: Array.from({ length: 3 }, (_, i) => new Vector4(...(inlets[i]?.start ?? [0, 0]), inlets[i]?.width ?? 0, 0)) },
-    oceanInletEnd: { value: Array.from({ length: 3 }, (_, i) => new Vector4(...(inlets[i]?.end ?? [0, 0]), 0, 0)) } };
+  const uniforms = { oceanInletCount: { value: 0 },
+    oceanInletStart: { value: Array.from({ length: 3 }, () => new Vector4()) },
+    oceanInletEnd: { value: Array.from({ length: 3 }, () => new Vector4()) } };
+  updateOceanInletUniforms(uniforms, inlets);
+  return uniforms;
+}
+
+export function updateOceanInletUniforms(uniforms: ReturnType<typeof createOceanInletUniforms>, inlets: readonly OceanInlet[]) {
+  const active = inlets.filter(inlet => inlet.active !== false);
+  if (active.length > 3) throw new Error("Ocean supports at most three active inlet reaches");
+  uniforms.oceanInletCount.value = active.length;
+  for (let i = 0; i < 3; i++) {
+    const inlet = active[i];
+    uniforms.oceanInletStart.value[i]!.set(...(inlet?.start ?? [0, 0]), inlet?.width ?? 0, 0);
+    uniforms.oceanInletEnd.value[i]!.set(...(inlet?.end ?? [0, 0]), 0, 0);
+  }
 }
 
 /** Same finite, constant-width reaches as the native CPU coverage query. */

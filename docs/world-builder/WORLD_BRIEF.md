@@ -205,11 +205,18 @@ yakın seçilir. Bu kısıt hidrodinamik veya gerçek haliç modellemesi değild
 Üretilen Kıyı Ocean'ı `offshorePolicy: "connectedBoundary"` kullanır.
 Alanı olmayan eski Ocean'lar tüm domain dışını deniz saymaya devam eder.
 `inlets` ve `offshorePolicy` mevcut ortak Ocean read/save allowlist'inden
-geçer. Eksik, eğri, değişken genişlikli veya deniz kotunda bitmeyen inlet
-kayıtları hazırlığı hata ile durdurur; eksik kaynak suyla gizlenmez.
+geçer. Görünür River sahibinin spline'ı eksik, eğri, değişken genişlikli veya
+deniz kotunda bitmiyorsa hazırlık hata ile durur; okunamayan terrain verisi
+suyla gizlenmez.
 Elle düzenlemede uç kotu/son kesit sözleşmesi korunmalıdır. Bu dilimde
-River aktörünün `widthScale` değerini 1'den değiştirmek Ocean kesitini
-otomatik güncellemez; otomatik genişlik eşlemesi takip işidir.
+River aktörünün canlı `widthScale` değeri editör ve runtime Ocean sahibine
+aktarılır; maske gerçek ribbon genişliğini izler. Gizlenen veya silinen River
+kendi kesitini Ocean'a bırakır. Genişlik/görünürlük değişiminde terrain verisi,
+kapsam dokusu, geometri ve FFT yeniden kurulmaz; CPU sorgusu, yüzey ve caustics
+maskesi aynı güncellemeyi kullanır. `inlets` kaydı hâlâ yalnız spline kimliğidir;
+yeni kalıcı alan yoktur. Standalone `prepareOceanTerrain` çağrısında River
+listesi verilmezse önceki genişlik=1 davranışı korunur. Son düz kesit ve ortak
+uç kotu sözleşmesi değişmez. [Canlı eşleme kabulü](../reports/WORLD_BUILDER_INLET_WIDTH.md).
 
 ## Sonraki adımlar
 

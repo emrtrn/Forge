@@ -1,7 +1,7 @@
 import { Color, DataArrayTexture, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, RGBAFormat, UnsignedByteType, Vector2, Vector4, type DataTexture, type Object3D, type Scene } from "three";
 import { resolveOceanAppearance, type OceanWaterBody } from "../../scene/oceanWater";
 import type { OceanCoverage, OceanInlet } from "../../terrain/oceanCoverage";
-import { createOceanInletUniforms, OCEAN_INLETS_GLSL } from "../ocean/oceanInlets";
+import { createOceanInletUniforms, updateOceanInletUniforms, OCEAN_INLETS_GLSL } from "../ocean/oceanInlets";
 import { WATER_EXTINCTION_GLSL } from "../waterOptics";
 import type { LayoutLakeWaterBody } from "../../scene/layout";
 import { resolveLakeAppearance } from "../../scene/waterBody";
@@ -65,7 +65,7 @@ export function registerOceanCaustics(scene: Scene, body: OceanWaterBody, covera
   const source: Source = { ocean: { body, texture, clock, inlets: coverage.inlets ?? [] }, object,
     coverage: { min: body.bounds.min, nx: coverage.nx, nz: coverage.nz, spacing: coverage.spacing, triangles: new Uint8Array(0) } };
   const dispose = registerSource(scene, source, replacing);
-  return { update: (next: OceanWaterBody) => { source.ocean!.body = next; }, dispose };
+  return { update: (next: OceanWaterBody) => { source.ocean!.body = next; source.ocean!.inlets = coverage.inlets ?? []; }, dispose };
 }
 
 function registerSource(scene:Scene, source:Source, replacing?:Object3D):()=>void {
@@ -163,13 +163,8 @@ export function updateTerrainCaustics(uniforms: TerrainUniforms, scene: Scene, t
       uniforms.uOceanCausticTime!.value = ocean.clock();
       uniforms.uOceanCausticAbsorption!.value = appearance.absorptionDistance;
       (uniforms.uOceanCausticColor!.value as Color).set(appearance.deepColor);
-      uniforms.oceanInletCount!.value = ocean.inlets.length;
+      updateOceanInletUniforms(uniforms as ReturnType<typeof createOceanInletUniforms>, ocean.inlets);
       uniforms.uOceanCausticConnectedOffshore!.value = ocean.body.offshorePolicy === "connectedBoundary" ? 1 : 0;
-      for (let index = 0; index < 3; index++) {
-        const inlet = ocean.inlets[index];
-        (uniforms.oceanInletStart!.value as Vector4[])[index]!.set(...(inlet?.start ?? [0, 0]), inlet?.width ?? 0, 0);
-        (uniforms.oceanInletEnd!.value as Vector4[])[index]!.set(...(inlet?.end ?? [0, 0]), 0, 0);
-      }
     }
     let visible = true;
     for (let parent: Object3D | null = object; parent; parent = parent.parent) visible &&= parent.visible;
@@ -206,9 +201,9 @@ ${WATER_EXTINCTION_GLSL}
 // Same packed bits and b-c interpolation as OceanSurface, including a partly
 // submerged face. Refracted sunlight must enter a connected, wet surface too.
 bool forgeOceanCausticWet(vec2 world, vec4 grid, vec4 area, bool offshore) {
-  if(oceanInletContains(world)) return false;
   vec2 p=(world-grid.xy)*grid.z;
   bool exterior=any(lessThan(p,vec2(0.)))||p.x>grid.w||p.y>area.x;
+  if(!exterior&&oceanInletContains(world)) return false;
   if(exterior&&(!offshore||uOceanCausticConnectedOffshore<.5))return offshore;
   p=clamp(p,vec2(0.),vec2(grid.w,area.x));
   ivec2 cell=ivec2(min(floor(p),vec2(grid.w,area.x)-1.));vec2 f=p-vec2(cell);

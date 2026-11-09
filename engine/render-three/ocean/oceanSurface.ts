@@ -1,7 +1,7 @@
 import { Box3, Color, DataTexture, FloatType, GLSL3, Matrix4, Mesh, NearestFilter, NoBlending, RGBAFormat,
   ShaderMaterial, UniformsLib, UniformsUtils, Vector2, Vector3, Vector4, type Camera, type WebGLRenderer } from "three";
 import { resolveOceanAppearance, type OceanWaterBody } from "../../scene/oceanWater";
-import { OCEAN_OFFSHORE_TRANSITION, type OceanCoverage } from "../../terrain/oceanCoverage";
+import { OCEAN_OFFSHORE_TRANSITION, type OceanCoverage, type OceanInlet } from "../../terrain/oceanCoverage";
 import { OceanFft } from "./oceanFft";
 import { createOceanGrid } from "./oceanGrid";
 import { WATER_OPTICS_GLSL } from "../waterOptics";
@@ -9,7 +9,7 @@ import type { WaterEnvironmentProbes } from "../waterEnvironment";
 import { createOceanOpticsUniforms, updateOceanOptics, OCEAN_NORMAL_GLSL, OCEAN_OPTICS_GLSL } from "./oceanOptics";
 import type { PlanarReflectionBinding, PlanarReflectionSource } from "../planarReflectionSource";
 import { createOceanReflectionUniforms, OCEAN_PLANAR_GLSL } from "./oceanReflection";
-import { createOceanInletUniforms, OCEAN_INLETS_GLSL } from "./oceanInlets";
+import { createOceanInletUniforms, updateOceanInletUniforms, OCEAN_INLETS_GLSL } from "./oceanInlets";
 
 const COVERAGE = /* glsl */ `
 uniform sampler2D coverageMap;
@@ -21,7 +21,6 @@ uniform float connectedOffshore;
 ${OCEAN_INLETS_GLSL}
 // (depth, wet). Triangles and interpolated bed share the terrain b-c diagonal.
 vec2 waterCoverage(vec2 world){
-  if(oceanInletContains(world)) return vec2(0.);
   vec2 g=(world-domain.xy)/domain.z;
   float outside=length(max(max(-g,g-cells),vec2(0.)))*domain.z;
   g=clamp(g,vec2(0.),cells);
@@ -37,6 +36,7 @@ vec2 waterCoverage(vec2 world){
     if(connectedOffshore>.5&&(!connected||bed>=seaLevel)) return vec2(0.);
     return vec2(mix(max(0.,seaLevel-bed),offshoreDepth,smoothstep(0.,${OCEAN_OFFSHORE_TRANSITION.toFixed(1)},outside)),1.);
   }
+  if(oceanInletContains(world)) return vec2(0.);
   return vec2(max(0.,seaLevel-bed),connected&&bed<seaLevel?1.:0.);
 }`;
 const WAVES = /* glsl */ `
@@ -233,6 +233,12 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
       this.userData.compositedWaterSurface = updateOceanOptics(this.material.uniforms as ReturnType<typeof createOceanOpticsUniforms>, renderer, scene, camera, probes);
     };
   }
+  /** In-place ownership update: the coverage texture, geometry and FFT stay intact. */
+  applyInlets(inlets: readonly OceanInlet[]): void {
+    updateOceanInletUniforms(this.material.uniforms as ReturnType<typeof createOceanInletUniforms>, inlets);
+    this.coverage.inlets = inlets;
+  }
+
   /** Main-view anchoring is explicit; a mirrored camera cannot relocate the grid. */
   updateView(camera: Camera): void {
     const point = camera.getWorldPosition(new Vector3()), u = this.material.uniforms;

@@ -6214,6 +6214,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
       causticsAllowed: lakeQuality(this.qualitySettings).causticsAllowed,
       environmentProbes: () => this.eligibleProbeBakes(),
       document: id => this.worldTerrainDocuments.get(id),
+      rivers: () => this.layout?.riverWaters ?? [],
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.worldTerrainDocuments.get(id);
         if (!actor || !document) throw new Error("Missing Ocean terrain");

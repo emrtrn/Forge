@@ -72,8 +72,8 @@ bu çalışmada değiştirilmemiştir.
 
 - Small: 1.024×1.024 m, 512×512 native hücre. Orta/büyük Ocean hazırlığı sonraki dilimdir.
 - Ada'da nehir seçeneği kapalı kalır; bu nehir ağzı teslimi Coast içindir.
-- Elle değiştirilen River aktörünün `widthScale` değeri Ocean kesitine otomatik
-  yansımaz; üretilen ağızda 1 korunmalıdır. Otomatik eşleme takip işidir.
+- İlk teslimdeki `widthScale=1` sınırlaması sonraki
+  [canlı genişlik eşlemesi](WORLD_BUILDER_INLET_WIDTH.md) diliminde giderildi.
 - Sonlu dünya sınırı vardır; haritanın ötesine anakara geometrisi üretilmez.
 - İlk görünüm ve işlev teslimidir. River/Ocean optiklerinin tam eşleşmesi,
   haliç geometrisi/akıntısı, kıyı breaker/swash ve nihai görsel kabul açıktır.

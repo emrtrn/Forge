@@ -38,6 +38,7 @@ import { prepareTerrainRiverWaterSource } from "../../engine/terrain/terrainRive
 import { resolveRiverWater } from "../../engine/scene/riverWater";
 import { buildRiverWaterRibbon } from "../../engine/render-three/riverWater";
 import { RiverSurfaceQuery } from "../../engine/terrain/riverSurface";
+import { resolveOceanInlets } from "../../engine/terrain/oceanInlets";
 
 type Check = (label: string, run: () => void) => void;
 type CheckAsync = (label: string, run: () => Promise<void>) => Promise<void>;
@@ -136,6 +137,21 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
     assert.equal(built.layout.riverWaters![0]!.waveAmplitude, 0, "terminal waterline remains coplanar with the Ocean");
     assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(built.layout)), "coast").oceanWaters, [sea]);
     assert.deepEqual(validateSavePayload({ layout: built.layout }).layout.oceanWaters, [sea]);
+    // Rescale the actual ribbon, not a test-only rectangle: Ocean must fill the
+    // uncovered channel when narrow and keep out of the widened wet surface.
+    for (const widthScale of [.25, .5, 2]) {
+      const waters = structuredClone(built.layout.riverWaters!); waters[0]!.widthScale = widthScale;
+      coverage.inlets = resolveOceanInlets(built.def, sea, waters);
+      const changed = await prepareTerrainRiverWaterSource({ def: built.def, tiles: built.tiles }, resolveRiverWater(waters[0]));
+      const data = buildRiverWaterRibbon(changed.spline, { surfaceLevel: changed.surfaceLevel, widthScale, heightAt: changed.heightAt, sampleSpacing: changed.sampleSpacing });
+      const query = new RiverSurfaceQuery(data, changed.position);
+      for (let along = length - 25; along < length - .5; along += 2) for (let across = -inlet.width * 2 + .25; across < inlet.width * 2; across += .5) {
+        const x = inlet.start[0] + dx / length * along - dz / length * across;
+        const z = inlet.start[1] + dz / length * along + dx / length * across;
+        if (query.sampleAt(x, z)) assert.equal(sampleOceanCoverage(coverage, x, z).status, "dry", `${widthScale}: no double surface`);
+        else if ((built.sampleHeight(x, z) ?? Infinity) < sea.surfaceLevel) assert.equal(sampleOceanCoverage(coverage, x, z).status, "wet", `${widthScale}: no empty water strip`);
+      }
+    }
   });
   check("random world island: deterministic coast, dry settlements and an internal road for a lone village", () => {
     for (const seed of [1, 11, 48213, 0xffffffff]) {

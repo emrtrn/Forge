@@ -303,8 +303,9 @@ ortak kıyı/zemin/önizleme, Ocean aktörü, kara üretim maskeleri ve tek köy
 iç erişim yolu mevcut. Pencere desteklenmeyen boyut/çıkış/nehir seçeneklerini
 kapatır. İkinci dilimde Small `coast`, dört deniz yönü, kuru yol çıkışları,
 bağlı offshore politikası ve sabit genişlikli düz nehir ağzının River/Ocean
-yüzey sahipliği eklendi. Ada'da nehir, orta/büyük dünya, elle River genişliği
-değişince inlet eşleme ve tam O9 görsel/performans kabulü açıktır.
+yüzey sahipliği eklendi. Devam diliminde River genişliği/görünürlüğü inlet
+maskesine canlı bağlandı; arazi ve FFT kaynakları korunur.
+Ada'da nehir, orta/büyük dünya ve tam O9 görsel/performans kabulü açıktır.
 Detaylar: [Random World planı](../world-builder/RANDOM_WORLD_PLAN.md).
 
 - [ ] Random World'a Ada/Kıyı landform'ları, Ocean verisi ve uyumlu önizleme.

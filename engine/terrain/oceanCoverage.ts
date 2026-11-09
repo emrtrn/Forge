@@ -14,8 +14,9 @@ export interface OceanCoverage {
   status: "ready" | "missing-data";
   wetFaces: number;
 }
-export interface OceanInlet { start: [number, number]; end: [number, number]; width: number }
+export interface OceanInlet { start: [number, number]; end: [number, number]; width: number; active?: boolean }
 export function oceanInletContains(inlet: OceanInlet, x: number, z: number): boolean {
+  if (inlet.active === false) return false;
   const dx = inlet.end[0] - inlet.start[0], dz = inlet.end[1] - inlet.start[1], length = Math.hypot(dx, dz);
   const along = ((x - inlet.start[0]) * dx + (z - inlet.start[1]) * dz) / length;
   const across = Math.abs((x - inlet.start[0]) * dz - (z - inlet.start[1]) * dx) / length;
@@ -86,7 +87,6 @@ export function sampleOceanCoverage(c: OceanCoverage, x: number, z: number): Oce
   if (!Number.isFinite(x) || !Number.isFinite(z)) return { status: "unknown" };
   const { body: b, spacing, nx, nz, heights: h } = c, { min, max } = b.bounds;
   if (c.status !== "ready") return { status: "unknown" };
-  if (c.inlets?.some(inlet => oceanInletContains(inlet, x, z))) return { status: "dry" };
   const clampedX = Math.min(max[0], Math.max(min[0], x)), clampedZ = Math.min(max[1], Math.max(min[1], z));
   const outside = Math.hypot(x - clampedX, z - clampedZ);
   const gx = (clampedX - min[0]) / spacing, gz = (clampedZ - min[1]) / spacing;
@@ -100,6 +100,8 @@ export function sampleOceanCoverage(c: OceanCoverage, x: number, z: number): Oce
     const depth = Math.max(0, b.surfaceLevel - bed) * (1 - fade) + b.offshoreDepth * fade;
     return { status: "wet", depth, bed: b.surfaceLevel - depth, offshore: true };
   }
+  // River ribbons clip to real terrain; widening one must not cut offshore holes.
+  if (c.inlets?.some(inlet => oceanInletContains(inlet, x, z))) return { status: "dry" };
   if (!(c.triangles[iz * nx + ix]! & (first ? 1 : 2))) return { status: "dry" };
   return bed < b.surfaceLevel ? { status: "wet", bed, depth: b.surfaceLevel - bed, offshore: false } : { status: "dry" };
 }

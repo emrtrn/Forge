@@ -1,3 +1,8 @@
+import { defaultWaterCaustics } from "../../engine/scene/waterCaustics";
+import { OceanCausticsBinding } from "../../engine/render-three/ocean/oceanCaustics";
+import { createTerrainCausticsUniforms, registerLakeCaustics, terrainCausticsResources, updateTerrainCaustics } from "../../engine/render-three/terrain/terrainCaustics";
+import { terrainLitFragmentSamplers } from "../../engine/render-three/terrain/terrainMaterial";
+import { affordableSunCascades } from "../../engine/render-three/sunCascadeShadow";
 import assert from "node:assert/strict";
 import { oceanPlanarSettings, validateOceanWater, validateOceanWaters, type OceanWaterBody } from "../../engine/scene/oceanWater";
 import { buildOceanCoverage, prepareOceanCoverage, sampleOceanCoverage } from "../../engine/terrain/oceanCoverage";
@@ -24,6 +29,7 @@ import { WaterReflectionRegistry } from "../../engine/render-three/waterReflecti
 import type { PlanarReflectionSource } from "../../engine/render-three/planarReflectionSource";
 
 const body = (): OceanWaterBody => ({ schema: 1, kind: "ocean", coordinateSpace: "world", id: "sea",
+  caustics: { ...defaultWaterCaustics(), enabled: true },
   name: "Reference", hidden: false, locked: false, terrainRef: "terrain", bounds: { min: [-8, -8], max: [8, 8] },
   openEdges: ["west", "east", "north", "south"], surfaceLevel: 7, offshoreDepth: 40,
   waves: { windSpeed: 9, windDirection: 20, fetchKm: 120, swellStrength: .7, swellDirection: 345, choppiness: .85, seed: 42 },
@@ -31,6 +37,50 @@ const body = (): OceanWaterBody => ({ schema: 1, kind: "ocean", coordinateSpace:
     reflectionMode: "sharedPlanar", reflectionGroup: "water", reflectionQuality: "medium", reflectionStrength: .8 } });
 
 export async function registerOceanWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("ocean: caustics borrow exact coverage and FFT time, hot edits retain patterns, quality/hide/disposal release leases", async () => {
+    const sea = body(), coverage = buildOceanCoverage(sea, 1, () => 5), scene = new Scene();
+    const textures = Array.from({ length: 7 }, () => new Texture());
+    const simulation = { lengths: [600,85,12,2.1], displacement: textures.slice(0,3), slopes: textures.slice(3), stats: { time: 12 } } as unknown as OceanFft;
+    const surface = new OceanSurface(coverage, simulation); scene.add(surface);
+    let freed = 0; surface.coverageTexture.addEventListener("dispose", () => freed++);
+    const binding = new OceanCausticsBinding(scene, coverage, surface.coverageTexture, surface, () => simulation.stats.time);
+    const u = createTerrainCausticsUniforms();
+    try {
+      binding.update(sea, true); updateTerrainCaustics(u, scene, "terrain");
+      assert.equal(u.uCausticCount.value, 1); assert.equal(u.uOceanCausticMap.value, surface.coverageTexture);
+      assert.equal(u.uOceanCausticTime.value, 12); assert.equal(u.uOceanCausticIndex.value, 0);
+      const pattern = u.uCausticMask.value, bytes = terrainCausticsResources(scene).patternBytes;
+      assert.equal(bytes, 256*256*4); assert.equal(terrainCausticsResources(scene).atlasBytes, 0);
+      binding.update({ ...sea, caustics: { ...sea.caustics!, strength: 2 }, appearance: { ...sea.appearance, absorptionDistance: 3 } }, true);
+      updateTerrainCaustics(u, scene, "terrain"); assert.equal(u.uCausticMask.value, pattern);
+      assert.equal(u.uCausticArea.value[0]!.z, 4); assert.equal(u.uOceanCausticAbsorption.value, 3);
+      assert.equal(u.uOceanCausticTime.value, 12); simulation.stats.time = 13;
+      updateTerrainCaustics(u, scene, "other"); assert.equal(u.uCausticArea.value[0]!.z, 0); assert.equal(u.uOceanCausticTime.value, 13);
+      binding.update(sea, false); updateTerrainCaustics(u, scene, "terrain");
+      assert.equal(u.uOceanCausticMap.value, null); assert.equal(u.uOceanCausticIndex.value, -1);
+      assert.equal(terrainCausticsResources(scene).bodies, 0); assert.equal(freed, 0);
+      binding.update(sea, true); binding.update({ ...sea, hidden: true }, true); assert.equal(terrainCausticsResources(scene).bodies, 0);
+      binding.update(sea, true); binding.dispose(); binding.dispose(); assert.equal(freed, 0);
+    } finally { binding.dispose(); surface.dispose(); textures.forEach(t => t.dispose()); }
+    assert.equal(freed, 1);
+  });
+  await check("ocean: shared caustic capacity preserves old owners on failure and replaces a full-budget Ocean safely", async () => {
+    const sea = body(), coverage = buildOceanCoverage(sea, 1, () => 5), scene = new Scene(), texture = new Texture();
+    const releases: (() => void)[] = [];
+    const layer = { status: "ready", coverage: { min: [0,0], spacing: 1, nx: 1, nz: 1, triangles: new Uint8Array([1,1]) } } as Parameters<typeof registerLakeCaustics>[2];
+    for(let i=0;i<7;i++) releases.push(registerLakeCaustics(scene, { id: `lake${i}`, appearance: { causticsEnabled: true } } as Parameters<typeof registerLakeCaustics>[1], layer, new Object3D()));
+    const oldObject = new Object3D(), nextObject = new Object3D();
+    const old = new OceanCausticsBinding(scene, coverage, texture as OceanSurface["coverageTexture"], oldObject, () => 0);
+    const next = new OceanCausticsBinding(scene, coverage, texture as OceanSurface["coverageTexture"], nextObject, () => 0);
+    try {
+      old.update(sea, true); assert.equal(terrainCausticsResources(scene).bodies, 8);
+      assert.throws(() => next.update(sea, true), /over-budget/); assert.equal(terrainCausticsResources(scene).bodies, 8);
+      next.update(sea, true, oldObject); old.dispose(); assert.equal(terrainCausticsResources(scene).bodies, 8);
+      assert.equal(terrainLitFragmentSamplers(true,false,false,true), terrainLitFragmentSamplers(true)+1);
+      assert.equal(affordableSunCascades(4,16,terrainLitFragmentSamplers(true,false,false,true)), 3);
+    } finally { old.dispose(); next.dispose(); releases.forEach(f => f()); texture.dispose(); }
+    assert.equal(terrainCausticsResources(scene).bodies, 0);
+  });
   await check("ocean: planar leases share coplanar Lake/River sources, obey quality and release only their own references", async () => {
     const registry = new WaterReflectionRegistry(), sea = body(), other = registry.acquire("water", sea.surfaceLevel, "medium");
     let bound: PlanarReflectionSource | null = null, fail = false, disposed = 0;
@@ -60,11 +110,11 @@ export async function registerOceanWaterTests(check: (label: string, fn: () => P
   });
   await check("ocean: optical edits, visibility and quality reuse the live simulation; geometric edits rebuild it", async () => {
     const document = createLakeFixture(), scene = new Scene(), sea: OceanWaterBody = { ...body(), bounds: { min: [-64,-64], max: [64,64] }, surfaceLevel: 17 };
-    let made = 0, freed = 0; const applied: { body: OceanWaterBody; quality: string }[] = [];
+    let made = 0, freed = 0; const applied: { body: OceanWaterBody; quality: string; allowed: boolean }[] = [];
     const controller = new OceanWaterController({ scene, renderer: {} as WebGLRenderer, document: () => document,
       load: async () => { throw new Error("unexpected read"); }, create: () => {
         made++; return { object: new Object3D(), update() {}, dispose: () => { freed++; },
-          applyAppearance: (body, quality) => applied.push({ body, quality }) };
+          applyAppearance: (body, quality, allowed) => applied.push({ body, quality, allowed }) };
       } });
     try {
       await controller.rebuild([sea]); const original = controller.object;
@@ -72,6 +122,10 @@ export async function registerOceanWaterTests(check: (label: string, fn: () => P
       await controller.rebuild([edited]); assert.equal(made, 1); assert.equal(controller.object, original);
       assert.equal(applied.at(-1)!.body.appearance!.reflectionMode, "off");
       controller.setReflectionQuality("off"); assert.equal(applied.at(-1)!.quality, "off"); assert.equal(made, 1);
+      await controller.rebuild([{ ...edited, caustics: { ...defaultWaterCaustics(), enabled: true, strength: 2 } }]);
+      assert.equal(made, 1); assert.equal(applied.at(-1)!.body.caustics!.strength, 2);
+      controller.setCausticsAllowed(false); assert.equal(applied.at(-1)!.allowed, false); assert.equal(made, 1);
+      controller.setCausticsAllowed(true); assert.equal(applied.at(-1)!.allowed, true);
       await controller.rebuild([{ ...edited, hidden: true, locked: true, name: "Renamed" }]);
       assert.equal(original!.visible, false); assert.equal(made, 1);
       await controller.rebuild([{ ...sea, surfaceLevel: 18 }]); assert.equal(made, 2); assert.equal(freed, 1);
@@ -144,7 +198,7 @@ export async function registerOceanWaterTests(check: (label: string, fn: () => P
     assert.deepEqual(saved.oceanWaters, [ocean]); assert.deepEqual(collectDroppedFields(layout, saved).paths, []);
     assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(saved)), "coast").oceanWaters, [ocean]);
     assert.deepEqual(partitionLayout(layout, { ...DEFAULT_WORLD_PARTITION, enabled: true }).persistent.oceanWaters, [ocean]);
-    const sparse = body(); delete sparse.waves; delete sparse.appearance;
+    const sparse = body(); delete sparse.waves; delete sparse.appearance; delete sparse.caustics;
     assert.deepEqual(validateOceanWater(sparse), sparse, "validation must not write resolved defaults into authored data");
     assert.ok(!("oceanWaters" in validateLayout({ ...layout, oceanWaters: undefined })));
     assert.deepEqual(validateOceanWaters([]), []);
@@ -152,7 +206,8 @@ export async function registerOceanWaterTests(check: (label: string, fn: () => P
     assert.ok(collectDroppedFields(dirty, validateLayout(dirty)).paths.some(p => p.includes("simulationTextures")));
   });
   await check("ocean: read and save reject unsafe dimensions, invalid wave parameters and excess bodies", async () => {
-    for (const patch of [{ surfaceLevel: Infinity }, { offshoreDepth: 0 }, { id: "" }, { terrainRef: " " },
+    for (const patch of [{ caustics: null }, { caustics: { ...defaultWaterCaustics(), strength: NaN } },
+      { caustics: { ...defaultWaterCaustics(), enabled: "yes" } }, { caustics: { ...defaultWaterCaustics(), depthFade: 31 } }, { surfaceLevel: Infinity }, { offshoreDepth: 0 }, { id: "" }, { terrainRef: " " },
       { openEdges: ["west", "west"] }, { openEdges: ["elsewhere"] }, { openEdges: [] },
       { bounds: { min: [0, 0], max: [-1, 2] } }, { waves: { seed: 1.5 } }, { waves: { windSpeed: 0 } },
       { waves: { choppiness: 10 } }, { appearance: { roughness: NaN } }, { hidden: 1 }, { appearance: { deepColor: "blue" } },

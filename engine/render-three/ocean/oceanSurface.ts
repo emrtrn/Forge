@@ -113,7 +113,8 @@ void main(){
   float sunVisibility=riverSunVisibility();
   vec3 ambient=oceanAmbient+waterSky(vec3(0.,1.,0.),1.)*.5;
   vec3 illumination=ambient+waterSunColor*max(waterSunDirection.y,0.)*.318309886*sunVisibility;
-  vec3 base=mix(shallowColor,deepColor,1.-exp(-cover.x/absorptionDistance))*illumination;
+  float columnDepth=max(0.,cover.x+vWorld.y-seaLevel);
+  vec3 base=mix(shallowColor,deepColor,1.-exp(-columnDepth/absorptionDistance))*illumination;
   vec3 direction=reflect(-eye,normal);direction.y=abs(direction.y);
   float reflectedCoverage=waterEnvironmentCoverage(vWorld);
   vec3 reflected=waterReflectedEnvironment(vWorld,direction,filteredRoughness);
@@ -125,20 +126,25 @@ void main(){
   reflected/=max(reflectedCoverage,.00001);
   float reflectionAmount=clamp(reflectionStrength*fresnel*reflectedCoverage,0.,1.)*step(0.,eye.y);
   vec3 glint=waterSunGlint(normal,eye,filteredRoughness,sunVisibility);
-  float path=waterPath(cover.x,abs(eye.y)),edgeDepth=cover.x;
+  float path=waterPath(columnDepth,abs(eye.y)),edgeDepth=columnDepth;
   vec2 screenUv=gl_FragCoord.xy/waterSceneSize;
   vec3 visibleBed=vec3(0.);
   if(waterSceneEnabled>.5){
     visibleBed=texture(waterSceneColor,screenUv).rgb;
-    vec3 bedView=waterScenePosition(screenUv,texture(waterSceneDepth,screenUv).r);
-    vec3 surfaceView=waterScenePosition(screenUv,gl_FragCoord.z);
-    vec3 column=surfaceView-bedView;
-    path=min(length(column),100.);
-    edgeDepth=min(cover.x,max(0.,dot(column,mat3(viewMatrix)*vec3(0.,1.,0.))));
-    vec3 bed=visibleBed;
-    oceanRefract(screenUv,normal,surfaceView,edgeDepth,bed,path);
-    vec3 tint=deepColor/max(max(deepColor.r,deepColor.g),max(deepColor.b,.00001));
-    vec3 extinction=(vec3(1.)+(vec3(1.)-tint)*2.)/max(absorptionDistance,.01);
+    float sceneDepth=texture(waterSceneDepth,screenUv).r;
+    vec3 bed=vec3(0.);
+    // A clear depth texel is sky, not a distant seabed. Keep the authored
+    // water column there and add no fictitious bottom radiance/refraction.
+    if(abs(sceneDepth-mix(1.,0.,waterSceneReversed))>.000001){
+      vec3 bedView=waterScenePosition(screenUv,sceneDepth);
+      vec3 surfaceView=waterScenePosition(screenUv,gl_FragCoord.z);
+      vec3 column=surfaceView-bedView;
+      path=min(length(column),100.);
+      edgeDepth=min(columnDepth,max(0.,dot(column,mat3(viewMatrix)*vec3(0.,1.,0.))));
+      bed=visibleBed;
+      oceanRefract(screenUv,normal,surfaceView,edgeDepth,bed,path);
+    }
+    vec3 extinction=waterExtinction(deepColor,absorptionDistance);
     vec3 transmission=exp(-extinction*path);
     vec3 tintExtinction=extinction+vec3(1./max(absorptionDistance,.01));
     vec3 shallowWeight=extinction/tintExtinction*(vec3(1.)-exp(-tintExtinction*path))
@@ -152,7 +158,7 @@ void main(){
   float foam=smoothstep(.3,.75,broken*foamStrength-pattern*.45)*smoothstep(.05,1.,cover.x);
   vec3 foamColor=vec3(.78,.87,.86)*(ambient+waterSunColor*max(dot(normal,waterSunDirection),0.)*.318309886*sunVisibility);
   float shoreBlend=smoothstep(.002,.12,edgeDepth);
-  gl_FragColor=waterComposite(base,1.-waterTransmission(cover.x,path,1.,absorptionDistance),reflected,reflectionAmount,foamColor,foam,glint);
+  gl_FragColor=waterComposite(base,1.-waterTransmission(columnDepth,path,1.,absorptionDistance),reflected,reflectionAmount,foamColor,foam,glint);
   if(waterSceneEnabled>.5){
     vec3 color=mix(mix(base,reflected,reflectionAmount)+glint,foamColor,foam);
     gl_FragColor=vec4(mix(visibleBed,color,shoreBlend),1.);
@@ -174,7 +180,8 @@ void main(){
 
 /** Owns grid/material/coverage; borrows FFT, environment and scene snapshots. */
 export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, ShaderMaterial> {
-  private readonly coverageTexture: DataTexture;
+  /** Borrowed by terrain caustics; OceanSurface alone owns/disposes this exact map. */
+  readonly coverageTexture: DataTexture;
   private disposed = false;
   private source: PlanarReflectionSource | null = null;
   private readonly emptyReflectionMatrix = new Matrix4();

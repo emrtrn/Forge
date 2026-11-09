@@ -75,7 +75,7 @@ import {
 } from "./terrainDeformation";
 import { TerrainTextureUpdates } from "./terrainTextureUpdates";
 import { isPlanarReflectionCamera } from "../planarReflectionSource";
-import { updateTerrainCaustics } from "./terrainCaustics";
+import { terrainOceanCausticsActive, updateTerrainCaustics } from "./terrainCaustics";
 
 /**
  * GPU CDLOD renderer for one terrain grid of tiles (OPEN_WORLD_PLAN Faz 2). One
@@ -468,6 +468,10 @@ export class TerrainRenderer {
         defines.FORGE_TERRAIN_RIVER_CAUSTICS = riverCaustics;
         this.materials.material.needsUpdate = true;
       }
+      const oceanCaustics = (this.materials.uniforms.uOceanCausticIndex!.value as number) >= 0 ? 1 : 0;
+      if (defines.FORGE_TERRAIN_OCEAN_CAUSTICS !== oceanCaustics) {
+        defines.FORGE_TERRAIN_OCEAN_CAUSTICS = oceanCaustics; this.materials.material.needsUpdate = true;
+      }
       const wetShore = (this.materials.uniforms.uShoreWetCount!.value as number) > 0 ? 1 : 0;
       if (defines.FORGE_TERRAIN_WET_SHORES !== wetShore) {
         defines.FORGE_TERRAIN_WET_SHORES = wetShore;
@@ -755,7 +759,7 @@ export class TerrainRenderer {
 
   /** Texture units the lit terrain's fragment stage takes for itself (shadow cascades budget against it). */
   get litFragmentSamplers(): number {
-    return this.materials.litFragmentSamplers + (this.deformation.trackWindow() && puddleTerrainActive(this.mesh, this.terrainRef) ? 1 : 0);
+    return this.materials.litFragmentSamplers + Number(terrainOceanCausticsActive(this.mesh)) + (this.deformation.trackWindow() && puddleTerrainActive(this.mesh, this.terrainRef) ? 1 : 0);
   }
 
   dispose(): void {

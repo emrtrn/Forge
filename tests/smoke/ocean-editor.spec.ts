@@ -15,7 +15,7 @@ test.use({ viewport: { width: 1100, height: 760 },
 test("ocean: native editor create/edit/undo/save/reload and runtime Play render the same body", async ({ page, context }, info) => {
   // Full FFT + planar rendering on SwiftShader makes each real UI action slow.
   // This is a functional workflow check; hardware frame-time acceptance is separate.
-  test.setTimeout(600_000);
+  test.setTimeout(900_000);
   const dataRef = "landscapes/__playwright-ocean.terrain.json";
   const def: WorldTerrainDef = { schema: 1, type: "worldTerrain", name: "Ocean coast", tileQuads: 32, spacing: 2,
     tilesX: 1, tilesZ: 1, origin: [-32, 0, -32], heightMin: -10, heightMax: 10, collision: false,
@@ -82,6 +82,11 @@ test("ocean: native editor create/edit/undo/save/reload and runtime Play render 
   await page.getByRole("textbox", { name: "Reflection Group", exact: true }).press("Tab");
   await page.getByRole("spinbutton", { name: "Reflection Strength", exact: true }).fill("0.6");
   await page.getByRole("spinbutton", { name: "Reflection Strength", exact: true }).press("Tab");
+  await page.getByRole("checkbox", { name: "Ocean Caustics", exact: true }).check();
+  const causticsStrength = page.getByRole("spinbutton", { name: "Caustics Strength", exact: true });
+  await causticsStrength.fill("1.4"); await causticsStrength.press("Tab");
+  await page.getByTestId("editor-undo").click(); await expect(causticsStrength).toHaveValue("1");
+  await page.getByTestId("editor-redo").click(); await expect(causticsStrength).toHaveValue("1.4");
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
   const saved = JSON.parse(await readFile(smokePublicPath(SMOKE_SCENE), "utf8"));
@@ -92,6 +97,8 @@ test("ocean: native editor create/edit/undo/save/reload and runtime Play render 
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 60_000 });
   await expect(page.getByRole("spinbutton", { name: "Sea Level", exact: true })).toHaveValue("1");
   await expect(reflectionMode).toHaveValue("sharedPlanar");
+  await expect(page.getByRole("checkbox", { name: "Ocean Caustics", exact: true })).toBeChecked();
+  await expect(causticsStrength).toHaveValue("1.4");
   await expect(page.getByRole("textbox", { name: "Reflection Group", exact: true })).toHaveValue("native-ocean");
   await page.keyboard.press("f");
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));

@@ -9,13 +9,14 @@ import { OceanFft } from "@engine/render-three/ocean/oceanFft";
 import { OceanSurface } from "@engine/render-three/ocean/oceanSurface";
 import type { WaterEnvironmentProbes } from "@engine/render-three/waterEnvironment";
 import { WaterReflectionRegistry } from "@engine/render-three/waterReflectionRegistry";
+import { OceanCausticsBinding } from "@engine/render-three/ocean/oceanCaustics";
 import { OceanReflectionLease } from "@engine/render-three/ocean/oceanReflection";
 
 export interface OceanPresentation {
   object: Object3D;
   update(delta: number, camera: Camera): void;
   dispose(): void;
-  applyAppearance?(body: OceanWaterBody, ceiling: OceanReflectionCeiling): void;
+  applyAppearance?(body: OceanWaterBody, ceiling: OceanReflectionCeiling, causticsAllowed: boolean): void;
 }
 export interface OceanWaterHost {
   scene: Scene;
@@ -26,6 +27,7 @@ export interface OceanWaterHost {
   environmentProbes?: WaterEnvironmentProbes;
   reflections?: WaterReflectionRegistry;
   reflectionQuality?: OceanReflectionCeiling;
+  causticsAllowed?: boolean;
   /** Host/diagnostic injection keeps lifecycle tests independent of a real GPU. */
   create?: (coverage: OceanCoverage) => OceanPresentation;
 }
@@ -42,13 +44,19 @@ export class OceanWaterController {
   private disposed = false;
   private readonly reflections: WaterReflectionRegistry;
   private reflectionQuality: OceanReflectionCeiling;
+  private causticsAllowed: boolean;
   constructor(private readonly host: OceanWaterHost) {
+    this.causticsAllowed = host.causticsAllowed ?? true;
     this.reflections = host.reflections ?? new WaterReflectionRegistry();
     this.reflectionQuality = host.reflectionQuality ?? "high";
   }
   setReflectionQuality(quality: OceanReflectionCeiling): void {
     this.reflectionQuality = quality;
-    if (this.current) this.current.visual.applyAppearance?.(this.current.source, quality);
+    if (this.current) this.current.visual.applyAppearance?.(this.current.source, quality, this.causticsAllowed);
+  }
+  setCausticsAllowed(allowed: boolean): void {
+    this.causticsAllowed = allowed;
+    if (this.current) this.current.visual.applyAppearance?.(this.current.source, this.reflectionQuality, allowed);
   }
   get object(): Object3D | null { return this.current?.visual.object ?? null; }
   private releaseCurrent(): void {
@@ -62,13 +70,13 @@ export class OceanWaterController {
     const signal = this.aborter.signal;
     if (!source) { this.releaseCurrent(); this.results.clear(); this.host.changed?.(); return; }
     const document = this.host.document(source.terrainRef), signature = JSON.stringify(source);
-    const { appearance: _appearance, name: _name, hidden: _hidden, locked: _locked, ...geometrySource } = source;
+    const { appearance: _appearance, caustics: _caustics, name: _name, hidden: _hidden, locked: _locked, ...geometrySource } = source;
     const preparation = JSON.stringify(geometrySource);
     if (this.current?.id === source.id) {
       this.current.visual.object.visible = !source.hidden;
       // Hide/release captures immediately, even if the next terrain preparation fails.
       this.current.source = { ...this.current.source, hidden: source.hidden ?? false };
-      this.current.visual.applyAppearance?.(this.current.source, this.reflectionQuality);
+      this.current.visual.applyAppearance?.(this.current.source, this.reflectionQuality, this.causticsAllowed);
     }
     if (!force && this.current?.signature === signature && this.current.document === document
       && this.results.get(source.id)?.status === "ready") {
@@ -76,7 +84,7 @@ export class OceanWaterController {
     }
     if (!force && this.current?.preparation === preparation && this.current.document === document
       && this.current.visual.applyAppearance && this.results.get(source.id)?.status === "ready") {
-      this.current.visual.applyAppearance(source, this.reflectionQuality);
+      this.current.visual.applyAppearance(source, this.reflectionQuality, this.causticsAllowed);
       this.current.source = source; this.current.signature = signature;
       this.results.set(source.id, { status: "ready", message: source.hidden ? "Hidden" : "Ready" }); this.host.changed?.(); return;
     }
@@ -102,18 +110,21 @@ export class OceanWaterController {
   }
   private create(coverage: OceanCoverage): OceanPresentation {
     const simulation = new OceanFft(this.host.renderer, coverage.body);
-    let surface: OceanSurface | undefined, lease: OceanReflectionLease | undefined;
+    let surface: OceanSurface | undefined, lease: OceanReflectionLease | undefined, caustics: OceanCausticsBinding | undefined;
     try {
       simulation.update(0); surface = new OceanSurface(coverage, simulation, this.host.environmentProbes);
       const object = surface;
       lease = new OceanReflectionLease(object, this.reflections);
       const reflections = lease;
       reflections.update(coverage.body, this.reflectionQuality);
+      caustics = new OceanCausticsBinding(this.host.scene, coverage, surface.coverageTexture, surface, () => simulation.stats.time);
+      const seabed = caustics;
+      seabed.update(coverage.body, this.causticsAllowed, this.current?.visual.object);
       surface.userData.oceanWaterId = coverage.body.id;
       return { object, update: (delta, camera) => { simulation.update(delta); object.updateView(camera); },
-        applyAppearance: (body, quality) => { object.applyAppearance(body); reflections.update(body, quality); },
-        dispose: () => { reflections.dispose(); object.dispose(); simulation.dispose(); } };
-    } catch (error) { lease?.dispose(); surface?.dispose(); simulation.dispose(); throw error; }
+        applyAppearance: (body, quality, allowed) => { seabed.update(body, allowed); reflections.update(body, quality); object.applyAppearance(body); },
+        dispose: () => { seabed.dispose(); reflections.dispose(); object.dispose(); simulation.dispose(); } };
+    } catch (error) { caustics?.dispose(); lease?.dispose(); surface?.dispose(); simulation.dispose(); throw error; }
   }
   update(delta: number, camera: Camera): void {
     if (this.current?.visual.object.visible) this.current.visual.update(Number.isFinite(delta) ? Math.max(0, Math.min(.25, delta)) : 0, camera);

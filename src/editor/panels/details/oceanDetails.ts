@@ -1,3 +1,4 @@
+import { defaultWaterCaustics } from "@engine/scene/waterCaustics";
 import type { SceneApp } from "@/scene/SceneApp";
 import { OCEAN_APPEARANCE, OCEAN_WAVES, type OceanEdge } from "@engine/scene/oceanWater";
 
@@ -6,6 +7,7 @@ const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "
 export function renderOceanDetails(element: HTMLElement, app: SceneApp): void {
   const { source, result } = app.getOceanEditorState(); if (!source) return;
   const disabled = source.locked ? "disabled" : "", waves = { ...OCEAN_WAVES, ...source.waves }, a = { ...OCEAN_APPEARANCE, ...source.appearance };
+  const caustics = source.caustics ?? defaultWaterCaustics();
   const number = (group: string, key: string, label: string, value: number, min: number, max: number, step = .1) =>
     `<label class="detail-row"><span>${label}</span><input aria-label="${label}" data-ocean-${group}="${key}" type="number" min="${min}" max="${max}" step="${step}" value="${value}" ${disabled}></label>`;
   const select = (key: string, label: string, choices: readonly (readonly [string, string])[], value: string, inactive = false) =>
@@ -39,7 +41,19 @@ export function renderOceanDetails(element: HTMLElement, app: SceneApp): void {
     ${number("appearance", "reflectionStrength", "Reflection Strength", a.reflectionStrength, 0, 1, .05)}
     ${select("reflectionQuality", "Reflection Quality", [["medium", "Medium"], ["high", "High"]], a.reflectionQuality, a.reflectionMode !== "sharedPlanar")}
     <label class="detail-row"><span>Reflection Group</span><input aria-label="Reflection Group" data-ocean-reflection="reflectionGroup" value="${escape(a.reflectionGroup)}" ${disabled || (a.reflectionMode !== "sharedPlanar" ? "disabled" : "")}></label>
-    <div class="detail-hint">Environment gökyüzünü ve çevreyi, Planar sahnedeki nesneleri de yansıtır. Grup, kot ve kalite eşleştiğinde sular ortak yansıma kullanır. Grafik kalitesi Planar yansımaları sınırlandırabilir.</div></div>`);
+    <div class="detail-hint">Environment gökyüzünü ve çevreyi, Planar sahnedeki nesneleri de yansıtır. Grup, kot ve kalite eşleştiğinde sular ortak yansıma kullanır. Grafik kalitesi Planar yansımaları sınırlandırabilir.</div></div>
+    <div class="detail-section" data-detail-section="ocean-caustics"><div class="detail-section-title">Seabed Caustics</div>
+    <label class="detail-toggle"><input aria-label="Ocean Caustics" data-ocean-caustics-enabled type="checkbox" ${caustics.enabled ? "checked" : ""} ${disabled}><span>Caustics</span></label>
+    ${number("caustics", "strength", "Caustics Strength", caustics.strength, 0, 4, .05)}
+    ${number("caustics", "scale", "Caustics Scale", caustics.scale, .1, 20, .1)}
+    ${number("caustics", "speed", "Caustics Speed", caustics.speed, 0, 3, .05)}
+    ${number("caustics", "depthFade", "Caustics Depth Fade", caustics.depthFade, .1, 30, .1)}
+    <div class="detail-hint">Güneş, gölge ve su derinliği dipteki ışığı belirler. Grafik kalitesi bu etkiyi sınırlandırabilir.</div></div>`);
+  element.querySelector<HTMLInputElement>("[data-ocean-caustics-enabled]")?.addEventListener("change", event =>
+    app.editOcean({ caustics: { ...caustics, enabled: (event.target as HTMLInputElement).checked } }));
+  element.querySelectorAll<HTMLInputElement>("[data-ocean-caustics]").forEach(input => input.addEventListener("change", () => {
+    if (Number.isFinite(input.valueAsNumber)) app.editOcean({ caustics: { ...caustics, [input.dataset.oceanCaustics!]: input.valueAsNumber } });
+  }));
   element.querySelector<HTMLInputElement>("[data-ocean-name]")?.addEventListener("change", event => app.editOcean({ name: (event.target as HTMLInputElement).value }));
   for (const key of ["hidden", "locked"] as const) element.querySelector<HTMLInputElement>(`[data-ocean-${key}]`)?.addEventListener("change", event => app.editOcean({ [key]: (event.target as HTMLInputElement).checked }));
   element.querySelectorAll<HTMLInputElement>("[data-ocean-body],[data-ocean-wave],[data-ocean-appearance]").forEach(input => input.addEventListener("change", () => {

@@ -3262,6 +3262,7 @@ export class SceneApp {
     setTerrainFarTiling(quality.terrainFarTiling);
     void this.lakes?.setQuality(lakeQuality(quality)).catch(error => console.warn("[lake-quality]", error));
     this.oceans?.setReflectionQuality(lakeQuality(quality).reflectionQuality);
+    this.oceans?.setCausticsAllowed(lakeQuality(quality).causticsAllowed);
     this.puddleReflections.setQuality(lakeQuality(quality).reflectionQuality);
     if (!quality.lakeFoamAllowed) this.riverFoam.clearLoaded();
     for(const river of this.riverWaterObjects) {
@@ -7788,6 +7789,7 @@ export class SceneApp {
     if (!this.layout?.oceanWaters?.length && !this.oceans) return;
     this.oceans ??= new OceanWaterController({ scene: this.scene, renderer: this.renderer,
       reflections: this.waterReflections, reflectionQuality: lakeQuality(this.editorQuality).reflectionQuality,
+      causticsAllowed: lakeQuality(this.editorQuality).causticsAllowed,
       environmentProbes: () => this.eligibleProbeBakes(),
       document: id => this.layout?.landscapes?.some(a => a.id === id) ? this.lakeDocument(id) : undefined,
       load: async (id, key, signal) => {

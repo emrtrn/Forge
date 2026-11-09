@@ -1,4 +1,7 @@
-import { DataArrayTexture, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, RGBAFormat, UnsignedByteType, Vector2, Vector4, type DataTexture, type Object3D, type Scene } from "three";
+import { Color, DataArrayTexture, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, RGBAFormat, UnsignedByteType, Vector2, Vector4, type DataTexture, type Object3D, type Scene } from "three";
+import { resolveOceanAppearance, type OceanWaterBody } from "../../scene/oceanWater";
+import type { OceanCoverage } from "../../terrain/oceanCoverage";
+import { WATER_EXTINCTION_GLSL } from "../waterOptics";
 import type { LayoutLakeWaterBody } from "../../scene/layout";
 import { resolveLakeAppearance } from "../../scene/waterBody";
 import type { LakeGeometry } from "../../terrain/terrainLakeWater";
@@ -14,14 +17,14 @@ const SIDE = 256, MAX_BODIES = 8;
  * light network was too faint to read at normal editor distances. Saved values
  * stay as authored; only the uniform is scaled, so 0 still disables the lake. */
 const CAUSTICS_STRENGTH_GAIN = 2;
-interface Source { lake?: LayoutLakeWaterBody; water?: ResolvedRiverWater; coverage: NonNullable<LakeGeometry["coverage"]>; object: Object3D; river?: RiverSurfaceQuery; flowSpeed?: number }
+interface Source { ocean?: { body: OceanWaterBody; texture: DataTexture; clock: () => number }; lake?: LayoutLakeWaterBody; water?: ResolvedRiverWater; coverage: NonNullable<LakeGeometry["coverage"]>; object: Object3D; river?: RiverSurfaceQuery; flowSpeed?: number }
 interface Registry { sources: Map<Object3D, Source>; texture: DataArrayTexture | null; dirty: boolean; layers: Source[]; atlasSources: RiverSurfaceQuery[]; atlas?: ReturnType<typeof riverCausticAtlas> | undefined }
 const registries = new WeakMap<Scene, Registry>();
 
 export function assertLakeCausticsCapacity(scene: Scene, replacing?: Object3D): void {
   const registry = registries.get(scene);
   if (registry && registry.sources.size - Number(!!replacing && registry.sources.has(replacing)) >= MAX_BODIES)
-    throw new Error("over-budget: at most eight caustics bodies (Lake + River)");
+    throw new Error("over-budget: at most eight caustics bodies (Lake + River + Ocean)");
 }
 
 /** Counts actual owned scene resources, independent of the last depth/capture pass's uniforms. */
@@ -30,6 +33,14 @@ export function terrainCausticsResources(scene:Scene) {
   const rivers=[...(registry?.sources.values()??[])].flatMap(s=>s.river?[s.river]:[]);
   return {bodies:registry?.sources.size??0,rivers:rivers.length,patternBytes:registry?.texture?.image.data?.byteLength??0,
     atlasBytes:registry?.atlas?.texture.image.data?.byteLength??0,indexBytes:rivers.reduce((n,s)=>n+s.offsets.byteLength+s.triangles.byteLength,0)};
+}
+
+/** Reserve the borrowed sampler before the first terrain draw too: cascaded
+ * shadows budget their texture units before onBeforeRender binds uniforms. */
+export function terrainOceanCausticsActive(object: Object3D): boolean {
+  let root = object;
+  while (root.parent) root = root.parent;
+  return [...(registries.get(root as Scene)?.sources.values() ?? [])].some(source => !!source.ocean);
 }
 
 /** Two exact connected-face flags per terrain cell. No raster edge leakage. */
@@ -45,10 +56,24 @@ export function registerLakeCaustics(scene: Scene, lake: LayoutLakeWaterBody, ge
   return registerSource(scene,{lake,coverage:geometry.coverage,object});
 }
 
-function registerSource(scene:Scene, source:Source):()=>void {
+/** Ocean borrows its full-resolution, packed face/height map. No 256² mask
+ * downsampling: Ocean domains may contain four times as many cells as Lakes. */
+export function registerOceanCaustics(scene: Scene, body: OceanWaterBody, coverage: OceanCoverage,
+  texture: DataTexture, object: Object3D, clock: () => number, replacing?: Object3D) {
+  if (coverage.status !== "ready") throw new Error("Cannot publish Ocean caustics from missing terrain");
+  const source: Source = { ocean: { body, texture, clock }, object,
+    coverage: { min: body.bounds.min, nx: coverage.nx, nz: coverage.nz, spacing: coverage.spacing, triangles: new Uint8Array(0) } };
+  const dispose = registerSource(scene, source, replacing);
+  return { update: (next: OceanWaterBody) => { source.ocean!.body = next; }, dispose };
+}
+
+function registerSource(scene:Scene, source:Source, replacing?:Object3D):()=>void {
   let registry=registries.get(scene);
   if(!registry){registry={sources:new Map(),texture:null,dirty:true,layers:[],atlasSources:[]};registries.set(scene,registry);}
-  if(registry.sources.size>=MAX_BODIES)throw new Error("over-budget: at most eight caustics bodies (Lake + River)");
+  if(registry.sources.size-Number(!!replacing&&registry.sources.has(replacing))>=MAX_BODIES)throw new Error("over-budget: at most eight caustics bodies (Lake + River + Ocean)");
+  // Publication is synchronous. The previous owner's later dispose only removes
+  // its own key; a failed capacity check above preserves it intact.
+  if(replacing)registry.sources.delete(replacing);
   registry.sources.set(source.object,source);registry.dirty=true;
   let released=false;
   return ()=>{
@@ -72,7 +97,9 @@ export function terrainRiverSurfaceIndex(scene: Scene, object: Object3D): number
 }
 
 export function createTerrainCausticsUniforms() {
-  return { uRiverCausticData: { value: null as DataTexture | null }, uRiverCausticWidth: { value: 1 }, uRiverCausticCount: { value: 0 },
+  return { uOceanCausticMap: { value: null as DataTexture | null }, uOceanCausticIndex: { value: -1 },
+    uOceanCausticTime: { value: 0 }, uOceanCausticAbsorption: { value: 9 }, uOceanCausticColor: { value: new Color() },
+    uRiverCausticData: { value: null as DataTexture | null }, uRiverCausticWidth: { value: 1 }, uRiverCausticCount: { value: 0 },
     uCausticRiver: { value: Array.from({length:MAX_BODIES},()=>new Vector4(-1,0,0,0)) }, uCausticMask: { value: null }, uCausticCount: { value: 0 }, uCausticTime: { value: 0 },
     uCausticGrid: { value: Array.from({ length: MAX_BODIES }, () => new Vector4()) },
     uCausticArea: { value: Array.from({ length: MAX_BODIES }, () => new Vector4()) },
@@ -84,9 +111,10 @@ export function updateTerrainCaustics(uniforms: TerrainUniforms, scene: Scene, t
   uniforms.uCausticCount!.value = registry?.sources.size ?? 0;
   uniforms.uCausticTime!.value = performance.now() / 1000;
   uniforms.uRiverCausticCount!.value = registry ? [...registry.sources.values()].filter(s=>s.river).length : 0;
+  uniforms.uOceanCausticMap!.value = null; uniforms.uOceanCausticIndex!.value = -1;
   if (!registry) { uniforms.uCausticMask!.value = null; uniforms.uRiverCausticData!.value=null; return; }
   const sources = registry.dirty ? [...registry.sources.values()].sort((a, b) =>
-    `${a.lake ? "lake" : "river"}:${a.lake?.id ?? a.water!.id}`.localeCompare(`${b.lake ? "lake" : "river"}:${b.lake?.id ?? b.water!.id}`)) : registry.layers;
+    `${a.lake ? "lake" : a.ocean ? "ocean" : "river"}:${a.lake?.id ?? a.ocean?.body.id ?? a.water!.id}`.localeCompare(`${b.lake ? "lake" : b.ocean ? "ocean" : "river"}:${b.lake?.id ?? b.ocean?.body.id ?? b.water!.id}`)) : registry.layers;
   if (registry.dirty) {
     // RG: exact face flags; BA: shared original light/warp tile. The masks use
     // texelFetch at level zero, while animated patterns use filtered mip levels.
@@ -124,10 +152,17 @@ export function updateTerrainCaustics(uniforms: TerrainUniforms, scene: Scene, t
   uniforms.uRiverCausticData!.value=registry.atlas?.texture??null;
   uniforms.uRiverCausticWidth!.value=registry.atlas?.width??1;
   let i = 0, riverIndex=0;
-  for (const { lake, water, coverage, object, river, flowSpeed } of sources) {
-    const caustics=water?.caustics;
+  for (const { lake, water, ocean, coverage, object, river, flowSpeed } of sources) {
+    const caustics=ocean?.body.caustics??water?.caustics;
     const a=lake?resolveLakeAppearance(lake):{causticsStrength:caustics?.enabled?caustics.strength:0,causticsScale:caustics?.scale??1.5,causticsSpeed:caustics?.speed??.25,causticsDepthFade:caustics?.depthFade??4};
-    const terrain=lake?.terrainRef??water!.landscapeRef,level=lake?.surfaceLevel??river!.origin[1];
+    const terrain=lake?.terrainRef??ocean?.body.terrainRef??water!.landscapeRef,level=lake?.surfaceLevel??ocean?.body.surfaceLevel??river!.origin[1];
+    if (ocean) {
+      const appearance = resolveOceanAppearance(ocean.body);
+      uniforms.uOceanCausticMap!.value = ocean.texture; uniforms.uOceanCausticIndex!.value = i;
+      uniforms.uOceanCausticTime!.value = ocean.clock();
+      uniforms.uOceanCausticAbsorption!.value = appearance.absorptionDistance;
+      (uniforms.uOceanCausticColor!.value as Color).set(appearance.deepColor);
+    }
     let visible = true;
     for (let parent: Object3D | null = object; parent; parent = parent.parent) visible &&= parent.visible;
     (uniforms.uCausticGrid!.value as Vector4[])[i]!.set(...coverage.min, 1 / coverage.spacing, coverage.nx);
@@ -141,12 +176,38 @@ export function updateTerrainCaustics(uniforms: TerrainUniforms, scene: Scene, t
 export const TERRAIN_CAUSTICS_VERTEX_PARS = /* glsl */ `varying vec3 vCausticWorld;`;
 export const TERRAIN_CAUSTICS_VERTEX = /* glsl */ `vCausticWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`;
 export const TERRAIN_CAUSTICS_PARS = /* glsl */ `
+// Standalone users of this shared chunk predate the Ocean option.
+#ifndef FORGE_TERRAIN_OCEAN_CAUSTICS
+#define FORGE_TERRAIN_OCEAN_CAUSTICS 0
+#endif
 uniform highp sampler2DArray uCausticMask;
 uniform int uCausticCount;
 uniform float uCausticTime;
 uniform vec4 uCausticGrid[8]; // world min XZ, inverse spacing, cells X
 uniform vec4 uCausticArea[8]; // cells Z, world surface Y, strength, pattern metres
 uniform vec2 uCausticMotion[8]; // speed, extinction depth
+#if FORGE_TERRAIN_OCEAN_CAUSTICS > 0
+uniform highp sampler2D uOceanCausticMap;
+uniform int uOceanCausticIndex;
+uniform float uOceanCausticTime;
+uniform float uOceanCausticAbsorption;
+uniform vec3 uOceanCausticColor;
+${WATER_EXTINCTION_GLSL}
+// Same packed bits and b-c interpolation as OceanSurface, including a partly
+// submerged face. Refracted sunlight must enter a connected, wet surface too.
+bool forgeOceanCausticWet(vec2 world, vec4 grid, vec4 area, bool offshore) {
+  vec2 p=(world-grid.xy)*grid.z;
+  if(any(lessThan(p,vec2(0.)))||p.x>grid.w||p.y>area.x)return offshore;
+  ivec2 cell=ivec2(min(floor(p),vec2(grid.w,area.x)-1.));vec2 f=p-vec2(cell);
+  vec4 a=texelFetch(uOceanCausticMap,cell,0);
+  float b=texelFetch(uOceanCausticMap,cell+ivec2(1,0),0).r;
+  float c=texelFetch(uOceanCausticMap,cell+ivec2(0,1),0).r;
+  float d=texelFetch(uOceanCausticMap,cell+ivec2(1,1),0).r;
+  bool first=f.x+f.y<=1.;int mask=int(a.g+.5);
+  float bed=first?a.r*(1.-f.x-f.y)+b*f.x+c*f.y:d*(f.x+f.y-1.)+c*(1.-f.x)+b*(1.-f.y);
+  return (first?(mask&1)!=0:(mask&2)!=0)&&bed<area.y;
+}
+#endif
 varying vec3 vCausticWorld;
 float forgeCausticFootprint = 0.0;
 ${RIVER_CAUSTIC_GLSL}
@@ -157,6 +218,14 @@ ${RIVER_FLOW_GLSL}
 float forgeCausticPattern(vec2 p, float t, int layer, float scale) {
   float lod = max(0.0, log2(max(1.0, forgeCausticFootprint * 256.0 / scale)));
   vec2 drift = t * vec2(0.027, 0.019);
+  #if FORGE_TERRAIN_OCEAN_CAUSTICS > 0
+  if(layer==uOceanCausticIndex){
+    // The FFT repeats after 300 seconds. A circular warp has matching value
+    // and velocity at that seam, for every authored speed (including zero).
+    float phase=uOceanCausticTime*0.020943951023932;
+    drift=vec2(cos(phase)-1.,sin(phase))*vec2(.027,.019)*47.746482927569*uCausticMotion[layer].x;
+  }
+  #endif
   vec2 warp = vec2(textureLod(uCausticMask, vec3(fract(p * 0.61 + drift), layer), lod).a,
     textureLod(uCausticMask, vec3(fract(p.yx * 0.83 - drift + 0.37), layer), lod).a) - 0.5;
   vec2 uv = p + warp * 0.24;
@@ -168,9 +237,9 @@ float forgeCausticPattern(vec2 p, float t, int layer, float scale) {
   // deliberately: caustics should read as sparse sunlit flecks, not a net.
   return min(1.5, sqrt(a * b) * 2.4);
 }
-float forgeCausticLight(vec3 sun) {
-  if (uCausticCount == 0 || uTerrainView > 0.5 || sun.y < 0.05) return 0.0;
-  float result = 0.0;
+vec3 forgeCausticLight(vec3 sun) {
+  if (uCausticCount == 0 || uTerrainView > 0.5 || sun.y < 0.05) return vec3(0.0);
+  vec3 result = vec3(0.0);
   ${Array.from({ length: MAX_BODIES }, (_, i) => `
   #if FORGE_TERRAIN_CAUSTIC_BODIES > ${i}
   if (uCausticCount > ${i}) {
@@ -187,9 +256,19 @@ float forgeCausticLight(vec3 sun) {
     float depth = level - vCausticWorld.y;
     if (area.z > 0.0 && depth > 0.0 && cell.x >= 0 && cell.y >= 0 && float(cell.x) < grid.w && float(cell.y) < area.x) {
     int index = cell.y * int(grid.w) + cell.x;
+    bool ocean=false;
+    #if FORGE_TERRAIN_OCEAN_CAUSTICS > 0
+    ocean=uOceanCausticIndex==${i};
+    #endif
+    bool covered=false;
+    if(!ocean){
     vec2 faces = texelFetch(uCausticMask, ivec3(index % 256, index / 256, ${i}), 0).rg;
     vec2 f = fract(p);
-    bool covered=(f.x + f.y <= 1.0 ? faces.r : faces.g) >= 0.001;
+    covered=(f.x + f.y <= 1.0 ? faces.r : faces.g) >= 0.001;
+    }
+    #if FORGE_TERRAIN_OCEAN_CAUSTICS > 0
+    if(ocean)covered=forgeOceanCausticWet(vCausticWorld.xz,grid,area,false);
+    #endif
     #if FORGE_TERRAIN_RIVER_CAUSTICS > 0
     if(uCausticRiver[${i}].x>=0.)covered=valid;
     #endif
@@ -199,6 +278,16 @@ float forgeCausticLight(vec3 sun) {
     // inputs remain bounded. The world position anchors all tile seams.
     vec2 refracted = -sun.xz / 1.333;
     vec2 samplePosition = vCausticWorld.xz - refracted * depth / sqrt(max(0.01, 1.0 - dot(refracted, refracted)));
+    float clock=uCausticTime;
+    vec3 attenuation=vec3(1.);
+    #if FORGE_TERRAIN_OCEAN_CAUSTICS > 0
+    if(ocean){
+      if(!forgeOceanCausticWet(samplePosition,grid,area,true))attenuation=vec3(0.);
+      clock=uOceanCausticTime;
+      float path=depth/sqrt(max(.01,1.-dot(refracted,refracted)));
+      attenuation*=exp(-waterExtinction(uOceanCausticColor,uOceanCausticAbsorption)*path);
+    }
+    #endif
     float pattern;
     #if FORGE_TERRAIN_RIVER_CAUSTICS > 0
     if (uCausticRiver[${i}].x >= 0.0 && abs(uCausticRiver[${i}].w) > 0.00001) {
@@ -210,10 +299,10 @@ float forgeCausticLight(vec3 sun) {
     } else
     #endif
     {
-      pattern = forgeCausticPattern(samplePosition / area.w, uCausticTime * motion.x, ${i}, area.w);
+      pattern = forgeCausticPattern(samplePosition / area.w, clock * motion.x, ${i}, area.w);
     }
     float fade = smoothstep(0.0, 0.12, depth) * exp(-depth / motion.y) * smoothstep(0.05, 0.3, sun.y);
-    result = max(result, pattern * fade * area.z);
+    result = max(result, attenuation * pattern * fade * area.z);
     }
     }
   }
@@ -223,7 +312,7 @@ float forgeCausticLight(vec3 sun) {
 // Preserve <lights_fragment_begin>: the cascaded sun binder patches that include
 // after the terrain callback. Its shadow factor then attenuates this irradiance.
 #if NUM_DIR_LIGHTS > 0
-float forgeCausticPreparedLight = 0.0;
+vec3 forgeCausticPreparedLight = vec3(0.0);
 vec3 forgeCausticSunDirection = vec3(0.0);
 void forgePrepareCaustics() {
   if (uCausticCount == 0 || uTerrainView > 0.5) return;

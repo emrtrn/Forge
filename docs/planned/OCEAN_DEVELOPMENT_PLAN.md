@@ -185,8 +185,10 @@ renk/depth kopyası üzerinden soğurulma ve kontrollü kırılmayı kullanıyor
 AO/DoF normal/depth çizimleri aynı FFT deplasmanı ve deniz kapsamını izliyor.
 Ortak planar registry bağlantısı, authored mod/grup/kalite ve FFT'yi koruyan
 optik güncellemeler de eklendi: [Planar yansıma](../reports/OCEAN_PLANAR_REFLECTIONS.md).
+Terrain caustics de Ocean kapsamı, FFT saati, spectral soğurulma ve ortak güneş
+gölgesiyle bağlandı: [Ocean caustics](../reports/OCEAN_CAUSTICS.md).
 Bu ara teslim aşağıdaki maddelerin tamamını kapatmaz: SSR karşılaştırması,
-caustics ve ortam profillerinin görsel kabulü açık.
+su altı ve ortam profillerinin görsel kabulü açık.
 Detay ve doğrulama: [Ortak Ocean optiği](../reports/OCEAN_SHARED_OPTICS.md).
 
 - [x] Ortak Fresnel/soğurulma, depth kontrollü kırılma, ortam ve planar yansıma.
@@ -200,9 +202,11 @@ Detay ve doğrulama: [Ortak Ocean optiği](../reports/OCEAN_SHARED_OPTICS.md).
   ikinci atmosfer, ikinci tone mapper veya çift güneş katkısı oluşturulmaz.
 - [ ] Planar off/on sürekliliği, foreground halo ve ekran kenarı fallback;
   AO/DoF depth/normal yardımcı yollarında aynı deplasman.
-- [ ] R06 dip ışık desenleri: mevcut terrain caustics'i Ocean derinlik/güneş
-  gölgesiyle bağla; alternatif dalga türevli yöntem denenirse üstüne ikinci
-  ışık katkısı ekleme. Yüzeyden ve su altından aynı deseni/soğurulmayı kullan.
+- [x] R06 ilk bağlantı: mevcut terrain caustics'i Ocean kapsamı, derinlik,
+  FFT saati, soğurulma ve ortak güneş/gölge hesabına bağla. Ayrı ışık katkısı yok.
+- [ ] R06 görsel kabul: yüzeyden ve su altından aynı deseni/soğurulmayı
+  değerlendir (su altı kamera yolu O7). Dalga türevli alternatif denenirse
+  mevcut desenin üstüne ikinci ışık katkısı ekleme.
 - [ ] R09 ortam profilleri: en az tropikal, fırtınalı ve ay ışıklı görsel
   karşılaştırma; kalan sekizli ürün setinin içerikleri bilinmediği için
   uydurulmaz. WES hava/güneş/ay/sis ve Ocean ayarları birlikte geçiş yapar.

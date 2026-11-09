@@ -2,6 +2,11 @@ import {expect,test} from "@playwright/test";
 import {writeFile} from "node:fs/promises";
 import type {} from "./pages/river-caustic-flow";
 
+test.use({ launchOptions: {
+  ...(process.env.FORGE_CHROMIUM_EXECUTABLE ? { executablePath: process.env.FORGE_CHROMIUM_EXECUTABLE } : {}),
+  args: ["--enable-unsafe-swiftshader"],
+} });
+
 test("River caustics regression: curved shared edges stay continuous after minutes and hours",async({page},info)=>{
   const errors:string[]=[];page.on("pageerror",e=>errors.push(e.message));page.on("console",m=>{if(m.type()==="error")errors.push(m.text());});
   await page.goto("/tests/smoke/pages/river-caustic-flow.html");await page.waitForFunction(()=>!!window.__riverCausticFlow);

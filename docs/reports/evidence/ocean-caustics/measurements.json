@@ -1,0 +1,90 @@
+{
+  "wet": 0.1749208255795141,
+  "basin": 0,
+  "shadow": 0,
+  "wrap": 0,
+  "wrapNear": 0.00000181012786924839,
+  "pause": 0,
+  "animation": 0,
+  "moved": 0.0002944937410453955,
+  "wrong": 0,
+  "deep": 0.018748471171905597,
+  "absorbed": 0.001176102515310049,
+  "night": 0,
+  "cells": 262144,
+  "draws": [
+    4,
+    4
+  ],
+  "samplers": [
+    9,
+    10
+  ],
+  "times": [
+    0,
+    0,
+    0.25,
+    0.25
+  ],
+  "updates": [
+    1,
+    1,
+    2,
+    2
+  ],
+  "finite": true,
+  "glError": 0,
+  "cycles": [
+    {
+      "disabled": {
+        "bodies": 0,
+        "rivers": 0,
+        "patternBytes": 0,
+        "atlasBytes": 0,
+        "indexBytes": 0
+      },
+      "active": {
+        "bodies": 1,
+        "rivers": 0,
+        "patternBytes": 262144,
+        "atlasBytes": 0,
+        "indexBytes": 0
+      },
+      "textures": 33
+    },
+    {
+      "disabled": {
+        "bodies": 0,
+        "rivers": 0,
+        "patternBytes": 0,
+        "atlasBytes": 0,
+        "indexBytes": 0
+      },
+      "active": {
+        "bodies": 1,
+        "rivers": 0,
+        "patternBytes": 262144,
+        "atlasBytes": 0,
+        "indexBytes": 0
+      },
+      "textures": 33
+    },
+    {
+      "disabled": {
+        "bodies": 0,
+        "rivers": 0,
+        "patternBytes": 0,
+        "atlasBytes": 0,
+        "indexBytes": 0
+      },
+      "active": {
+        "bodies": 1,
+        "rivers": 0,
+        "patternBytes": 262144,
+        "atlasBytes": 0,
+        "indexBytes": 0
+      },
+      "textures": 33
+    }
+  ]
+}

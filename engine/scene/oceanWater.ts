@@ -1,3 +1,4 @@
+import { validateWaterCaustics, type WaterCaustics } from "./waterCaustics";
 /** Ocean authoring contract. Runtime simulation/coverage never lives in a layout. */
 export type OceanEdge = "west" | "east" | "north" | "south";
 export type OceanReflectionMode = "off" | "environment" | "sharedPlanar";
@@ -17,6 +18,7 @@ export interface OceanWaterBody {
   openEdges: OceanEdge[];
   surfaceLevel: number;
   offshoreDepth: number;
+  caustics?: WaterCaustics;
   waves?: { windSpeed?: number; windDirection?: number; fetchKm?: number;
     swellStrength?: number; swellDirection?: number; choppiness?: number; seed?: number };
   appearance?: { shallowColor?: string; deepColor?: string; absorptionDistance?: number;
@@ -74,6 +76,7 @@ export function validateOceanWater(value: unknown): OceanWaterBody {
   for (const key of ["hidden", "locked"] as const) if (v[key] !== undefined) {
     if (typeof v[key] !== "boolean") throw new Error(`Invalid Ocean ${key}`); out[key] = v[key];
   }
+  if (v.caustics !== undefined) out.caustics = validateWaterCaustics(v.caustics);
   if (v.waves !== undefined) {
     const source = record(v.waves), waves: NonNullable<OceanWaterBody["waves"]> = {};
     const ranges = { windSpeed: [1, 30], windDirection: [0, 360], fetchKm: [1, 2000],

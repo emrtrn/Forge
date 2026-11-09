@@ -18,6 +18,7 @@ import {
   SETTLEMENT_TYPES,
   WORLD_SIZES,
   worldExtent,
+  oceanWorldSizeSupported,
   type CoverName,
   type RandomWorldOptions,
   type SettlementType,
@@ -146,8 +147,8 @@ function readStored(): StoredState {
   for (const key of ["forest", "rocks", "fields"] as const) {
     choices.densities[key] = pick(given.densities?.[key], COVER_DENSITY_LEVELS, choices.densities[key]);
   }
-  if (choices.landform === "island") { choices.size = "small"; choices.roads = "between"; choices.rivers = 0; }
-  if (choices.landform === "coast") choices.size = "small";
+  if (choices.landform === "island") { choices.roads = "between"; choices.rivers = 0; }
+  if ((choices.landform === "island" || choices.landform === "coast") && !oceanWorldSizeSupported(choices.size)) choices.size = "small";
   return { choices };
 }
 
@@ -265,9 +266,9 @@ export class RandomWorldPanel {
         <div class="random-world-options">
           ${row("Size", TIPS.size, segmented("size", Object.keys(WORLD_SIZES) as RandomWorldChoices["size"][], LABELS.size))}
           ${row("Landform", TIPS.landform, segmented("landform", LANDFORMS, LABELS.landform))}
-          <div class="random-world-hint" data-island-info hidden>Ada: Small (1 km), Ocean ve kıyı otomatik oluşturulur. Yollar ada içinde kalır. Nehir ağzı desteği sonraki aşamada; göl için yeterli iç alan aranır.</div>
+          <div class="random-world-hint" data-island-info hidden>Ada: Small (1 km) / Medium (2 km), Ocean ve kıyı otomatik oluşturulur. Yollar ada içinde kalır. Nehir ağzı desteği sonraki aşamada; göl için yeterli iç alan aranır.</div>
           <div data-coast-options hidden>${row("Sea Side", "Denizin haritanın hangi tarafında olacağı. Yol çıkışları karada kalır.", segmented("seaSide", SEA_SIDES, LABELS.seaSide))}
-            <div class="random-world-hint">Kıyı: Small (1 km). Denize ulaşan nehirler ortak su kotunda birleşir; yol çıkışları karadan seçilir.</div></div>
+            <div class="random-world-hint">Kıyı: Small (1 km) / Medium (2 km). Denize ulaşan nehirler ortak su kotunda birleşir; yol çıkışları karadan seçilir.</div></div>
           ${row("Mountains", TIPS.mountainHeight, segmented("mountainHeight", MOUNTAIN_HEIGHTS, LABELS.mountainHeight))}
           ${row("Settlements", TIPS.settlements, `<div class="random-world-settlements">
               <div class="random-world-chips" data-settlement-list></div>
@@ -378,11 +379,11 @@ export class RandomWorldPanel {
   /** A choice changed: store it, redraw the controls (unless an input is being typed in) and the preview. */
   private changed(redraw = true): void {
     if (this.state.choices.landform === "island") {
-      this.state.choices.size = "small";
       this.state.choices.roads = "between";
       this.state.choices.rivers = 0;
     }
-    if (this.state.choices.landform === "coast") this.state.choices.size = "small";
+    if ((this.state.choices.landform === "island" || this.state.choices.landform === "coast")
+      && !oceanWorldSizeSupported(this.state.choices.size)) this.state.choices.size = "small";
     this.store();
     if (redraw) this.syncControls();
     else this.syncSettlementButtons();
@@ -408,7 +409,7 @@ export class RandomWorldPanel {
         const active = button.dataset.value === current;
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-pressed", String(active));
-        button.disabled = ((choices.landform === "island" || choices.landform === "coast") && name === "size" && button.dataset.value !== "small")
+        button.disabled = ((choices.landform === "island" || choices.landform === "coast") && name === "size" && !oceanWorldSizeSupported(button.dataset.value))
           || (choices.landform === "island" && name === "roads" && button.dataset.value === "exits");
       }
     }

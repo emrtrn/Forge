@@ -5,6 +5,7 @@ import { resolveOceanInlets } from "./oceanInlets";
 import type { LayoutRiverWater } from "../scene/layout";
 import type { WorldTerrainDocument } from "./terrainLoader";
 import { tileKey, type TerrainTileData } from "./terrainTypes";
+import { createOceanCoverageStorage } from "./oceanCoverageStorage";
 
 /** Snapshots native World Terrain samples before building coverage. Source data
  * is never inserted into streaming residency or replaced with the global map.
@@ -62,9 +63,11 @@ export async function prepareOceanTerrain(document: WorldTerrainDocument, value:
   }
   // A sparse tile definition may share all edge vertices around a hole. Missing
   // cells still invalidate the domain; vertex presence alone isn't sufficient.
-  if (present.some(v => v === 0)) return {
-    body, spacing: def.spacing, nx, nz, heights: Float32Array.from(heights), triangles: new Uint8Array(nx * nz), status: "missing-data", wetFaces: 0,
-  };
+  if (present.some(v => v === 0)) {
+    const storage = createOceanCoverageStorage(nx, nz); storage.heights.fill(NaN);
+    return { storage, minBed: NaN, body, spacing: def.spacing, nx, nz, heights: storage.heights,
+      triangles: new Uint8Array(nx * nz), status: "missing-data", wetFaces: 0 };
+  }
   return prepareOceanCoverage(body, def.spacing, (x, z) => {
     signal?.throwIfAborted();
     const gx = Math.round((x - def.origin[0]) / def.spacing), gz = Math.round((z - def.origin[2]) / def.spacing);

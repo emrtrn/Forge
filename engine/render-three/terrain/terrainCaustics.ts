@@ -3,6 +3,7 @@ import { resolveOceanAppearance, type OceanWaterBody } from "../../scene/oceanWa
 import type { OceanCoverage, OceanInlet } from "../../terrain/oceanCoverage";
 import { createOceanInletUniforms, updateOceanInletUniforms, OCEAN_INLETS_GLSL } from "../ocean/oceanInlets";
 import { WATER_EXTINCTION_GLSL } from "../waterOptics";
+import { OCEAN_COVERAGE_SAMPLE_GLSL } from "../ocean/oceanCoverageTexture";
 import type { LayoutLakeWaterBody } from "../../scene/layout";
 import { resolveLakeAppearance } from "../../scene/waterBody";
 import type { LakeGeometry } from "../../terrain/terrainLakeWater";
@@ -198,6 +199,7 @@ uniform vec3 uOceanCausticColor;
 uniform float uOceanCausticConnectedOffshore;
 ${OCEAN_INLETS_GLSL}
 ${WATER_EXTINCTION_GLSL}
+${OCEAN_COVERAGE_SAMPLE_GLSL}
 // Same packed bits and b-c interpolation as OceanSurface, including a partly
 // submerged face. Refracted sunlight must enter a connected, wet surface too.
 bool forgeOceanCausticWet(vec2 world, vec4 grid, vec4 area, bool offshore) {
@@ -206,14 +208,8 @@ bool forgeOceanCausticWet(vec2 world, vec4 grid, vec4 area, bool offshore) {
   if(!exterior&&oceanInletContains(world)) return false;
   if(exterior&&(!offshore||uOceanCausticConnectedOffshore<.5))return offshore;
   p=clamp(p,vec2(0.),vec2(grid.w,area.x));
-  ivec2 cell=ivec2(min(floor(p),vec2(grid.w,area.x)-1.));vec2 f=p-vec2(cell);
-  vec4 a=texelFetch(uOceanCausticMap,cell,0);
-  float b=texelFetch(uOceanCausticMap,cell+ivec2(1,0),0).r;
-  float c=texelFetch(uOceanCausticMap,cell+ivec2(0,1),0).r;
-  float d=texelFetch(uOceanCausticMap,cell+ivec2(1,1),0).r;
-  bool first=f.x+f.y<=1.;int mask=int(a.g+.5);
-  float bed=first?a.r*(1.-f.x-f.y)+b*f.x+c*f.y:d*(f.x+f.y-1.)+c*(1.-f.x)+b*(1.-f.y);
-  return (first?(mask&1)!=0:(mask&2)!=0)&&bed<area.y;
+  vec2 bedSample=oceanCoverageSample(uOceanCausticMap,ivec2(grid.w,area.x),p);
+  return bedSample.y>.5&&bedSample.x<area.y;
 }
 #endif
 varying vec3 vCausticWorld;

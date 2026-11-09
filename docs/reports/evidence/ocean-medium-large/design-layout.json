@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "date": "2026-11-09",
+  "sourceCommit": "8e2f988f",
+  "results": [
+    {
+      "cells": 262144,
+      "heightShape": [
+        513,
+        513
+      ],
+      "atlasShape": [
+        513,
+        577
+      ],
+      "maskWords": 32768,
+      "maskRows": 64,
+      "atlasBytes": 1184004,
+      "baseGpuBytes": 25813520,
+      "replacementGpuBytes": 51627040,
+      "cpuSteadyTypedBytes": 2307984,
+      "verifiedHeightWords": 263169,
+      "verifiedMaskCells": 262144
+    },
+    {
+      "cells": 1048576,
+      "heightShape": [
+        1025,
+        1025
+      ],
+      "atlasShape": [
+        1025,
+        1153
+      ],
+      "maskWords": 131072,
+      "maskRows": 128,
+      "atlasBytes": 4727300,
+      "baseGpuBytes": 29356816,
+      "replacementGpuBytes": 58713632,
+      "cpuSteadyTypedBytes": 6637712,
+      "verifiedHeightWords": 1050625,
+      "verifiedMaskCells": 1048576
+    },
+    {
+      "cells": 4194304,
+      "heightShape": [
+        2049,
+        2049
+      ],
+      "atlasShape": [
+        2049,
+        2305
+      ],
+      "maskWords": 524288,
+      "maskRows": 256,
+      "atlasBytes": 18891780,
+      "baseGpuBytes": 43521296,
+      "replacementGpuBytes": 87042592,
+      "cpuSteadyTypedBytes": 23947920,
+      "verifiedHeightWords": 4198401,
+      "verifiedMaskCells": 4194304
+    }
+  ],
+  "wordsChecked": 65536,
+  "kind": "JS layout/float32/bit roundtrip only; no GPU or performance acceptance"
+}

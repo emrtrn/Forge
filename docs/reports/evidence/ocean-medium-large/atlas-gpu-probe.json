@@ -1,0 +1,16 @@
+{
+  "samples": 2097152,
+  "mismatches": 0,
+  "uploadCalls": 19,
+  "repeatUploadCalls": 0,
+  "maxUploadBytes": 258300,
+  "cancelled": true,
+  "targetPreserved": true,
+  "glError": 0,
+  "atlasBytes": 4727300,
+  "dimensions": [
+    1025,
+    1153
+  ],
+  "maxTextures": 16
+}

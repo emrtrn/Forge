@@ -108,12 +108,12 @@ Level ve üretilmiş dünya verilerinin silinmesi:
   Test: `randomWorldPreview.test.ts`, `randomWorldRequest.test.ts`, `terrainSplitBake.test.ts`,
   smoke `world-builder-random.spec.ts`.
 - [ ] 6. Rol → model
-- [ ] 7. Ada ve kıyı — ilk Ada dilimi: `island`, yalnız Small (1.024 m,
+- [ ] 7. Ada ve kıyı — ilk Ada dilimi yalnız Small idi: `island` (1.024 m,
   512×512 native hücre). Ocean, kıyı/taban, güvenli yerleşim/yol maskeleri ve
   aynı kıyıyı gösteren önizleme ortak kurucuya bağlıdır. Tek köyün iç erişim
   yolu vardır; Ada'da harita dışına yol çıkmaz. İç göller için kıyıdan uzak
   alan aranır, sığmayan yerleşim/göller notlarda bildirilir.
-  Pencere Island seçilince Small / Between / 0 Rivers seçer ve uyumsuz
+  İlk dilimde pencere Island seçilince Small / Between / 0 Rivers seçer ve uyumsuz
   kontrolleri kapatır; karasal araziye dönünce tekrar açılır. CLI:
   `npm.cmd run world:random -- --out assets/Worlds/MyIsland.level.json --size small --landform island --rivers 0 --roads between --seed 11`.
   Ocean kayıtları `oceanWaters` üzerinden mevcut editör/runtime yolunu kullanır.
@@ -122,6 +122,12 @@ Level ve üretilmiş dünya verilerinin silinmesi:
   Medium/Large devamı [Ocean planı O9-B](../planned/OCEAN_DEVELOPMENT_PLAN.md)
   altında dört dilime ayrıldı; ilk hücre/bellek/hazırlık incelemesi
   [bütçe raporunda](../reports/OCEAN_MEDIUM_LARGE_BUDGET.md) izlenir.
+  Medium/Large ikinci adımının [tek atlas tasarımı](../planned/OCEAN_MEDIUM_LARGE_COVERAGE_DESIGN.md)
+  tamamlandı. [Üçüncü adımın Medium uygulaması](../reports/OCEAN_MEDIUM_WORLD_BUILDER.md)
+  Small ve Medium Island/Coast'u açar: Medium 2.048 m, 1024×1024 native hücredir.
+  Pencere artık geçerli Medium seçimini korur; yalnız Large Small'a döner.
+  Save/Reload/Play ve Coast dar/geniş inlet eşlemesi doğrulandı. Large, Ada'da
+  nehir ve tam hedef donanım GPU/bellek kabulü sonraki işlerdir.
   İkinci dilim: `coast` ile Small kıyı, West/East/North/South deniz yönü,
   karada kalan yol çıkışları ve kıyı kanalında Ocean'a ulaşan nehirler eklendi.
   `--landform coast --size small --sea-side west --rivers 1 --seed 11` aynı
@@ -131,6 +137,16 @@ Level ve üretilmiş dünya verilerinin silinmesi:
   gizlenen veya silinen suyun bıraktığı denize bağlı alan Ocean'a döner.
   Bu, sonsuz anakara üretimi veya akışkan simülasyonu değildir. Ada'da nehir
   seçeneği bu ikinci dilimde de kapalıdır. Ayrıntılar: [Kıyı raporu](../reports/WORLD_BUILDER_COAST.md).
+
+## Takip işi: Coast alan payı, kumsal ve Island biçimi
+
+9 Kasım 2026. [Ayrıntılı plan](../planned/WORLD_BUILDER_SHORELINE_PLAN.md)
+kaydedildi; uygulama başlamadı. İlk teslim Coast için %70 iç kara / %30 kuru
+kumsal+deniz dağılımı ve 2–3 kat geniş kuru kumsaldır. Sonraki teslimler
+Island/Coast sığ kıyı profili ve toplam kara oranını koruyarak haritaya daha
+iyi yayılan, Roll Dice ile ana biçimi de değişen girintili Island kıyılarıdır.
+Small/Medium desteği ve nehir ağzı eşlemesi korunur; Large, Ada'da nehir ve
+kıyıya vurup kırılan dalgalar bu plana kendiliğinden dahil olmaz.
 
 ## Takip işi: yerleşim yollarında araç geçişi
 

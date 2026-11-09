@@ -7788,6 +7788,7 @@ export class SceneApp {
   private rebuildOceans(force = false): void {
     if (!this.layout?.oceanWaters?.length && !this.oceans) return;
     this.oceans ??= new OceanWaterController({ scene: this.scene, renderer: this.renderer,
+      camera: () => this.camera,
       reflections: this.waterReflections, reflectionQuality: lakeQuality(this.editorQuality).reflectionQuality,
       causticsAllowed: lakeQuality(this.editorQuality).causticsAllowed,
       environmentProbes: () => this.eligibleProbeBakes(),

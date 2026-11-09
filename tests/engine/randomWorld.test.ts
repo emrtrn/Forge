@@ -73,10 +73,10 @@ function waterGaps(world: WorldBrief): Array<{ id: string; gap: number }> {
 
 export async function registerRandomWorldTests(check: Check, checkSlowAsync: CheckAsync): Promise<void> {
   check("random world coast: four sea directions keep settlements and exits dry; rivers drain to sea", () => {
-    for (const seaSide of SEA_SIDES) {
+    for (const size of ["small", "medium"] as const) for (const seaSide of SEA_SIDES) {
       let mouths = 0;
       for (const seed of [4, 11, 29]) {
-        const options = { ...OPTIONS, landform: "coast" as const, seaSide, seed, rivers: 1, settlements: [{ type: "hamlet" as const }] };
+        const options = { ...OPTIONS, size, landform: "coast" as const, seaSide, seed, rivers: 1, settlements: [{ type: "hamlet" as const }] };
         const result = randomWorldBrief(options);
         const normalized = normalizeWorldBrief(result.brief);
         assert.deepEqual(normalized.issues, []);
@@ -221,8 +221,36 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
     shifted.ocean!.surfaceElevation = 90;
     const shiftedGround = createBriefTerrain(shifted);
     assert.equal(shiftedGround.ocean!.surfaceLevel, 15, "brief elevation is converted once");
-    const tooBig = structuredClone(world); tooBig.terrain.tileQuads = 128; tooBig.terrain.spacing = 1;
+    const tooBig = structuredClone(world); tooBig.terrain.tileQuads = 128; tooBig.terrain.spacing = .5;
     assert.throws(() => buildWorldFromBrief({ brief: tooBig, levelPath: "assets/trial/TooBig.level.json", profile, cover, assetIdForFile: () => null }), /preparation grid limit/);
+  });
+
+  await checkSlowAsync("random world Medium Ocean: real Island/Coast builds retain native coverage and live river widths", async () => {
+    for (const landform of ["island", "coast"] as const) {
+      const world = brief({ size: "medium", landform, seed: 11, rivers: landform === "coast" ? 1 : 0,
+        cover: "forest", settlements: [{ type: "hamlet" }] });
+      const profile = normalizeRegionProfile(JSON.parse(readFileSync(`public/${world.regionProfile}`, "utf8"))).profile;
+      const cover = normalizeGroundCover(JSON.parse(readFileSync(`public/${world.cover!.file}`, "utf8"))).cover!;
+      const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as { assets: Array<{ id: string; path: string }> };
+      const byPath = new Map(manifest.assets.map(asset => [asset.path, asset.id]));
+      const built = buildWorldFromBrief({ brief: world, levelPath: `assets/trial/Medium-${landform}.level.json`, profile, cover, assetIdForFile: file => byPath.get(file) ?? null });
+      const sea = built.layout.oceanWaters![0]!, doc = { def: built.def, tiles: built.tiles };
+      const coverage = await prepareOceanTerrain(doc, sea, undefined, undefined, undefined, built.layout.riverWaters);
+      assert.equal(coverage.status, "ready"); assert.equal(coverage.nx, 1024); assert.equal(coverage.nz, 1024);
+      assert.equal(coverage.storage.data.byteLength, 4727300);
+      assert.equal(sampleOceanCoverage(coverage, -worldExtent("medium"), 0).status, "wet");
+      if (landform === "coast") {
+        assert.equal(sampleOceanCoverage(coverage, worldExtent("medium"), 0).status, "dry");
+        assert.equal(built.layout.riverWaters?.length, 1, "the Medium fixture has a real sea outlet");
+        for (const widthScale of [.5, 1.5]) {
+          const rivers = built.layout.riverWaters!.map(r => ({ ...r, widthScale }));
+          const inlet = resolveOceanInlets(built.def, sea, rivers)[0]!;
+          assert.equal(inlet.width, resolveOceanInlets(built.def, sea, built.layout.riverWaters)[0]!.width * widthScale);
+        }
+      } else assert.equal(sampleOceanCoverage(coverage, 0, 0).status, "dry");
+      assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(built.layout)), "medium").oceanWaters, [sea]);
+      assert.deepEqual(validateSavePayload({ layout: built.layout }).layout.oceanWaters, [sea]);
+    }
   });
 
   check("random world island: random lakes stay inland or report that no lake fits", () => {
@@ -293,8 +321,8 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
   check("random world: every landform and size gives a valid brief; the same seed the same brief", () => {
     for (const landform of LANDFORMS) {
       for (const size of ["small", "medium", "large"] as const) {
-        if ((landform === "island" || landform === "coast") && size !== "small") {
-          assert.throws(() => brief({ landform, size }), /Small worlds only/);
+        if ((landform === "island" || landform === "coast") && size === "large") {
+          assert.throws(() => brief({ landform, size }), /Ocean terrain budget/);
           continue;
         }
         const world = brief({ landform, size });

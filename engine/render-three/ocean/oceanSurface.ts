@@ -1,15 +1,16 @@
-import { Box3, Color, DataTexture, FloatType, GLSL3, Matrix4, Mesh, NearestFilter, NoBlending, RGBAFormat,
-  ShaderMaterial, UniformsLib, UniformsUtils, Vector2, Vector3, Vector4, type Camera, type WebGLRenderer } from "three";
+import { Box3, Color, type DataTexture, GLSL3, Matrix4, Mesh, NoBlending,
+  ShaderMaterial, UniformsLib, UniformsUtils, Vector2, Vector3, Vector4, type Camera, type Scene, type WebGLRenderer } from "three";
 import { resolveOceanAppearance, type OceanWaterBody } from "../../scene/oceanWater";
 import { OCEAN_OFFSHORE_TRANSITION, type OceanCoverage, type OceanInlet } from "../../terrain/oceanCoverage";
 import { OceanFft } from "./oceanFft";
-import { createOceanGrid } from "./oceanGrid";
+import { createOceanGrid, oceanGridLevels } from "./oceanGrid";
 import { WATER_OPTICS_GLSL } from "../waterOptics";
 import type { WaterEnvironmentProbes } from "../waterEnvironment";
 import { createOceanOpticsUniforms, updateOceanOptics, OCEAN_NORMAL_GLSL, OCEAN_OPTICS_GLSL } from "./oceanOptics";
 import type { PlanarReflectionBinding, PlanarReflectionSource } from "../planarReflectionSource";
 import { createOceanReflectionUniforms, OCEAN_PLANAR_GLSL } from "./oceanReflection";
 import { createOceanInletUniforms, updateOceanInletUniforms, OCEAN_INLETS_GLSL } from "./oceanInlets";
+import { createOceanCoverageTexture, OCEAN_COVERAGE_SAMPLE_GLSL } from "./oceanCoverageTexture";
 
 const COVERAGE = /* glsl */ `
 uniform sampler2D coverageMap;
@@ -19,19 +20,14 @@ uniform float seaLevel;
 uniform float offshoreDepth;
 uniform float connectedOffshore;
 ${OCEAN_INLETS_GLSL}
+${OCEAN_COVERAGE_SAMPLE_GLSL}
 // (depth, wet). Triangles and interpolated bed share the terrain b-c diagonal.
 vec2 waterCoverage(vec2 world){
   vec2 g=(world-domain.xy)/domain.z;
   float outside=length(max(max(-g,g-cells),vec2(0.)))*domain.z;
   g=clamp(g,vec2(0.),cells);
-  ivec2 cell=ivec2(min(floor(g),cells-1.));vec2 f=g-vec2(cell);
-  vec4 a=texelFetch(coverageMap,cell,0);
-  float b=texelFetch(coverageMap,cell+ivec2(1,0),0).r;
-  float c=texelFetch(coverageMap,cell+ivec2(0,1),0).r;
-  float d=texelFetch(coverageMap,cell+ivec2(1,1),0).r;
-  bool first=f.x+f.y<=1.; int mask=int(a.g+.5);
-  bool connected=first?(mask&1)!=0:(mask&2)!=0;
-  float bed=first?a.r*(1.-f.x-f.y)+b*f.x+c*f.y:d*(f.x+f.y-1.)+c*(1.-f.x)+b*(1.-f.y);
+  vec2 bedSample=oceanCoverageSample(coverageMap,ivec2(cells),g);
+  float bed=bedSample.x;bool connected=bedSample.y>.5;
   if(outside>0.) {
     if(connectedOffshore>.5&&(!connected||bed>=seaLevel)) return vec2(0.);
     return vec2(mix(max(0.,seaLevel-bed),offshoreDepth,smoothstep(0.,${OCEAN_OFFSHORE_TRANSITION.toFixed(1)},outside)),1.);
@@ -195,14 +191,10 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
   readonly reflectionBounds = new Box3();
   private readonly depthBound: number;
   private readonly waveOverrides = new Map<"normal" | "depth", Mesh<ReturnType<typeof createOceanGrid>, ShaderMaterial>>();
-  constructor(readonly coverage: OceanCoverage, readonly simulation: OceanFft, probes?: WaterEnvironmentProbes) {
+  constructor(readonly coverage: OceanCoverage, readonly simulation: OceanFft, probes?: WaterEnvironmentProbes, grid?: ReturnType<typeof createOceanGrid>) {
     if (coverage.status !== "ready") throw new Error("Cannot publish Ocean from missing terrain");
-    const { nx, nz, heights, triangles, body } = coverage;
-    const packed = new Float32Array(heights.length * 4);
-    heights.forEach((h, i) => { packed[i * 4] = h; const x = i % (nx + 1), z = Math.floor(i / (nx + 1));
-      packed[i * 4 + 1] = x < nx && z < nz ? triangles[z * nx + x]! : 0; });
-    const texture = new DataTexture(packed, nx + 1, nz + 1, RGBAFormat, FloatType);
-    texture.minFilter = texture.magFilter = NearestFilter; texture.needsUpdate = true;
+    const { nx, nz, body } = coverage;
+    const texture = createOceanCoverageTexture(coverage.storage);
     const a = resolveOceanAppearance(body);
     const material = new ShaderMaterial({ glslVersion: GLSL3, vertexShader: VERTEX, fragmentShader: FRAGMENT,
       transparent: true, depthWrite: false, fog: true, lights: true, uniforms: {
@@ -218,11 +210,10 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
         shallowColor: { value: new Color(a.shallowColor) }, deepColor: { value: new Color(a.deepColor) },
         absorptionDistance: { value: a.absorptionDistance }, roughness: { value: a.roughness }, foamStrength: { value: a.foamStrength },
       } });
-    super(createOceanGrid(), material); this.coverageTexture = texture;
-    let maxDepth = body.offshoreDepth;
-    for (const height of heights) maxDepth = Math.max(maxDepth, body.surfaceLevel - height);
+    super(grid ?? createOceanGrid(64, oceanGridLevels(body)), material); this.coverageTexture = texture;
+    const maxDepth = Math.max(body.offshoreDepth, body.surfaceLevel - coverage.minBed);
     this.depthBound = Math.max(1, maxDepth * .7);
-    this.geometry.computeBoundingBox(); this.syncReflectionBounds(); this.applyAppearance(body);
+    this.syncReflectionBounds(); this.applyAppearance(body);
     this.name = `Ocean:${body.id}`; this.frustumCulled = false; this.renderOrder = 1; this.visible = !body.hidden;
     this.receiveShadow = true; this.layers.enable(31);
     this.userData.waterSceneTransmission = this.userData.aoWaterSurface = true;
@@ -273,7 +264,7 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
     u.planarReflectionEnabled!.value = binding && this.source?.hasCapture ? 1 : 0;
   }
   /** AO/DoF draw the same displaced, connected surface without stepping FFT. */
-  renderWaveOverride(renderer: WebGLRenderer, camera: Camera, kind: "normal" | "depth"): void {
+  private waveOverride(kind: "normal" | "depth") {
     let proxy = this.waveOverrides.get(kind);
     if (!proxy) {
       const material = new ShaderMaterial({ glslVersion: GLSL3, vertexShader: VERTEX, fragmentShader: OVERRIDE_FRAGMENT(kind),
@@ -281,6 +272,14 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
       proxy = new Mesh(this.geometry, material); proxy.frustumCulled = false;
       this.waveOverrides.set(kind, proxy);
     }
+    return proxy;
+  }
+  async warmup(renderer: WebGLRenderer, camera: Camera, scene: Scene): Promise<void> {
+    await renderer.compileAsync(this, camera, scene);
+    for (const kind of ["normal", "depth"] as const) await renderer.compileAsync(this.waveOverride(kind), camera, scene);
+  }
+  renderWaveOverride(renderer: WebGLRenderer, camera: Camera, kind: "normal" | "depth"): void {
+    const proxy = this.waveOverride(kind);
     proxy.layers.mask = this.layers.mask;
     const autoClear = renderer.autoClear;
     try { renderer.autoClear = false; renderer.render(proxy, camera); }

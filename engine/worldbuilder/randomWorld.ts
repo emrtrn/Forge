@@ -18,6 +18,7 @@ import { DEFAULT_RELIEF_CLEAR, type BriefModel, type BriefRelief, type CoverDens
 import { islandOcean, type SeaSide } from "./island";
 import type { RoadClass } from "./vocabulary";
 import { randomWater } from "./randomWater";
+import { OCEAN_LIMITS } from "../scene/oceanBudget";
 
 /** Tile resolution per size; every size has 8 × 8 tiles 2 m apart (1, 2, 4 km). */
 export const WORLD_SIZES = { small: 64, medium: 128, large: 256 } as const;
@@ -127,8 +128,15 @@ export function worldExtent(size: WorldSize): number {
   return WORLD_TILES * WORLD_SIZES[size] * WORLD_SPACING;
 }
 
+/** The UI, request boundary and generator share the native Ocean cell cap. */
+export function oceanWorldSizeSupported(size: unknown): size is WorldSize {
+  if (typeof size !== "string" || !Object.hasOwn(WORLD_SIZES, size)) return false;
+  const axis = WORLD_TILES * WORLD_SIZES[size as WorldSize];
+  return axis <= OCEAN_LIMITS.axisCells && axis * axis <= OCEAN_LIMITS.cells;
+}
+
 export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
-  if ((options.landform === "island" || options.landform === "coast") && options.size !== "small") throw new Error("Island/Coast currently supports Small worlds only (Ocean terrain budget)");
+  if ((options.landform === "island" || options.landform === "coast") && !oceanWorldSizeSupported(options.size)) throw new Error("Island/Coast supports Small/Medium worlds only (Ocean terrain budget)");
   if (options.landform === "island" && (options.rivers ?? 0) > 0) throw new Error("Island rivers require the river-mouth integration; choose 0 rivers");
   const notes: string[] = [];
   const next = random(options.seed);

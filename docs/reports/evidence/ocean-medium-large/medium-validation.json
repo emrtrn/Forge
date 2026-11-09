@@ -1,0 +1,30 @@
+{
+  "date": "2026-11-09",
+  "productionSizes": ["small", "medium"],
+  "largeEnabled": false,
+  "typescript": { "main": "passed", "smoke": "passed", "oceanBudgetTool": "passed" },
+  "buildVerifyGates": "passed",
+  "finalEngine": { "command": "npm.cmd run test:engine:slow", "checksPassed": 2606, "seconds": 205.0 },
+  "strictDist": "passed",
+  "worldData": { "status": "passed", "levelsScanned": 12, "levelsWithWorldData": 6 },
+  "browser": {
+    "mode": "headed Chromium",
+    "shaderGroup": { "scenariosPassed": 4, "seconds": 36.6 },
+    "mediumAuthoringFinalOuterRing": { "scenariosPassed": 2, "minutes": 3.0 },
+    "atlasFinalTargetPreservation": "passed",
+    "smallManualCreateSavePlay": "passed"
+  },
+  "evidence": {
+    "gpuProbe": "atlas-gpu-probe.json",
+    "cpuAndFormatAccounting": "budget-atlas-medium.json",
+    "screenshots": "../../images/ocean-medium-atlas/"
+  },
+  "limits": [
+    "No formal full-water GPU or transient-memory acceptance",
+    "Measured Node CPU slice maximum 4.9 ms exceeds the 4 ms design target",
+    "Real GPU context restore and repeated resource-growth acceptance remain open",
+    "Finite Ocean horizon and River/Ocean optical boundary remain visible"
+  ],
+  "authoredSceneModifiedByThisWork": false,
+  "commitOrPush": false
+}

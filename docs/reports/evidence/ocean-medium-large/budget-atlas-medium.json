@@ -1,0 +1,3224 @@
+{
+  "schema": 2,
+  "representation": "R32F atlas, eight cells per flag word",
+  "measuredAtUtc": "2026-11-09T20:23:26.430Z",
+  "host": {
+    "platform": "win32",
+    "release": "10.0.26200",
+    "node": "v24.19.0",
+    "cpu": "11th Gen Intel(R) Core(TM) i5-11400F @ 2.60GHz",
+    "logicalCpus": 12
+  },
+  "samples": 5,
+  "warmups": 2,
+  "protocol": {
+    "seed": 11,
+    "landforms": [
+      "island",
+      "coast-west"
+    ],
+    "settlements": 0,
+    "rivers": 0,
+    "lakes": 0,
+    "heightFormat": "f32",
+    "io": "local filesystem reads after fixture creation; OS cache not flushed; not cold I/O",
+    "scheduler": "CooperativeWork 2 ms target, explicit Node setImmediate task yields; not browser or default Node timer latency",
+    "timing": "preparation includes atlas packing; packMs is now cooperative grid preparation + short surface constructor, NOT historic RGBA packing; fixture synthesis, GC and fingerprints excluded; onSlice memory instrumentation included in wall time",
+    "memory": "exact typed-array/texture-format accounting plus process checkpoints; checkpoints are not continuous peaks; driver/JS overhead excluded from format accounting",
+    "graphics": "no WebGL context; texture bytes are format accounting, not measured GPU time/VRAM; no planar/snapshot/caustics/terrain-renderer budget included"
+  },
+  "cases": [
+    {
+      "landform": "island",
+      "size": "small",
+      "extent": 1024,
+      "spacing": 2,
+      "tileQuads": 64,
+      "tiles": 64,
+      "layers": 6,
+      "productionAllowed": true,
+      "baselineReadsBeforeRejection": 0,
+      "fixtureMs": 726.6827999999999,
+      "encodedBytes": 3246848,
+      "fingerprint": {
+        "status": "ready",
+        "wetFaces": 299394,
+        "depthChecksum": 1188788.5182607067,
+        "maskChecksum": 449079
+      },
+      "inventory": {
+        "cells": 262144,
+        "vertices": 263169,
+        "decodedTile": 50700,
+        "decodedAllTiles": 3244800,
+        "snapshotF64": 2105352,
+        "presentCells": 262144,
+        "coverageHeightsF32": 1052676,
+        "connectedTrianglesU8": 262144,
+        "floodQueueI32": 2097152,
+        "floodVisitedU8": 524288,
+        "preparationTypedBuffers": 6435084,
+        "coverageCpu": 1446148,
+        "atlasCpu": 1184004,
+        "gridCpuAndGpuEach": 861836,
+        "steadyOceanCpuTyped": 2307984,
+        "preparationAndPackingAllocationWindow": 7296920,
+        "fourReadGuardEstimate": 405600,
+        "fourReadDecodedAndEncodedPayload": 405728,
+        "coverageGpuFormatBytes": 1184004,
+        "fftGpuFormatBytes": 23767680,
+        "baseOceanGpuFormatBytes": 25813520,
+        "replacementBaseGpuFormatBytes": 51627040,
+        "replacementSteadyCpuTyped": 4615968
+      },
+      "paths": [
+        {
+          "residency": "resident",
+          "runs": [
+            {
+              "prepareMs": 88.67769999999973,
+              "packMs": 6.8629000000000815,
+              "prepareCpuMs": 109,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 473200,
+              "checkpointHeapDelta": 4103184,
+              "checkpointRssDelta": 2220032,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.047599999999874854,
+                  "p50": 0.08770000000004075,
+                  "p95": 1.046100000000024,
+                  "max": 1.1315000000001874,
+                  "sum": 12.424500000000535
+                },
+                "ocean-coverage": {
+                  "count": 32,
+                  "min": 1.3329000000003361,
+                  "p50": 2.0098000000002685,
+                  "p95": 2.1574000000000524,
+                  "max": 2.225300000000061,
+                  "sum": 64.24079999999981
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.6147000000000844,
+                  "p50": 2.0007000000000517,
+                  "p95": 2.05600000000004,
+                  "max": 2.05600000000004,
+                  "sum": 5.671400000000176
+                }
+              }
+            },
+            {
+              "prepareMs": 83.39989999999989,
+              "packMs": 6.781100000000151,
+              "prepareCpuMs": 125,
+              "packCpuMs": 15,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 473200,
+              "checkpointHeapDelta": 4030336,
+              "checkpointRssDelta": 471040,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04790000000002692,
+                  "p50": 0.16589999999996508,
+                  "p95": 0.9503999999997177,
+                  "max": 1.3170999999997548,
+                  "sum": 15.213699999998425
+                },
+                "ocean-coverage": {
+                  "count": 29,
+                  "min": 0.01890000000003056,
+                  "p50": 2.014100000000326,
+                  "p95": 2.0317999999997483,
+                  "max": 2.046299999999974,
+                  "sum": 56.444599999999355
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.7153000000002976,
+                  "p50": 2.0005999999998494,
+                  "p95": 2.0109999999999673,
+                  "max": 2.0109999999999673,
+                  "sum": 4.726900000000114
+                }
+              }
+            },
+            {
+              "prepareMs": 105.32330000000002,
+              "packMs": 7.248199999999997,
+              "prepareCpuMs": 173,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 4178792,
+              "checkpointRssDelta": 2580480,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04360000000042419,
+                  "p50": 0.1022000000002663,
+                  "p95": 0.6435999999998785,
+                  "max": 0.8072999999999411,
+                  "sum": 9.528199999997923
+                },
+                "ocean-coverage": {
+                  "count": 41,
+                  "min": 0.1991000000002714,
+                  "p50": 2.0195999999996275,
+                  "p95": 2.1996000000003733,
+                  "max": 2.510899999999765,
+                  "sum": 82.09069999999929
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.8689999999996871,
+                  "p50": 2.003700000000208,
+                  "p95": 2.079899999999725,
+                  "max": 2.079899999999725,
+                  "sum": 5.95259999999962
+                }
+              }
+            },
+            {
+              "prepareMs": 64.95609999999988,
+              "packMs": 7.665300000000116,
+              "prepareCpuMs": 78,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 4140104,
+              "checkpointRssDelta": 794624,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.049099999999725696,
+                  "p50": 0.10300000000006548,
+                  "p95": 1.0960000000000036,
+                  "max": 1.2851999999998043,
+                  "sum": 11.561899999999241
+                },
+                "ocean-coverage": {
+                  "count": 23,
+                  "min": 0.22080000000005384,
+                  "p50": 2.007999999999811,
+                  "p95": 2.0235999999999876,
+                  "max": 2.0455000000001746,
+                  "sum": 44.471100000000206
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.9691000000002532,
+                  "p50": 2.0095000000001164,
+                  "p95": 2.0120999999999185,
+                  "max": 2.0120999999999185,
+                  "sum": 5.990700000000288
+                }
+              }
+            },
+            {
+              "prepareMs": 71.28780000000006,
+              "packMs": 6.540700000000015,
+              "prepareCpuMs": 78,
+              "packCpuMs": 31,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 4193488,
+              "checkpointRssDelta": 188416,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.07660000000032596,
+                  "p50": 0.15679999999974825,
+                  "p95": 1.1006999999999607,
+                  "max": 1.1838999999999942,
+                  "sum": 13.770500000000538
+                },
+                "ocean-coverage": {
+                  "count": 24,
+                  "min": 0.8269000000000233,
+                  "p50": 2.013500000000022,
+                  "p95": 2.074500000000171,
+                  "max": 2.132299999999759,
+                  "sum": 47.30699999999979
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.1099000000003798,
+                  "p50": 2.0054999999997563,
+                  "p95": 2.0154999999999745,
+                  "max": 2.0154999999999745,
+                  "sum": 5.130900000000111
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 64.95609999999988,
+            "p50": 83.39989999999989,
+            "p95": 105.32330000000002,
+            "max": 105.32330000000002
+          },
+          "packMs": {
+            "count": 5,
+            "min": 6.540700000000015,
+            "p50": 6.8629000000000815,
+            "p95": 7.665300000000116,
+            "max": 7.665300000000116
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 78,
+            "p50": 109,
+            "p95": 173,
+            "max": 173
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 31,
+            "max": 31
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.0455000000001746,
+            "p50": 2.132299999999759,
+            "p95": 2.510899999999765,
+            "max": 2.510899999999765
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 354900,
+            "p50": 354900,
+            "p95": 473200,
+            "max": 473200
+          }
+        },
+        {
+          "residency": "disk-four-at-a-time",
+          "runs": [
+            {
+              "prepareMs": 112.61160000000018,
+              "packMs": 6.587699999999586,
+              "prepareCpuMs": 155,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 8.145599999998467,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 3866560,
+              "checkpointRssDelta": 491520,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.047700000000077125,
+                  "p50": 0.0785000000000764,
+                  "p95": 0.6608000000001084,
+                  "max": 0.8611000000000786,
+                  "sum": 8.027699999997822
+                },
+                "ocean-coverage": {
+                  "count": 29,
+                  "min": 0.5381999999999607,
+                  "p50": 2.025100000000293,
+                  "p95": 2.1708999999996195,
+                  "max": 2.355800000000272,
+                  "sum": 57.93700000000035
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.1931000000004133,
+                  "p50": 2.0007000000000517,
+                  "p95": 2.0104999999998654,
+                  "max": 2.0104999999998654,
+                  "sum": 5.20430000000033
+                }
+              }
+            },
+            {
+              "prepareMs": 144.36130000000003,
+              "packMs": 5.743399999999838,
+              "prepareCpuMs": 235,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 10.08809999999903,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 4285144,
+              "checkpointRssDelta": 1638400,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04460000000017317,
+                  "p50": 0.09679999999980282,
+                  "p95": 0.9940000000001419,
+                  "max": 1.1779999999998836,
+                  "sum": 10.90060000000176
+                },
+                "ocean-coverage": {
+                  "count": 38,
+                  "min": 0.7746999999999389,
+                  "p50": 2.0217999999999847,
+                  "p95": 2.1977999999999156,
+                  "max": 2.2532999999998538,
+                  "sum": 76.45319999999765
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.6725000000001273,
+                  "p50": 2.0000999999997475,
+                  "p95": 2.009100000000217,
+                  "max": 2.009100000000217,
+                  "sum": 4.681700000000092
+                }
+              }
+            },
+            {
+              "prepareMs": 116.9681999999998,
+              "packMs": 11.27029999999968,
+              "prepareCpuMs": 125,
+              "packCpuMs": 32,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 8.237199999997756,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 4261512,
+              "checkpointRssDelta": 860160,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04739999999992506,
+                  "p50": 0.08410000000003492,
+                  "p95": 0.6750000000001819,
+                  "max": 1.0214000000000851,
+                  "sum": 8.468900000001213
+                },
+                "ocean-coverage": {
+                  "count": 29,
+                  "min": 1.5270000000000437,
+                  "p50": 2.0195000000003347,
+                  "p95": 2.1028000000001157,
+                  "max": 2.2978000000002794,
+                  "sum": 58.50079999999889
+                },
+                "ocean-grid": {
+                  "count": 4,
+                  "min": 1.7583999999997104,
+                  "p50": 2.0016999999998006,
+                  "p95": 2.0624000000002525,
+                  "max": 2.0624000000002525,
+                  "sum": 7.829400000000078
+                }
+              }
+            },
+            {
+              "prepareMs": 118.10170000000016,
+              "packMs": 8.871799999999894,
+              "prepareCpuMs": 203,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 8.399600000000191,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 4142160,
+              "checkpointRssDelta": 622592,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04510000000027503,
+                  "p50": 0.08109999999987849,
+                  "p95": 0.5793999999996231,
+                  "max": 0.8955999999998312,
+                  "sum": 8.228500000001532
+                },
+                "ocean-coverage": {
+                  "count": 30,
+                  "min": 1.5268999999998414,
+                  "p50": 2.010200000000168,
+                  "p95": 2.2871000000000095,
+                  "max": 2.296100000000024,
+                  "sum": 60.672599999999875
+                },
+                "ocean-grid": {
+                  "count": 4,
+                  "min": 0.7038000000002285,
+                  "p50": 2.001299999999901,
+                  "p95": 2.0075000000001637,
+                  "max": 2.0075000000001637,
+                  "sum": 6.716600000000199
+                }
+              }
+            },
+            {
+              "prepareMs": 152.2770999999998,
+              "packMs": 7.747599999999693,
+              "prepareCpuMs": 203,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 7.649599999999737,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 4402520,
+              "checkpointRssDelta": 2351104,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.041899999999714055,
+                  "p50": 0.07999999999992724,
+                  "p95": 0.5985999999998057,
+                  "max": 0.7143000000000939,
+                  "sum": 7.760900000001584
+                },
+                "ocean-coverage": {
+                  "count": 46,
+                  "min": 0.7316999999998188,
+                  "p50": 2.0230000000001382,
+                  "p95": 2.2307999999998174,
+                  "max": 2.3510000000001128,
+                  "sum": 92.78910000000133
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.759099999999762,
+                  "p50": 2.0063999999997577,
+                  "p95": 2.012699999999768,
+                  "max": 2.012699999999768,
+                  "sum": 5.778199999999288
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 112.61160000000018,
+            "p50": 118.10170000000016,
+            "p95": 152.2770999999998,
+            "max": 152.2770999999998
+          },
+          "packMs": {
+            "count": 5,
+            "min": 5.743399999999838,
+            "p50": 7.747599999999693,
+            "p95": 11.27029999999968,
+            "max": 11.27029999999968
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 125,
+            "p50": 203,
+            "p95": 235,
+            "max": 235
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 32,
+            "max": 32
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.2532999999998538,
+            "p50": 2.2978000000002794,
+            "p95": 2.355800000000272,
+            "max": 2.355800000000272
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 354900,
+            "p50": 354900,
+            "p95": 354900,
+            "max": 354900
+          }
+        }
+      ]
+    },
+    {
+      "landform": "island",
+      "size": "medium",
+      "extent": 2048,
+      "spacing": 2,
+      "tileQuads": 128,
+      "tiles": 64,
+      "layers": 6,
+      "productionAllowed": true,
+      "baselineReadsBeforeRejection": 0,
+      "fixtureMs": 2478.1350999999995,
+      "encodedBytes": 12782336,
+      "fingerprint": {
+        "status": "ready",
+        "wetFaces": 1194856,
+        "depthChecksum": 9068359.009503571,
+        "maskChecksum": 1792260
+      },
+      "inventory": {
+        "cells": 1048576,
+        "vertices": 1050625,
+        "decodedTile": 199692,
+        "decodedAllTiles": 12780288,
+        "snapshotF64": 8405000,
+        "presentCells": 1048576,
+        "coverageHeightsF32": 4202500,
+        "connectedTrianglesU8": 1048576,
+        "floodQueueI32": 8388608,
+        "floodVisitedU8": 2097152,
+        "preparationTypedBuffers": 25715212,
+        "coverageCpu": 5775876,
+        "atlasCpu": 4727300,
+        "gridCpuAndGpuEach": 983200,
+        "steadyOceanCpuTyped": 6759076,
+        "preparationAndPackingAllocationWindow": 26698412,
+        "fourReadGuardEstimate": 1597536,
+        "fourReadDecodedAndEncodedPayload": 1597664,
+        "coverageGpuFormatBytes": 4727300,
+        "fftGpuFormatBytes": 23767680,
+        "baseOceanGpuFormatBytes": 29478180,
+        "replacementBaseGpuFormatBytes": 58956360,
+        "replacementSteadyCpuTyped": 13518152
+      },
+      "paths": [
+        {
+          "residency": "resident",
+          "runs": [
+            {
+              "prepareMs": 298.10719999999947,
+              "packMs": 5.661600000000362,
+              "prepareCpuMs": 312,
+              "packCpuMs": 16,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 983200,
+              "checkpointHeapDelta": 8350760,
+              "checkpointRssDelta": 655360,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.18830000000070868,
+                  "p50": 0.3088999999999942,
+                  "p95": 0.7519000000002052,
+                  "max": 2.0038000000004104,
+                  "sum": 25.619200000001
+                },
+                "ocean-coverage": {
+                  "count": 116,
+                  "min": 1.2893999999996595,
+                  "p50": 2.014900000000125,
+                  "p95": 2.141700000000128,
+                  "max": 2.4094999999997526,
+                  "sum": 235.24069999999665
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.7170999999998457,
+                  "p50": 2.0001000000002023,
+                  "p95": 2.008500000000822,
+                  "max": 2.008500000000822,
+                  "sum": 4.72570000000087
+                }
+              }
+            },
+            {
+              "prepareMs": 356.47350000000006,
+              "packMs": 6.337900000000445,
+              "prepareCpuMs": 375,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 984224,
+              "checkpointHeapDelta": 8496520,
+              "checkpointRssDelta": 356352,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.1555000000007567,
+                  "p50": 0.2393000000001848,
+                  "p95": 0.7234999999991487,
+                  "max": 2.0102999999999156,
+                  "sum": 22.486399999997047
+                },
+                "ocean-coverage": {
+                  "count": 146,
+                  "min": 0.27999999999974534,
+                  "p50": 2.0239999999994325,
+                  "p95": 2.1370999999999185,
+                  "max": 2.3572000000003754,
+                  "sum": 295.9437999999982
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.1759999999994761,
+                  "p50": 2.0023999999993976,
+                  "p95": 2.0064000000002125,
+                  "max": 2.0064000000002125,
+                  "sum": 5.184799999999086
+                }
+              }
+            },
+            {
+              "prepareMs": 293.28669999999966,
+              "packMs": 6.982299999999668,
+              "prepareCpuMs": 297,
+              "packCpuMs": 15,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 9387176,
+              "checkpointHeapDelta": 8331504,
+              "checkpointRssDelta": 1232896,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15529999999944266,
+                  "p50": 0.30569999999988795,
+                  "p95": 0.6956000000000131,
+                  "max": 2.0070999999998094,
+                  "sum": 23.748900000001413
+                },
+                "ocean-coverage": {
+                  "count": 117,
+                  "min": 1.3079999999999927,
+                  "p50": 2.0186000000003332,
+                  "p95": 2.1156999999993786,
+                  "max": 3.3950999999997293,
+                  "sum": 238.1917000000085
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.5958999999993466,
+                  "p50": 2.001900000000205,
+                  "p95": 2.014100000000326,
+                  "max": 2.014100000000326,
+                  "sum": 5.611899999999878
+                }
+              }
+            },
+            {
+              "prepareMs": 284.60040000000026,
+              "packMs": 6.468399999999747,
+              "prepareCpuMs": 344,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 9388200,
+              "checkpointHeapDelta": 8460144,
+              "checkpointRssDelta": 1167360,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15779999999995198,
+                  "p50": 0.2113999999992302,
+                  "p95": 0.529700000000048,
+                  "max": 2.011700000000019,
+                  "sum": 19.429500000004737
+                },
+                "ocean-coverage": {
+                  "count": 114,
+                  "min": 1.1302999999998065,
+                  "p50": 2.01720000000023,
+                  "p95": 2.0888000000004467,
+                  "max": 2.3216999999995096,
+                  "sum": 230.25099999999657
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.9041999999999462,
+                  "p50": 2,
+                  "p95": 2.0325000000002547,
+                  "max": 2.0325000000002547,
+                  "sum": 4.936700000000201
+                }
+              }
+            },
+            {
+              "prepareMs": 275.2479000000003,
+              "packMs": 6.353499999999258,
+              "prepareCpuMs": 297,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 677024,
+              "checkpointHeapDelta": 8356536,
+              "checkpointRssDelta": 1056768,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15430000000014843,
+                  "p50": 0.2838999999994485,
+                  "p95": 0.538300000000163,
+                  "max": 2.0064000000002125,
+                  "sum": 21.99829999999838
+                },
+                "ocean-coverage": {
+                  "count": 110,
+                  "min": 0.6013999999995576,
+                  "p50": 2.0146999999997206,
+                  "p95": 2.0729999999994106,
+                  "max": 2.1635999999998603,
+                  "sum": 221.08889999999337
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.2402000000001863,
+                  "p50": 2.0007000000005064,
+                  "p95": 2.009599999999409,
+                  "max": 2.009599999999409,
+                  "sum": 5.250500000000102
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 275.2479000000003,
+            "p50": 293.28669999999966,
+            "p95": 356.47350000000006,
+            "max": 356.47350000000006
+          },
+          "packMs": {
+            "count": 5,
+            "min": 5.661600000000362,
+            "p50": 6.353499999999258,
+            "p95": 6.982299999999668,
+            "max": 6.982299999999668
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 297,
+            "p50": 312,
+            "p95": 375,
+            "max": 375
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 16,
+            "max": 16
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.1635999999998603,
+            "p50": 2.3572000000003754,
+            "p95": 3.3950999999997293,
+            "max": 3.3950999999997293
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 677024,
+            "p50": 984224,
+            "p95": 9388200,
+            "max": 9388200
+          }
+        },
+        {
+          "residency": "disk-four-at-a-time",
+          "runs": [
+            {
+              "prepareMs": 373.85059999999976,
+              "packMs": 7.648800000000847,
+              "prepareCpuMs": 360,
+              "packCpuMs": 15,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 27.731799999997747,
+              "checkpointArrayBuffersDelta": 9389224,
+              "checkpointHeapDelta": 8364008,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15949999999975262,
+                  "p50": 0.2198000000007596,
+                  "p95": 0.8202000000001135,
+                  "max": 2.0282999999999447,
+                  "sum": 20.343299999994997
+                },
+                "ocean-coverage": {
+                  "count": 127,
+                  "min": 0.7055000000000291,
+                  "p50": 2.018000000000029,
+                  "p95": 2.066100000000006,
+                  "max": 2.341500000000451,
+                  "sum": 256.1051999999927
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 2.0006999999986874,
+                  "p50": 2.0059000000001106,
+                  "p95": 2.094999999999345,
+                  "max": 2.094999999999345,
+                  "sum": 6.101599999998143
+                }
+              }
+            },
+            {
+              "prepareMs": 437.14979999999923,
+              "packMs": 7.312599999999293,
+              "prepareCpuMs": 422,
+              "packCpuMs": 16,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 27.29589999998825,
+              "checkpointArrayBuffersDelta": 9387176,
+              "checkpointHeapDelta": 8520656,
+              "checkpointRssDelta": 1183744,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.1602999999995518,
+                  "p50": 0.23220000000037544,
+                  "p95": 0.6239000000005035,
+                  "max": 2.012699999999313,
+                  "sum": 19.72429999999804
+                },
+                "ocean-coverage": {
+                  "count": 156,
+                  "min": 1.6709999999984575,
+                  "p50": 2.0275999999994383,
+                  "p95": 2.166400000000067,
+                  "max": 2.357399999998961,
+                  "sum": 318.16899999999805
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 2.0015000000003056,
+                  "p50": 2.0024000000012165,
+                  "p95": 2.2132999999994354,
+                  "max": 2.2132999999994354,
+                  "sum": 6.2172000000009575
+                }
+              }
+            },
+            {
+              "prepareMs": 427.9469000000008,
+              "packMs": 6.3708000000005995,
+              "prepareCpuMs": 484,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 36.35620000000017,
+              "checkpointArrayBuffersDelta": 9389224,
+              "checkpointHeapDelta": 8362552,
+              "checkpointRssDelta": 741376,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.17469999999957508,
+                  "p50": 0.3065999999998894,
+                  "p95": 0.6980999999996129,
+                  "max": 2.0133999999998196,
+                  "sum": 24.350600000005215
+                },
+                "ocean-coverage": {
+                  "count": 142,
+                  "min": 1.5073999999985972,
+                  "p50": 2.0232000000014523,
+                  "p95": 2.0909999999985303,
+                  "max": 2.4122999999999593,
+                  "sum": 288.48079999999754
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.4351999999998952,
+                  "p50": 2.0006999999986874,
+                  "p95": 2.002599999999802,
+                  "max": 2.002599999999802,
+                  "sum": 5.438499999998385
+                }
+              }
+            },
+            {
+              "prepareMs": 391.244999999999,
+              "packMs": 7.393899999999121,
+              "prepareCpuMs": 453,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 29.182199999995646,
+              "checkpointArrayBuffersDelta": 9387176,
+              "checkpointHeapDelta": 8244936,
+              "checkpointRssDelta": 1183744,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.1640000000006694,
+                  "p50": 0.287400000001071,
+                  "p95": 0.5883999999987282,
+                  "max": 2.0138000000006286,
+                  "sum": 22.076600000003964
+                },
+                "ocean-coverage": {
+                  "count": 133,
+                  "min": 0.6136000000005879,
+                  "p50": 2.022100000000137,
+                  "p95": 2.13550000000032,
+                  "max": 2.3827999999994063,
+                  "sum": 269.21270000000004
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 2.0020000000004075,
+                  "p50": 2.0072999999993044,
+                  "p95": 2.0635999999994965,
+                  "max": 2.0635999999994965,
+                  "sum": 6.072899999999208
+                }
+              }
+            },
+            {
+              "prepareMs": 519.3902999999991,
+              "packMs": 6.847600000000966,
+              "prepareCpuMs": 547,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 30.830700000002253,
+              "checkpointArrayBuffersDelta": 9389224,
+              "checkpointHeapDelta": 8444912,
+              "checkpointRssDelta": 335872,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.16049999999995634,
+                  "p50": 0.29579999999987194,
+                  "p95": 0.6277000000009139,
+                  "max": 2.0185999999994237,
+                  "sum": 23.775399999996807
+                },
+                "ocean-coverage": {
+                  "count": 188,
+                  "min": 0.636900000001333,
+                  "p50": 2.0340999999989435,
+                  "p95": 2.1442000000006374,
+                  "max": 2.3505000000004657,
+                  "sum": 383.94089999999596
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.2801999999992404,
+                  "p50": 2.000899999999092,
+                  "p95": 2.092800000000352,
+                  "max": 2.092800000000352,
+                  "sum": 5.3738999999986845
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 373.85059999999976,
+            "p50": 427.9469000000008,
+            "p95": 519.3902999999991,
+            "max": 519.3902999999991
+          },
+          "packMs": {
+            "count": 5,
+            "min": 6.3708000000005995,
+            "p50": 7.312599999999293,
+            "p95": 7.648800000000847,
+            "max": 7.648800000000847
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 360,
+            "p50": 453,
+            "p95": 547,
+            "max": 547
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 16,
+            "max": 16
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.341500000000451,
+            "p50": 2.357399999998961,
+            "p95": 2.4122999999999593,
+            "max": 2.4122999999999593
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 9387176,
+            "p50": 9389224,
+            "p95": 9389224,
+            "max": 9389224
+          }
+        }
+      ]
+    },
+    {
+      "landform": "island",
+      "size": "large",
+      "extent": 4096,
+      "spacing": 2,
+      "tileQuads": 256,
+      "tiles": 64,
+      "layers": 6,
+      "productionAllowed": false,
+      "baselineReadsBeforeRejection": 0,
+      "fixtureMs": 8894.228000000001,
+      "encodedBytes": 50727680,
+      "fingerprint": {
+        "status": "ready",
+        "wetFaces": 4774543,
+        "depthChecksum": 90213169.53430447,
+        "maskChecksum": 7161768
+      },
+      "inventory": {
+        "cells": 4194304,
+        "vertices": 4198401,
+        "decodedTile": 792588,
+        "decodedAllTiles": 50725632,
+        "snapshotF64": 33587208,
+        "presentCells": 4194304,
+        "coverageHeightsF32": 16793604,
+        "connectedTrianglesU8": 4194304,
+        "floodQueueI32": 33554432,
+        "floodVisitedU8": 8388608,
+        "preparationTypedBuffers": 102810636,
+        "coverageCpu": 23086084,
+        "atlasCpu": 18891780,
+        "gridCpuAndGpuEach": 1104564,
+        "steadyOceanCpuTyped": 24190648,
+        "preparationAndPackingAllocationWindow": 103915200,
+        "fourReadGuardEstimate": 6340704,
+        "fourReadDecodedAndEncodedPayload": 6340832,
+        "coverageGpuFormatBytes": 18891780,
+        "fftGpuFormatBytes": 23767680,
+        "baseOceanGpuFormatBytes": 43764024,
+        "replacementBaseGpuFormatBytes": 87528048,
+        "replacementSteadyCpuTyped": 48381296
+      },
+      "paths": [
+        {
+          "residency": "resident",
+          "runs": [
+            {
+              "prepareMs": 1366.6950000000033,
+              "packMs": 6.19289999999819,
+              "prepareCpuMs": 1390,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8274744,
+              "checkpointRssDelta": 1888256,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.6001999999971304,
+                  "p50": 0.7655999999988126,
+                  "p95": 1.6134999999994761,
+                  "max": 2.005699999997887,
+                  "sum": 57.39629999998215
+                },
+                "ocean-coverage": {
+                  "count": 579,
+                  "min": 1.1927000000032422,
+                  "p50": 2.0279000000009546,
+                  "p95": 2.102500000000873,
+                  "max": 2.4144999999989523,
+                  "sum": 1179.4268000000338
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.1926000000021304,
+                  "p50": 2.0011999999987893,
+                  "p95": 2.0024000000012165,
+                  "max": 2.0024000000012165,
+                  "sum": 5.196200000002136
+                }
+              }
+            },
+            {
+              "prepareMs": 1245.1742000000013,
+              "packMs": 4.676900000002206,
+              "prepareCpuMs": 1266,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8441960,
+              "checkpointRssDelta": 65536,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 68,
+                  "min": 0.02170000000114669,
+                  "p50": 0.8726999999998952,
+                  "p95": 2.002599999999802,
+                  "max": 2.063300000001618,
+                  "sum": 63.017799999983254
+                },
+                "ocean-coverage": {
+                  "count": 524,
+                  "min": 0.7943000000013853,
+                  "p50": 2.0253000000011525,
+                  "p95": 2.090299999999843,
+                  "max": 2.6118999999998778,
+                  "sum": 1065.2656999999963
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.968799999998737,
+                  "p50": 1.968799999998737,
+                  "p95": 2.0007000000005064,
+                  "max": 2.0007000000005064,
+                  "sum": 3.9694999999992433
+                }
+              }
+            },
+            {
+              "prepareMs": 1293.2417000000023,
+              "packMs": 3.9624000000003434,
+              "prepareCpuMs": 1344,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8334880,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 68,
+                  "min": 0.37739999999757856,
+                  "p50": 0.6680999999989581,
+                  "p95": 2.00090000000273,
+                  "max": 2.0229999999974098,
+                  "sum": 52.906100000011065
+                },
+                "ocean-coverage": {
+                  "count": 551,
+                  "min": 1.1775999999990745,
+                  "p50": 2.02560000000085,
+                  "p95": 2.101699999999255,
+                  "max": 2.5306999999993423,
+                  "sum": 1122.7476000000133
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.296200000000681,
+                  "p50": 1.296200000000681,
+                  "p95": 2.001400000001013,
+                  "max": 2.001400000001013,
+                  "sum": 3.297600000001694
+                }
+              }
+            },
+            {
+              "prepareMs": 1286.7286999999997,
+              "packMs": 6.318500000001222,
+              "prepareCpuMs": 1327,
+              "packCpuMs": 32,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8371880,
+              "checkpointRssDelta": 8192,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.5742999999965832,
+                  "p50": 0.7373000000006869,
+                  "p95": 1.5709999999999127,
+                  "max": 2.0337000000035914,
+                  "sum": 56.599400000010064
+                },
+                "ocean-coverage": {
+                  "count": 546,
+                  "min": 0.3757000000005064,
+                  "p50": 2.024600000000646,
+                  "p95": 2.093799999998737,
+                  "max": 2.3601999999991676,
+                  "sum": 1109.180899999974
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.2101000000002387,
+                  "p50": 2.0031999999991967,
+                  "p95": 2.007900000000518,
+                  "max": 2.007900000000518,
+                  "sum": 5.221199999999953
+                }
+              }
+            },
+            {
+              "prepareMs": 1345.823199999999,
+              "packMs": 6.349000000001979,
+              "prepareCpuMs": 1438,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8392896,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.5754999999990105,
+                  "p50": 0.7173000000002503,
+                  "p95": 1.4611000000004424,
+                  "max": 2.0328999999983353,
+                  "sum": 54.774700000005396
+                },
+                "ocean-coverage": {
+                  "count": 570,
+                  "min": 0.5524000000004889,
+                  "p50": 2.0300999999999476,
+                  "p95": 2.1239000000023225,
+                  "max": 4.655199999997421,
+                  "sum": 1164.6784000000152
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.2082999999984168,
+                  "p50": 2.002599999999802,
+                  "p95": 2.0174000000006345,
+                  "max": 2.0174000000006345,
+                  "sum": 5.228299999998853
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 1245.1742000000013,
+            "p50": 1293.2417000000023,
+            "p95": 1366.6950000000033,
+            "max": 1366.6950000000033
+          },
+          "packMs": {
+            "count": 5,
+            "min": 3.9624000000003434,
+            "p50": 6.19289999999819,
+            "p95": 6.349000000001979,
+            "max": 6.349000000001979
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 1266,
+            "p50": 1344,
+            "p95": 1438,
+            "max": 1438
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 32,
+            "max": 32
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.3601999999991676,
+            "p50": 2.5306999999993423,
+            "p95": 4.655199999997421,
+            "max": 4.655199999997421
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 5298868,
+            "p50": 5298868,
+            "p95": 5298868,
+            "max": 5298868
+          }
+        },
+        {
+          "residency": "disk-four-at-a-time",
+          "runs": [
+            {
+              "prepareMs": 1366.8122999999978,
+              "packMs": 6.247099999993225,
+              "prepareCpuMs": 1407,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 97.8660999999629,
+              "checkpointArrayBuffersDelta": 24272688,
+              "checkpointHeapDelta": 8437848,
+              "checkpointRssDelta": 1966080,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.5711999999984982,
+                  "p50": 0.6696999999985565,
+                  "p95": 1.4429999999993015,
+                  "max": 2.3135999999940395,
+                  "sum": 51.97550000002957
+                },
+                "ocean-coverage": {
+                  "count": 521,
+                  "min": 0.6514999999999418,
+                  "p50": 2.021999999997206,
+                  "p95": 2.1130000000048312,
+                  "max": 4.083099999996193,
+                  "sum": 1063.3526000000638
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.1586000000024796,
+                  "p50": 2.000099999997474,
+                  "p95": 2.0150999999968917,
+                  "max": 2.0150999999968917,
+                  "sum": 5.173799999996845
+                }
+              }
+            },
+            {
+              "prepareMs": 1456.2876999999935,
+              "packMs": 5.141400000000431,
+              "prepareCpuMs": 1452,
+              "packCpuMs": 16,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 100.28069999997388,
+              "checkpointArrayBuffersDelta": 26651604,
+              "checkpointHeapDelta": 8403264,
+              "checkpointRssDelta": 1982464,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 68,
+                  "min": 0.4098000000012689,
+                  "p50": 0.725800000000163,
+                  "p95": 2.00619999999617,
+                  "max": 2.231099999997241,
+                  "sum": 60.43729999999778
+                },
+                "ocean-coverage": {
+                  "count": 554,
+                  "min": 0.020600000003469177,
+                  "p50": 2.0285000000003492,
+                  "p95": 2.1014999999970314,
+                  "max": 11.781399999999849,
+                  "sum": 1137.8473999998241
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.3162999999985914,
+                  "p50": 2.000899999999092,
+                  "p95": 2.0054999999993015,
+                  "max": 2.0054999999993015,
+                  "sum": 4.322699999996985
+                }
+              }
+            },
+            {
+              "prepareMs": 1432.8561999999947,
+              "packMs": 5.78360000000248,
+              "prepareCpuMs": 1485,
+              "packCpuMs": 31,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 102.47329999999783,
+              "checkpointArrayBuffersDelta": 24272688,
+              "checkpointHeapDelta": 8412344,
+              "checkpointRssDelta": 28438528,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.5800000000017462,
+                  "p50": 0.7429000000047381,
+                  "p95": 1.7511000000013155,
+                  "max": 2.1510999999954947,
+                  "sum": 57.34170000004087
+                },
+                "ocean-coverage": {
+                  "count": 549,
+                  "min": 0.45820000000094296,
+                  "p50": 2.0267000000021653,
+                  "p95": 2.097300000001269,
+                  "max": 2.210800000000745,
+                  "sum": 1115.5156999999308
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.6554000000032829,
+                  "p50": 2.000899999999092,
+                  "p95": 2.0175000000017462,
+                  "max": 2.0175000000017462,
+                  "sum": 4.673800000004121
+                }
+              }
+            },
+            {
+              "prepareMs": 1811.7559000000037,
+              "packMs": 4.40679999999702,
+              "prepareCpuMs": 1891,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 113.36960000001272,
+              "checkpointArrayBuffersDelta": 6173528,
+              "checkpointHeapDelta": 8367864,
+              "checkpointRssDelta": 1581056,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 67,
+                  "min": 0.584500000004482,
+                  "p50": 0.7268000000040047,
+                  "p95": 1.5195999999996275,
+                  "max": 2.1018999999942025,
+                  "sum": 60.37160000003496
+                },
+                "ocean-coverage": {
+                  "count": 699,
+                  "min": 0.027399999999033753,
+                  "p50": 2.0345000000015716,
+                  "p95": 2.1515999999974156,
+                  "max": 5.9004999999961,
+                  "sum": 1438.2810999998983
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.7784000000028755,
+                  "p50": 1.7784000000028755,
+                  "p95": 2.0064999999958673,
+                  "max": 2.0064999999958673,
+                  "sum": 3.7848999999987427
+                }
+              }
+            },
+            {
+              "prepareMs": 1253.8768000000055,
+              "packMs": 6.583800000000338,
+              "prepareCpuMs": 1266,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 87.34320000000298,
+              "checkpointArrayBuffersDelta": 24272688,
+              "checkpointHeapDelta": 8419768,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.5799000000042724,
+                  "p50": 0.6422999999995227,
+                  "p95": 1.2756000000008498,
+                  "max": 2.016700000000128,
+                  "sum": 50.02240000004531
+                },
+                "ocean-coverage": {
+                  "count": 486,
+                  "min": 0.0011999999987892807,
+                  "p50": 2.0190999999977066,
+                  "p95": 2.0942999999970198,
+                  "max": 3.1108000000022002,
+                  "sum": 986.8472000000256
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.557699999997567,
+                  "p50": 2.00170000000071,
+                  "p95": 2.0138999999981024,
+                  "max": 2.0138999999981024,
+                  "sum": 5.5732999999963795
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 1253.8768000000055,
+            "p50": 1432.8561999999947,
+            "p95": 1811.7559000000037,
+            "max": 1811.7559000000037
+          },
+          "packMs": {
+            "count": 5,
+            "min": 4.40679999999702,
+            "p50": 5.78360000000248,
+            "p95": 6.583800000000338,
+            "max": 6.583800000000338
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 1266,
+            "p50": 1452,
+            "p95": 1891,
+            "max": 1891
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 31,
+            "max": 31
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.210800000000745,
+            "p50": 4.083099999996193,
+            "p95": 11.781399999999849,
+            "max": 11.781399999999849
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 6173528,
+            "p50": 24272688,
+            "p95": 26651604,
+            "max": 26651604
+          }
+        }
+      ]
+    },
+    {
+      "landform": "coast",
+      "size": "small",
+      "extent": 1024,
+      "spacing": 2,
+      "tileQuads": 64,
+      "tiles": 64,
+      "layers": 6,
+      "productionAllowed": true,
+      "baselineReadsBeforeRejection": 0,
+      "fixtureMs": 673.9914999999964,
+      "encodedBytes": 3246848,
+      "fingerprint": {
+        "status": "ready",
+        "wetFaces": 260614,
+        "depthChecksum": 1843314.7324332744,
+        "maskChecksum": 390898
+      },
+      "inventory": {
+        "cells": 262144,
+        "vertices": 263169,
+        "decodedTile": 50700,
+        "decodedAllTiles": 3244800,
+        "snapshotF64": 2105352,
+        "presentCells": 262144,
+        "coverageHeightsF32": 1052676,
+        "connectedTrianglesU8": 262144,
+        "floodQueueI32": 2097152,
+        "floodVisitedU8": 524288,
+        "preparationTypedBuffers": 6435084,
+        "coverageCpu": 1446148,
+        "atlasCpu": 1184004,
+        "gridCpuAndGpuEach": 861836,
+        "steadyOceanCpuTyped": 2307984,
+        "preparationAndPackingAllocationWindow": 7296920,
+        "fourReadGuardEstimate": 405600,
+        "fourReadDecodedAndEncodedPayload": 405728,
+        "coverageGpuFormatBytes": 1184004,
+        "fftGpuFormatBytes": 23767680,
+        "baseOceanGpuFormatBytes": 25813520,
+        "replacementBaseGpuFormatBytes": 51627040,
+        "replacementSteadyCpuTyped": 4615968
+      },
+      "paths": [
+        {
+          "residency": "resident",
+          "runs": [
+            {
+              "prepareMs": 76.72320000000036,
+              "packMs": 6.540600000000268,
+              "prepareCpuMs": 126,
+              "packCpuMs": 15,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 8149272,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04389999999693828,
+                  "p50": 0.09369999999762513,
+                  "p95": 0.6180999999996857,
+                  "max": 0.7629000000015367,
+                  "sum": 8.334800000011455
+                },
+                "ocean-coverage": {
+                  "count": 29,
+                  "min": 1.8788000000058673,
+                  "p50": 2.013700000003155,
+                  "p95": 2.084999999999127,
+                  "max": 2.1938000000009197,
+                  "sum": 58.52140000001236
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.2814999999973224,
+                  "p50": 2.0007000000041444,
+                  "p95": 2.0019000000029337,
+                  "max": 2.0019000000029337,
+                  "sum": 5.2841000000044005
+                }
+              }
+            },
+            {
+              "prepareMs": 76.96029999999882,
+              "packMs": 4.449800000002142,
+              "prepareCpuMs": 110,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 2967188,
+              "checkpointHeapDelta": 7661536,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04389999999693828,
+                  "p50": 0.09639999999490101,
+                  "p95": 0.6837999999988824,
+                  "max": 0.7137999999977183,
+                  "sum": 8.349199999996927
+                },
+                "ocean-coverage": {
+                  "count": 31,
+                  "min": 0.08780000000115251,
+                  "p50": 2.0181999999986147,
+                  "p95": 2.3289999999979045,
+                  "max": 2.9098999999987427,
+                  "sum": 61.903199999978824
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.4580000000059954,
+                  "p50": 1.4580000000059954,
+                  "p95": 2.006699999998091,
+                  "max": 2.006699999998091,
+                  "sum": 3.464700000004086
+                }
+              }
+            },
+            {
+              "prepareMs": 56.69959999999992,
+              "packMs": 5.894899999999325,
+              "prepareCpuMs": 78,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 2967188,
+              "checkpointHeapDelta": 8190240,
+              "checkpointRssDelta": 143360,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04230000000097789,
+                  "p50": 0.09860000000480795,
+                  "p95": 0.6825000000026193,
+                  "max": 0.996500000001106,
+                  "sum": 9.861300000055053
+                },
+                "ocean-coverage": {
+                  "count": 19,
+                  "min": 1.0083000000013271,
+                  "p50": 2.0117000000027474,
+                  "p95": 2.043599999997241,
+                  "max": 2.043599999997241,
+                  "sum": 37.266399999993155
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.7569999999977881,
+                  "p50": 2.002599999999802,
+                  "p95": 2.0072999999974854,
+                  "max": 2.0072999999974854,
+                  "sum": 4.766899999995076
+                }
+              }
+            },
+            {
+              "prepareMs": 88.75950000000012,
+              "packMs": 4.761800000000221,
+              "prepareCpuMs": 94,
+              "packCpuMs": 31,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 2967188,
+              "checkpointHeapDelta": 8212280,
+              "checkpointRssDelta": 2633728,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04290000000037253,
+                  "p50": 0.095500000003085,
+                  "p95": 0.5961999999999534,
+                  "max": 1.0867999999973108,
+                  "sum": 9.162700000000768
+                },
+                "ocean-coverage": {
+                  "count": 36,
+                  "min": 0.0006999999968684278,
+                  "p50": 2.0152000000016415,
+                  "p95": 2.1929999999993015,
+                  "max": 2.617600000005041,
+                  "sum": 71.86800000000949
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.9830000000001746,
+                  "p50": 1.9830000000001746,
+                  "p95": 2.01140000000305,
+                  "max": 2.01140000000305,
+                  "sum": 3.9944000000032247
+                }
+              }
+            },
+            {
+              "prepareMs": 93.86039999999775,
+              "packMs": 6.173999999999069,
+              "prepareCpuMs": 125,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 354900,
+              "checkpointHeapDelta": 8629848,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.042499999995925464,
+                  "p50": 0.09389999999984866,
+                  "p95": 0.6642999999967287,
+                  "max": 1.404900000001362,
+                  "sum": 10.583499999986088
+                },
+                "ocean-coverage": {
+                  "count": 36,
+                  "min": 1.595500000003085,
+                  "p50": 2.018400000000838,
+                  "p95": 2.077100000002247,
+                  "max": 2.099900000001071,
+                  "sum": 72.52400000001944
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.9492000000027474,
+                  "p50": 2.0025000000023283,
+                  "p95": 2.0063999999983935,
+                  "max": 2.0063999999983935,
+                  "sum": 4.958100000003469
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 56.69959999999992,
+            "p50": 76.96029999999882,
+            "p95": 93.86039999999775,
+            "max": 93.86039999999775
+          },
+          "packMs": {
+            "count": 5,
+            "min": 4.449800000002142,
+            "p50": 5.894899999999325,
+            "p95": 6.540600000000268,
+            "max": 6.540600000000268
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 78,
+            "p50": 110,
+            "p95": 126,
+            "max": 126
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 31,
+            "max": 31
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.043599999997241,
+            "p50": 2.1938000000009197,
+            "p95": 2.9098999999987427,
+            "max": 2.9098999999987427
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 354900,
+            "p50": 2967188,
+            "p95": 2967188,
+            "max": 2967188
+          }
+        },
+        {
+          "residency": "disk-four-at-a-time",
+          "runs": [
+            {
+              "prepareMs": 121.4484999999986,
+              "packMs": 5.772100000001956,
+              "prepareCpuMs": 156,
+              "packCpuMs": 31,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 9.517100000033679,
+              "checkpointArrayBuffersDelta": 3098584,
+              "checkpointHeapDelta": 8058816,
+              "checkpointRssDelta": 2392064,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.04749999999330612,
+                  "p50": 0.0918999999994412,
+                  "p95": 0.9063000000023749,
+                  "max": 1.2669000000023516,
+                  "sum": 10.545600000004924
+                },
+                "ocean-coverage": {
+                  "count": 28,
+                  "min": 0.1632000000026892,
+                  "p50": 2.016199999998207,
+                  "p95": 2.042300000000978,
+                  "max": 2.047999999995227,
+                  "sum": 54.67289999999775
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.6094999999986612,
+                  "p50": 2.000400000004447,
+                  "p95": 2.0080999999991036,
+                  "max": 2.0080999999991036,
+                  "sum": 4.618000000002212
+                }
+              }
+            },
+            {
+              "prepareMs": 125.33290000000125,
+              "packMs": 6.833999999995285,
+              "prepareCpuMs": 188,
+              "packCpuMs": 15,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 6.876300000003539,
+              "checkpointArrayBuffersDelta": 3098584,
+              "checkpointHeapDelta": 8369648,
+              "checkpointRssDelta": 57344,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.043999999994412065,
+                  "p50": 0.08499999999912689,
+                  "p95": 0.6911000000036438,
+                  "max": 1.549799999993411,
+                  "sum": 9.958499999956985
+                },
+                "ocean-coverage": {
+                  "count": 36,
+                  "min": 0.30389999999897555,
+                  "p50": 2.0174000000042724,
+                  "p95": 2.0913999999975204,
+                  "max": 2.2969999999986612,
+                  "sum": 71.49089999998978
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.328300000001036,
+                  "p50": 2.0010999999940395,
+                  "p95": 2.0659000000014203,
+                  "max": 2.0659000000014203,
+                  "sum": 5.395299999996496
+                }
+              }
+            },
+            {
+              "prepareMs": 132.26650000000518,
+              "packMs": 7.421699999998964,
+              "prepareCpuMs": 204,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 8.001700000029814,
+              "checkpointArrayBuffersDelta": 3098584,
+              "checkpointHeapDelta": 8321408,
+              "checkpointRssDelta": 348160,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.042499999995925464,
+                  "p50": 0.07510000000183936,
+                  "p95": 0.5918999999994412,
+                  "max": 1.1453000000037719,
+                  "sum": 9.105000000039581
+                },
+                "ocean-coverage": {
+                  "count": 37,
+                  "min": 0.20859999999811407,
+                  "p50": 2.0249999999941792,
+                  "p95": 2.1278000000020256,
+                  "max": 2.2620999999999185,
+                  "sum": 73.54690000000846
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.9668999999994412,
+                  "p50": 2.0002999999996973,
+                  "p95": 2.004399999997986,
+                  "max": 2.004399999997986,
+                  "sum": 5.9715999999971245
+                }
+              }
+            },
+            {
+              "prepareMs": 120.07129999999597,
+              "packMs": 6.66830000000482,
+              "prepareCpuMs": 125,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 8.682800000038696,
+              "checkpointArrayBuffersDelta": 3098584,
+              "checkpointHeapDelta": 8132624,
+              "checkpointRssDelta": 2437120,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.0452000000004773,
+                  "p50": 0.08699999999953434,
+                  "p95": 0.9978999999948428,
+                  "max": 1.479299999999057,
+                  "sum": 10.338899999987916
+                },
+                "ocean-coverage": {
+                  "count": 29,
+                  "min": 0.21749999999883585,
+                  "p50": 2.0133999999961816,
+                  "p95": 2.1991999999954714,
+                  "max": 2.4491999999954714,
+                  "sum": 57.307199999995646
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.505700000001525,
+                  "p50": 2.000399999997171,
+                  "p95": 2.003000000004249,
+                  "max": 2.003000000004249,
+                  "sum": 5.509100000002945
+                }
+              }
+            },
+            {
+              "prepareMs": 125.41250000000582,
+              "packMs": 5.603699999999662,
+              "prepareCpuMs": 140,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 3246848,
+              "decodeMs": 7.832700000006298,
+              "checkpointArrayBuffersDelta": 3098584,
+              "checkpointHeapDelta": 8377800,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 64,
+                  "min": 0.045700000002398156,
+                  "p50": 0.08269999999902211,
+                  "p95": 1.1062999999994645,
+                  "max": 1.4090999999971245,
+                  "sum": 10.33119999999326
+                },
+                "ocean-coverage": {
+                  "count": 33,
+                  "min": 1.307200000002922,
+                  "p50": 2.0146999999997206,
+                  "p95": 2.2327000000004773,
+                  "max": 2.268099999993865,
+                  "sum": 66.48519999996643
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.4841999999989639,
+                  "p50": 2.001400000001013,
+                  "p95": 2.0055999999967753,
+                  "max": 2.0055999999967753,
+                  "sum": 4.491199999996752
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 120.07129999999597,
+            "p50": 125.33290000000125,
+            "p95": 132.26650000000518,
+            "max": 132.26650000000518
+          },
+          "packMs": {
+            "count": 5,
+            "min": 5.603699999999662,
+            "p50": 6.66830000000482,
+            "p95": 7.421699999998964,
+            "max": 7.421699999998964
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 125,
+            "p50": 156,
+            "p95": 204,
+            "max": 204
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 31,
+            "max": 31
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.047999999995227,
+            "p50": 2.268099999993865,
+            "p95": 2.4491999999954714,
+            "max": 2.4491999999954714
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 3098584,
+            "p50": 3098584,
+            "p95": 3098584,
+            "max": 3098584
+          }
+        }
+      ]
+    },
+    {
+      "landform": "coast",
+      "size": "medium",
+      "extent": 2048,
+      "spacing": 2,
+      "tileQuads": 128,
+      "tiles": 64,
+      "layers": 6,
+      "productionAllowed": true,
+      "baselineReadsBeforeRejection": 0,
+      "fixtureMs": 2249.3329000000012,
+      "encodedBytes": 12782336,
+      "fingerprint": {
+        "status": "ready",
+        "wetFaces": 1050967,
+        "depthChecksum": 18891744.157215934,
+        "maskChecksum": 1576417
+      },
+      "inventory": {
+        "cells": 1048576,
+        "vertices": 1050625,
+        "decodedTile": 199692,
+        "decodedAllTiles": 12780288,
+        "snapshotF64": 8405000,
+        "presentCells": 1048576,
+        "coverageHeightsF32": 4202500,
+        "connectedTrianglesU8": 1048576,
+        "floodQueueI32": 8388608,
+        "floodVisitedU8": 2097152,
+        "preparationTypedBuffers": 25715212,
+        "coverageCpu": 5775876,
+        "atlasCpu": 4727300,
+        "gridCpuAndGpuEach": 983200,
+        "steadyOceanCpuTyped": 6759076,
+        "preparationAndPackingAllocationWindow": 26698412,
+        "fourReadGuardEstimate": 1597536,
+        "fourReadDecodedAndEncodedPayload": 1597664,
+        "coverageGpuFormatBytes": 4727300,
+        "fftGpuFormatBytes": 23767680,
+        "baseOceanGpuFormatBytes": 29478180,
+        "replacementBaseGpuFormatBytes": 58956360,
+        "replacementSteadyCpuTyped": 13518152
+      },
+      "paths": [
+        {
+          "residency": "resident",
+          "runs": [
+            {
+              "prepareMs": 192.06900000000314,
+              "packMs": 4.966300000000047,
+              "prepareCpuMs": 218,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 9388200,
+              "checkpointHeapDelta": 8300736,
+              "checkpointRssDelta": 1060864,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15539999999600695,
+                  "p50": 0.19189999999798601,
+                  "p95": 0.5335999999952037,
+                  "max": 2.009200000000419,
+                  "sum": 17.834499999997206
+                },
+                "ocean-coverage": {
+                  "count": 76,
+                  "min": 1.8911000000007334,
+                  "p50": 2.011000000005879,
+                  "p95": 2.03870000000461,
+                  "max": 2.109099999994214,
+                  "sum": 152.96230000002106
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 2.0059000000037486,
+                  "p50": 2.0059000000037486,
+                  "p95": 2.188799999996263,
+                  "max": 2.188799999996263,
+                  "sum": 4.194700000000012
+                }
+              }
+            },
+            {
+              "prepareMs": 288.2952000000005,
+              "packMs": 4.886099999996077,
+              "prepareCpuMs": 391,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 9388200,
+              "checkpointHeapDelta": 8479008,
+              "checkpointRssDelta": 4284416,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.1532999999981257,
+                  "p50": 0.2926000000006752,
+                  "p95": 0.444100000000617,
+                  "max": 2.010600000001432,
+                  "sum": 21.808300000004238
+                },
+                "ocean-coverage": {
+                  "count": 117,
+                  "min": 0.9748000000035972,
+                  "p50": 2.019000000000233,
+                  "p95": 2.117000000005646,
+                  "max": 4.868999999998778,
+                  "sum": 239.0692999999519
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.934000000001106,
+                  "p50": 1.934000000001106,
+                  "p95": 2.0049999999973807,
+                  "max": 2.0049999999973807,
+                  "sum": 3.9389999999984866
+                }
+              }
+            },
+            {
+              "prepareMs": 180.34100000000035,
+              "packMs": 5.180000000000291,
+              "prepareCpuMs": 234,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 2031776,
+              "checkpointHeapDelta": 8044328,
+              "checkpointRssDelta": 430080,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.14490000000660075,
+                  "p50": 0.1889999999984866,
+                  "p95": 0.4342999999935273,
+                  "max": 2.012800000004063,
+                  "sum": 17.795100000032107
+                },
+                "ocean-coverage": {
+                  "count": 72,
+                  "min": 0.4698999999964144,
+                  "p50": 2.012399999999616,
+                  "p95": 2.0370000000039,
+                  "max": 2.182600000000093,
+                  "sum": 143.60069999997359
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.450700000001234,
+                  "p50": 2.0018999999956577,
+                  "p95": 2.002999999996973,
+                  "max": 2.002999999996973,
+                  "sum": 4.455599999993865
+                }
+              }
+            },
+            {
+              "prepareMs": 196.58060000000114,
+              "packMs": 4.573599999996077,
+              "prepareCpuMs": 203,
+              "packCpuMs": 16,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 9388200,
+              "checkpointHeapDelta": 8379512,
+              "checkpointRssDelta": 61440,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.17970000000059372,
+                  "p50": 0.29659999999421416,
+                  "p95": 0.6456000000034692,
+                  "max": 2.0148000000044703,
+                  "sum": 23.8275000000649
+                },
+                "ocean-coverage": {
+                  "count": 77,
+                  "min": 0.3301999999966938,
+                  "p50": 2.013599999998405,
+                  "p95": 2.0472999999983585,
+                  "max": 2.1798999999955413,
+                  "sum": 153.81119999996736
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.940599999994447,
+                  "p50": 1.940599999994447,
+                  "p95": 2.010500000003958,
+                  "max": 2.010500000003958,
+                  "sum": 3.951099999998405
+                }
+              }
+            },
+            {
+              "prepareMs": 212.45950000000448,
+              "packMs": 9.607800000005227,
+              "prepareCpuMs": 250,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 9388200,
+              "checkpointHeapDelta": 8565352,
+              "checkpointRssDelta": 4591616,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15010000000620494,
+                  "p50": 0.16220000000612345,
+                  "p95": 0.5609000000040396,
+                  "max": 2.008800000003248,
+                  "sum": 15.782400000025518
+                },
+                "ocean-coverage": {
+                  "count": 88,
+                  "min": 1.6183000000019092,
+                  "p50": 2.0130999999964843,
+                  "p95": 2.0390000000043074,
+                  "max": 2.065599999994447,
+                  "sum": 176.99230000002717
+                },
+                "ocean-grid": {
+                  "count": 4,
+                  "min": 0.40129999999771826,
+                  "p50": 2.0006999999968684,
+                  "p95": 3.868399999999383,
+                  "max": 3.868399999999383,
+                  "sum": 8.272199999992154
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 180.34100000000035,
+            "p50": 196.58060000000114,
+            "p95": 288.2952000000005,
+            "max": 288.2952000000005
+          },
+          "packMs": {
+            "count": 5,
+            "min": 4.573599999996077,
+            "p50": 4.966300000000047,
+            "p95": 9.607800000005227,
+            "max": 9.607800000005227
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 203,
+            "p50": 234,
+            "p95": 391,
+            "max": 391
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 16,
+            "max": 16
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.1798999999955413,
+            "p50": 2.188799999996263,
+            "p95": 4.868999999998778,
+            "max": 4.868999999998778
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 2031776,
+            "p50": 9388200,
+            "p95": 9388200,
+            "max": 9388200
+          }
+        },
+        {
+          "residency": "disk-four-at-a-time",
+          "runs": [
+            {
+              "prepareMs": 264.4481999999989,
+              "packMs": 5.943099999996775,
+              "prepareCpuMs": 343,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 24.66729999997915,
+              "checkpointArrayBuffersDelta": 25649836,
+              "checkpointHeapDelta": 8445240,
+              "checkpointRssDelta": 21540864,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15539999999600695,
+                  "p50": 0.22510000000329455,
+                  "p95": 0.4775000000008731,
+                  "max": 2.0122000000046683,
+                  "sum": 17.90739999998914
+                },
+                "ocean-coverage": {
+                  "count": 83,
+                  "min": 0.9887000000016997,
+                  "p50": 2.012399999999616,
+                  "p95": 2.0433999999950174,
+                  "max": 2.074400000004971,
+                  "sum": 166.2998000000007
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.8919999999998254,
+                  "p50": 2.0005999999993946,
+                  "p95": 2.014999999999418,
+                  "max": 2.014999999999418,
+                  "sum": 4.907599999998638
+                }
+              }
+            },
+            {
+              "prepareMs": 276.6840000000011,
+              "packMs": 4.838400000000547,
+              "prepareCpuMs": 328,
+              "packCpuMs": 31,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 24.075499999991735,
+              "checkpointArrayBuffersDelta": 9388200,
+              "checkpointHeapDelta": 8459176,
+              "checkpointRssDelta": 708608,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15009999999892898,
+                  "p50": 0.24210000000311993,
+                  "p95": 0.48359999999956926,
+                  "max": 2.0152000000016415,
+                  "sum": 18.733900000072026
+                },
+                "ocean-coverage": {
+                  "count": 87,
+                  "min": 0.5517999999938183,
+                  "p50": 2.0166000000026543,
+                  "p95": 2.0476999999955297,
+                  "max": 2.1934999999939464,
+                  "sum": 174.51189999998314
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 2.002599999999802,
+                  "p50": 2.002599999999802,
+                  "p95": 2.1598999999987427,
+                  "max": 2.1598999999987427,
+                  "sum": 4.162499999998545
+                }
+              }
+            },
+            {
+              "prepareMs": 322.70330000000104,
+              "packMs": 9.876500000005763,
+              "prepareCpuMs": 375,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 25.163600000007136,
+              "checkpointArrayBuffersDelta": 9388200,
+              "checkpointHeapDelta": 8643280,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.15869999999995343,
+                  "p50": 0.2885999999998603,
+                  "p95": 0.5647999999928288,
+                  "max": 2.0135000000009313,
+                  "sum": 20.66869999998744
+                },
+                "ocean-coverage": {
+                  "count": 108,
+                  "min": 1.5436999999947147,
+                  "p50": 2.0152000000016415,
+                  "p95": 2.151799999999639,
+                  "max": 2.309900000000198,
+                  "sum": 219.13620000005176
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.6935999999986961,
+                  "p50": 2.0086999999984982,
+                  "p95": 4.757100000002538,
+                  "max": 4.757100000002538,
+                  "sum": 8.459399999999732
+                }
+              }
+            },
+            {
+              "prepareMs": 247.4021999999968,
+              "packMs": 4.822199999995064,
+              "prepareCpuMs": 282,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 22.45270000002347,
+              "checkpointArrayBuffersDelta": 20922536,
+              "checkpointHeapDelta": 8382872,
+              "checkpointRssDelta": 12566528,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.1525000000037835,
+                  "p50": 0.18140000000130385,
+                  "p95": 0.7347000000008848,
+                  "max": 2.010099999999511,
+                  "sum": 17.680900000013935
+                },
+                "ocean-coverage": {
+                  "count": 77,
+                  "min": 0.3548999999984517,
+                  "p50": 2.01310000000376,
+                  "p95": 2.0327000000033877,
+                  "max": 2.0901000000012573,
+                  "sum": 153.44100000002072
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.8842999999978929,
+                  "p50": 1.8842999999978929,
+                  "p95": 2.0091000000029453,
+                  "max": 2.0091000000029453,
+                  "sum": 3.893400000000838
+                }
+              }
+            },
+            {
+              "prepareMs": 249.69410000000062,
+              "packMs": 6.183599999996659,
+              "prepareCpuMs": 250,
+              "packCpuMs": 15,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 12782336,
+              "decodeMs": 24.627599999999802,
+              "checkpointArrayBuffersDelta": 9388200,
+              "checkpointHeapDelta": 8248376,
+              "checkpointRssDelta": 6557696,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 65,
+                  "min": 0.1510000000052969,
+                  "p50": 0.20329999999376014,
+                  "p95": 0.4657999999981257,
+                  "max": 2.022499999999127,
+                  "sum": 18.0904999999766
+                },
+                "ocean-coverage": {
+                  "count": 77,
+                  "min": 1.956899999997404,
+                  "p50": 2.013200000001234,
+                  "p95": 2.042200000003504,
+                  "max": 2.1762999999991735,
+                  "sum": 155.23550000003888
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.1340999999956694,
+                  "p50": 2.0010000000038417,
+                  "p95": 2.0016000000032363,
+                  "max": 2.0016000000032363,
+                  "sum": 5.136700000002747
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 247.4021999999968,
+            "p50": 264.4481999999989,
+            "p95": 322.70330000000104,
+            "max": 322.70330000000104
+          },
+          "packMs": {
+            "count": 5,
+            "min": 4.822199999995064,
+            "p50": 5.943099999996775,
+            "p95": 9.876500000005763,
+            "max": 9.876500000005763
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 250,
+            "p50": 328,
+            "p95": 375,
+            "max": 375
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 31,
+            "max": 31
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.074400000004971,
+            "p50": 2.1762999999991735,
+            "p95": 4.757100000002538,
+            "max": 4.757100000002538
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 9388200,
+            "p50": 9388200,
+            "p95": 25649836,
+            "max": 25649836
+          }
+        }
+      ]
+    },
+    {
+      "landform": "coast",
+      "size": "large",
+      "extent": 4096,
+      "spacing": 2,
+      "tileQuads": 256,
+      "tiles": 64,
+      "layers": 6,
+      "productionAllowed": false,
+      "baselineReadsBeforeRejection": 0,
+      "fixtureMs": 7269.7281,
+      "encodedBytes": 50727680,
+      "fingerprint": {
+        "status": "ready",
+        "wetFaces": 4197116,
+        "depthChecksum": 163438949.50830933,
+        "maskChecksum": 6295599
+      },
+      "inventory": {
+        "cells": 4194304,
+        "vertices": 4198401,
+        "decodedTile": 792588,
+        "decodedAllTiles": 50725632,
+        "snapshotF64": 33587208,
+        "presentCells": 4194304,
+        "coverageHeightsF32": 16793604,
+        "connectedTrianglesU8": 4194304,
+        "floodQueueI32": 33554432,
+        "floodVisitedU8": 8388608,
+        "preparationTypedBuffers": 102810636,
+        "coverageCpu": 23086084,
+        "atlasCpu": 18891780,
+        "gridCpuAndGpuEach": 1104564,
+        "steadyOceanCpuTyped": 24190648,
+        "preparationAndPackingAllocationWindow": 103915200,
+        "fourReadGuardEstimate": 6340704,
+        "fourReadDecodedAndEncodedPayload": 6340832,
+        "coverageGpuFormatBytes": 18891780,
+        "fftGpuFormatBytes": 23767680,
+        "baseOceanGpuFormatBytes": 43764024,
+        "replacementBaseGpuFormatBytes": 87528048,
+        "replacementSteadyCpuTyped": 48381296
+      },
+      "paths": [
+        {
+          "residency": "resident",
+          "runs": [
+            {
+              "prepareMs": 928.0662000000011,
+              "packMs": 4.692599999994854,
+              "prepareCpuMs": 968,
+              "packCpuMs": 32,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8381872,
+              "checkpointRssDelta": 73728,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 68,
+                  "min": 0.33009999999922,
+                  "p50": 0.665499999995518,
+                  "p95": 2.00970000000234,
+                  "max": 2.037799999998242,
+                  "sum": 51.27370000000519
+                },
+                "ocean-coverage": {
+                  "count": 384,
+                  "min": 1.7222000000037951,
+                  "p50": 2.0183000000033644,
+                  "p95": 2.074300000000221,
+                  "max": 2.407500000001164,
+                  "sum": 777.986599999902
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.889999999999418,
+                  "p50": 1.889999999999418,
+                  "p95": 2.003599999996368,
+                  "max": 2.003599999996368,
+                  "sum": 3.8935999999957858
+                }
+              }
+            },
+            {
+              "prepareMs": 1039.1587999999974,
+              "packMs": 5.2612000000008265,
+              "prepareCpuMs": 1125,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8437160,
+              "checkpointRssDelta": 1097728,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 68,
+                  "min": 0.2367000000012922,
+                  "p50": 0.8013999999966472,
+                  "p95": 2.0031999999991967,
+                  "max": 2.0273999999990338,
+                  "sum": 62.75690000000759
+                },
+                "ocean-coverage": {
+                  "count": 431,
+                  "min": 1.82390000000305,
+                  "p50": 2.0195999999996275,
+                  "p95": 2.0956999999980326,
+                  "max": 2.620999999999185,
+                  "sum": 876.1947
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 0.4524999999994179,
+                  "p50": 2.0001000000047497,
+                  "p95": 2.009200000000419,
+                  "max": 2.009200000000419,
+                  "sum": 4.461800000004587
+                }
+              }
+            },
+            {
+              "prepareMs": 950.697699999997,
+              "packMs": 6.654900000001362,
+              "prepareCpuMs": 953,
+              "packCpuMs": 15,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8344352,
+              "checkpointRssDelta": 942080,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.5846999999994296,
+                  "p50": 0.6464000000050873,
+                  "p95": 1.5331000000005588,
+                  "max": 2.0031999999991967,
+                  "sum": 50.948700000037206
+                },
+                "ocean-coverage": {
+                  "count": 400,
+                  "min": 0.0012999999962630682,
+                  "p50": 2.019399999997404,
+                  "p95": 2.073499999998603,
+                  "max": 2.2358000000022002,
+                  "sum": 808.5909000000465
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.4501999999993131,
+                  "p50": 2,
+                  "p95": 2.010599999994156,
+                  "max": 2.010599999994156,
+                  "sum": 5.460799999993469
+                }
+              }
+            },
+            {
+              "prepareMs": 916.6200000000026,
+              "packMs": 4.208200000000943,
+              "prepareCpuMs": 953,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8408960,
+              "checkpointRssDelta": 53248,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 69,
+                  "min": 0.021000000000640284,
+                  "p50": 0.6443999999974039,
+                  "p95": 2.003499999998894,
+                  "max": 2.048500000004424,
+                  "sum": 55.01080000002548
+                },
+                "ocean-coverage": {
+                  "count": 378,
+                  "min": 1.0218000000022585,
+                  "p50": 2.0195000000021537,
+                  "p95": 2.0718999999953667,
+                  "max": 4.379899999999907,
+                  "sum": 767.0715999999302
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.517199999994773,
+                  "p50": 1.517199999994773,
+                  "p95": 2.0002999999996973,
+                  "max": 2.0002999999996973,
+                  "sum": 3.5174999999944703
+                }
+              }
+            },
+            {
+              "prepareMs": 905.3580000000002,
+              "packMs": 5.295500000000175,
+              "prepareCpuMs": 906,
+              "packCpuMs": 0,
+              "reads": 0,
+              "maxInFlight": 0,
+              "bytesRead": 0,
+              "decodeMs": 0,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 8422472,
+              "checkpointRssDelta": 921600,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 67,
+                  "min": 0.44369999999616994,
+                  "p50": 0.6175999999977648,
+                  "p95": 1.7176000000035856,
+                  "max": 2.030399999996007,
+                  "sum": 52.79369999998744
+                },
+                "ocean-coverage": {
+                  "count": 378,
+                  "min": 0.7583999999988009,
+                  "p50": 2.018500000005588,
+                  "p95": 2.073499999998603,
+                  "max": 2.2242999999944004,
+                  "sum": 765.0045000000318
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 2.0020999999978812,
+                  "p50": 2.0020999999978812,
+                  "p95": 2.2206999999980326,
+                  "max": 2.2206999999980326,
+                  "sum": 4.222799999995914
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 905.3580000000002,
+            "p50": 928.0662000000011,
+            "p95": 1039.1587999999974,
+            "max": 1039.1587999999974
+          },
+          "packMs": {
+            "count": 5,
+            "min": 4.208200000000943,
+            "p50": 5.2612000000008265,
+            "p95": 6.654900000001362,
+            "max": 6.654900000001362
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 906,
+            "p50": 953,
+            "p95": 1125,
+            "max": 1125
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 32,
+            "max": 32
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.2242999999944004,
+            "p50": 2.407500000001164,
+            "p95": 4.379899999999907,
+            "max": 4.379899999999907
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 5298868,
+            "p50": 5298868,
+            "p95": 5298868,
+            "max": 5298868
+          }
+        },
+        {
+          "residency": "disk-four-at-a-time",
+          "runs": [
+            {
+              "prepareMs": 1157.9435999999987,
+              "packMs": 6.962699999989127,
+              "prepareCpuMs": 1344,
+              "packCpuMs": 16,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 101.92650000000867,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 16028496,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 67,
+                  "min": 0.2908999999999651,
+                  "p50": 1.0016000000032363,
+                  "p95": 1.6758999999947264,
+                  "max": 2.0331999999980326,
+                  "sum": 64.76349999998638
+                },
+                "ocean-coverage": {
+                  "count": 421,
+                  "min": 1.6754000000073574,
+                  "p50": 2.020699999993667,
+                  "p95": 2.0720000000001164,
+                  "max": 2.1889000000082888,
+                  "sum": 852.854199999987
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.8173999999999069,
+                  "p50": 2.0014000000082888,
+                  "p95": 2.0037000000011176,
+                  "max": 2.0037000000011176,
+                  "sum": 5.822500000009313
+                }
+              }
+            },
+            {
+              "prepareMs": 1080.9526000000042,
+              "packMs": 5.041499999992084,
+              "prepareCpuMs": 1063,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 95.25379999996221,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 16076048,
+              "checkpointRssDelta": 2637824,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 66,
+                  "min": 0.5807999999960884,
+                  "p50": 0.7157000000006519,
+                  "p95": 1.6971000000048662,
+                  "max": 2.004000000000815,
+                  "sum": 56.023900000043795
+                },
+                "ocean-coverage": {
+                  "count": 388,
+                  "min": 0.3837000000057742,
+                  "p50": 2.0199999999895226,
+                  "p95": 2.077899999989313,
+                  "max": 3.0671000000002095,
+                  "sum": 785.4604000002146
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.9807999999902677,
+                  "p50": 1.9807999999902677,
+                  "p95": 2.001800000012736,
+                  "max": 2.001800000012736,
+                  "sum": 3.9826000000030035
+                }
+              }
+            },
+            {
+              "prepareMs": 1147.7271000000037,
+              "packMs": 6.697999999989406,
+              "prepareCpuMs": 1344,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 94.82129999995232,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 16453464,
+              "checkpointRssDelta": 716800,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 68,
+                  "min": 0.39929999999003485,
+                  "p50": 0.7175000000133878,
+                  "p95": 2.0020999999978812,
+                  "max": 2.0077000000019325,
+                  "sum": 60.40059999997902
+                },
+                "ocean-coverage": {
+                  "count": 419,
+                  "min": 1.2839999999996508,
+                  "p50": 2.021599999992759,
+                  "p95": 2.0921999999991385,
+                  "max": 2.525000000008731,
+                  "sum": 851.6370000000024
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.810700000001816,
+                  "p50": 2.002299999992829,
+                  "p95": 2.0494999999937136,
+                  "max": 2.0494999999937136,
+                  "sum": 5.8624999999883585
+                }
+              }
+            },
+            {
+              "prepareMs": 1158.2900999999983,
+              "packMs": 6.935599999997066,
+              "prepareCpuMs": 1312,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 93.95990000000165,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 16049160,
+              "checkpointRssDelta": 22364160,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 67,
+                  "min": 0.22800000000279397,
+                  "p50": 0.739000000001397,
+                  "p95": 1.6071999999985565,
+                  "max": 2.13200000001234,
+                  "sum": 58.860199999951874
+                },
+                "ocean-coverage": {
+                  "count": 425,
+                  "min": 0.1645999999891501,
+                  "p50": 2.0209000000031665,
+                  "p95": 2.0722999999998137,
+                  "max": 2.31150000001071,
+                  "sum": 859.5490000000864
+                },
+                "ocean-grid": {
+                  "count": 3,
+                  "min": 1.7056000000011409,
+                  "p50": 2.000400000004447,
+                  "p95": 2.0393999999942025,
+                  "max": 2.0393999999942025,
+                  "sum": 5.7453999999997905
+                }
+              }
+            },
+            {
+              "prepareMs": 1066.3448999999964,
+              "packMs": 4.539400000008754,
+              "prepareCpuMs": 1219,
+              "packCpuMs": 0,
+              "reads": 64,
+              "maxInFlight": 4,
+              "bytesRead": 50727680,
+              "decodeMs": 98.7622000000556,
+              "checkpointArrayBuffersDelta": 5298868,
+              "checkpointHeapDelta": 16548456,
+              "checkpointRssDelta": 0,
+              "slices": {
+                "ocean-terrain-snapshot": {
+                  "count": 68,
+                  "min": 0.24020000000018626,
+                  "p50": 0.7529999999969732,
+                  "p95": 2.001799999998184,
+                  "max": 2.036600000006729,
+                  "sum": 60.17319999994652
+                },
+                "ocean-coverage": {
+                  "count": 382,
+                  "min": 0.08999999999650754,
+                  "p50": 2.018000000010943,
+                  "p95": 2.061700000005658,
+                  "max": 2.1388999999908265,
+                  "sum": 771.069500000056
+                },
+                "ocean-grid": {
+                  "count": 2,
+                  "min": 1.7894000000087544,
+                  "p50": 1.7894000000087544,
+                  "p95": 2.001300000003539,
+                  "max": 2.001300000003539,
+                  "sum": 3.7907000000122935
+                }
+              }
+            }
+          ],
+          "prepareMs": {
+            "count": 5,
+            "min": 1066.3448999999964,
+            "p50": 1147.7271000000037,
+            "p95": 1158.2900999999983,
+            "max": 1158.2900999999983
+          },
+          "packMs": {
+            "count": 5,
+            "min": 4.539400000008754,
+            "p50": 6.697999999989406,
+            "p95": 6.962699999989127,
+            "max": 6.962699999989127
+          },
+          "prepareCpuMs": {
+            "count": 5,
+            "min": 1063,
+            "p50": 1312,
+            "p95": 1344,
+            "max": 1344
+          },
+          "packCpuMs": {
+            "count": 5,
+            "min": 0,
+            "p50": 0,
+            "p95": 16,
+            "max": 16
+          },
+          "maxSliceMs": {
+            "count": 5,
+            "min": 2.1388999999908265,
+            "p50": 2.31150000001071,
+            "p95": 3.0671000000002095,
+            "max": 3.0671000000002095
+          },
+          "checkpointArrayBuffersDelta": {
+            "count": 5,
+            "min": 5298868,
+            "p50": 5298868,
+            "p95": 5298868,
+            "max": 5298868
+          }
+        }
+      ]
+    }
+  ],
+  "diagnosticTransforms": [
+    {
+      "file": "engine/scene/oceanBudget.ts",
+      "originalSha256": "30bfd41b389018da305fb8a912bb45d4a78348c94e290ba7e6044127075da8fb",
+      "experimentalSha256": "065041681a0b4bdcadcce52de35e7745c389f2f769a35d5f524f7740185a0efd",
+      "needle": "cells: 1048576, axisCells: 2048"
+    }
+  ],
+  "bundleSha256": {
+    "baseline": "54787e5a9d4ef247430a150a090a9cc2b961254e62df1857d5ed0f63d84631f2",
+    "diagnostic": "5c4b3c6b565a6f70785170ee7127e6b06a4400dc7f8732b837509c453a092d83"
+  }
+}

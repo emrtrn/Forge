@@ -16,6 +16,8 @@ import { OCEAN_LIMITS, type OceanWaterBody } from "../../engine/scene/oceanWater
 import { OceanSurface } from "../../engine/render-three/ocean/oceanSurface";
 import type { OceanFft } from "../../engine/render-three/ocean/oceanFft";
 import { N, LOG_N, CASCADE_LENGTHS } from "../../engine/render-three/ocean/oceanSpectrum";
+import { oceanCoverageLayout } from "../../engine/terrain/oceanCoverageStorage";
+import { prepareOceanGrid, oceanGridLevels } from "../../engine/render-three/ocean/oceanGrid";
 
 interface Baseline {
   limits: { cells: number; axisCells: number };
@@ -38,25 +40,26 @@ const distribution = (values: number[]) => {
 function buffers(nx: number, tileQuads: number, layerCount: number, gridBytes: number) {
   const cells = nx * nx, vertices = (nx + 1) ** 2, tileVertices = (tileQuads + 1) ** 2;
   const decodedTile = tileVertices * (4 + 4 * Math.ceil(layerCount / 4));
-  const coverageCpu = 4 * vertices + cells, packedCpu = 16 * vertices;
+  const layout = oceanCoverageLayout(nx, nx), atlasBytes = layout.width * layout.height * 4;
+  const coverageCpu = atlasBytes + cells;
   const fft = N * N * 4 * 16 + 2 * N * N * 4 * 2 * 8
     + CASCADE_LENGTHS.length * 2 * 2 * 8 * Array.from({ length: LOG_N + 1 }, (_, i) => (N >> i) ** 2).reduce((a, b) => a + b, 0);
   return {
     cells, vertices, decodedTile, decodedAllTiles: WORLD_TILES ** 2 * decodedTile,
     snapshotF64: 8 * vertices, presentCells: cells, coverageHeightsF32: 4 * vertices, connectedTrianglesU8: cells,
     floodQueueI32: 8 * cells, floodVisitedU8: 2 * cells,
-    preparationTypedBuffers: 12 * vertices + 12 * cells,
-    coverageCpu, packedCoverageCpu: packedCpu, gridCpuAndGpuEach: gridBytes,
-    steadyOceanCpuTyped: coverageCpu + packedCpu + gridBytes,
+    preparationTypedBuffers: 8 * vertices + atlasBytes + 12 * cells,
+    coverageCpu, atlasCpu: atlasBytes, gridCpuAndGpuEach: gridBytes,
+    steadyOceanCpuTyped: coverageCpu + gridBytes,
     // A conservative allocation window if preparation garbage has not been collected before packing.
-    preparationAndPackingAllocationWindow: 28 * vertices + 12 * cells + gridBytes,
+    preparationAndPackingAllocationWindow: 8 * vertices + atlasBytes + 12 * cells + gridBytes,
     fourReadGuardEstimate: 4 * tileVertices * (8 + 8 * Math.ceil(layerCount / 4)),
     fourReadDecodedAndEncodedPayload: 4 * (2 * decodedTile + 32),
-    coverageGpuFormatBytes: packedCpu, fftGpuFormatBytes: fft,
-    baseOceanGpuFormatBytes: packedCpu + fft + gridBytes,
+    coverageGpuFormatBytes: atlasBytes, fftGpuFormatBytes: fft,
+    baseOceanGpuFormatBytes: atlasBytes + fft + gridBytes,
     // Controller constructs the complete replacement (including its own FFT) before disposing the old one.
-    replacementBaseGpuFormatBytes: 2 * (packedCpu + fft + gridBytes),
-    replacementSteadyCpuTyped: 2 * (coverageCpu + packedCpu + gridBytes),
+    replacementBaseGpuFormatBytes: 2 * (atlasBytes + fft + gridBytes),
+    replacementSteadyCpuTyped: 2 * (coverageCpu + gridBytes),
   };
 }
 
@@ -99,14 +102,15 @@ function coverageFingerprint(coverage: OceanCoverage) {
 }
 
 export async function runOceanBudgetStudy(baseline: Baseline, study: StudyOptions) {
-  assert.equal(baseline.limits.cells, 262144, "baseline must retain the production limit");
+  assert.equal(baseline.limits.cells, 1048576, "baseline must retain the Medium production limit");
   assert.equal(OCEAN_LIMITS.cells, 4194304, "only the diagnostic bundle raises the full-domain cap");
   const cases = [];
   for (const landform of ["island", "coast"] as const) for (const size of ["small", "medium", "large"] as const) {
     console.log(`[ocean-budget] ${landform}/${size}: fixture`);
     const options: RandomWorldOptions = { id: `budget-${landform}-${size}`, name: "Ocean budget fixture", seed: 11,
       size, landform, mountainHeight: "medium", roads: "between", settlements: [], rivers: 0, lakes: 0, cover: "forest", seaSide: "west" };
-    if (size !== "small") assert.throws(() => baseline.randomWorldBrief(options), /Small worlds only/);
+    const productionAllowed = (WORLD_TILES * WORLD_SIZES[size]) ** 2 <= baseline.limits.cells;
+    if (!productionAllowed) assert.throws(() => baseline.randomWorldBrief(options), /Ocean terrain budget/);
     else assert.deepEqual(randomWorldBrief(options), baseline.randomWorldBrief(options), "Small generation must be unchanged");
     const source = await fixture(options, study), { def, body } = source;
     // Use Uint8Array semantics like fetch: Buffer.slice would retain the entire
@@ -116,7 +120,7 @@ export async function runOceanBudgetStudy(baseline: Baseline, study: StudyOption
       return validateTerrainTile(def, key, new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength));
     };
     let baselineReads = 0;
-    if (size !== "small") await assert.rejects(() => baseline.prepareOceanTerrain({ def, tiles: new Map() }, body,
+    if (!productionAllowed) await assert.rejects(() => baseline.prepareOceanTerrain({ def, tiles: new Map() }, body,
       async key => { baselineReads++; return read(key); }), /over-budget/);
     assert.equal(baselineReads, 0, "production must reject before native tile I/O");
     const paths = []; let fingerprint: ReturnType<typeof coverageFingerprint> | undefined, inventory: ReturnType<typeof buffers> | undefined;
@@ -157,12 +161,14 @@ export async function runOceanBudgetStudy(baseline: Baseline, study: StudyOption
         // Measure the actual CPU packing/grid/material constructor, without creating a GL context or claiming GPU allocation.
         const textures = Array.from({ length: 7 }, () => new Texture());
         const simulation = { lengths: CASCADE_LENGTHS, displacement: textures.slice(0, 3), slopes: textures.slice(3), stats: { time: 0 } } as unknown as OceanFft;
-        const packedAt = performance.now(), packCpuAt = process.cpuUsage(), surface = new OceanSurface(coverage, simulation), packMs = performance.now() - packedAt;
+        const packedAt = performance.now(), packCpuAt = process.cpuUsage();
+        const grid = await prepareOceanGrid(work, 64, oceanGridLevels(body)), surface = new OceanSurface(coverage, simulation, undefined, grid), packMs = performance.now() - packedAt;
         const packCpu = process.cpuUsage(packCpuAt);
         checkpoint();
         const gridBytes = Object.values(surface.geometry.attributes).reduce((n, a) => n + a.array.byteLength, 0) + surface.geometry.index!.array.byteLength;
         inventory = buffers(def.tileQuads * def.tilesX, def.tileQuads, def.layers.length, gridBytes);
-        assert.equal((surface.coverageTexture.image.data as Float32Array).byteLength, inventory.packedCoverageCpu);
+        assert.equal((surface.coverageTexture.image.data as Float32Array).byteLength, inventory.atlasCpu);
+        assert.equal(coverage.heights.buffer, (surface.coverageTexture.image.data as Float32Array).buffer);
         surface.dispose(); textures.forEach(texture => texture.dispose());
         assert.deepEqual([...tiles.keys()], beforeKeys, "Ocean reads must not populate native residency");
         assert.equal(reads, residency === "resident" ? 0 : WORLD_TILES ** 2); assert.ok(maxInFlight <= 4);
@@ -185,14 +191,14 @@ export async function runOceanBudgetStudy(baseline: Baseline, study: StudyOption
       console.log(`[ocean-budget] ${landform}/${size}/${residency}: p50 ${paths.at(-1)!.prepareMs.p50.toFixed(1)} ms`);
     }
     cases.push({ landform, size, extent: worldExtent(size), spacing: def.spacing, tileQuads: def.tileQuads, tiles: def.tiles.length,
-      layers: def.layers.length, productionAllowed: size === "small", baselineReadsBeforeRejection: baselineReads,
+      layers: def.layers.length, productionAllowed, baselineReadsBeforeRejection: baselineReads,
       fixtureMs: source.fixtureMs, encodedBytes: source.encodedBytes, fingerprint, inventory, paths });
   }
-  return { schema: 1, measuredAtUtc: new Date().toISOString(), host: { platform: platform(), release: release(), node: process.version,
+  return { schema: 2, representation: "R32F atlas, eight cells per flag word", measuredAtUtc: new Date().toISOString(), host: { platform: platform(), release: release(), node: process.version,
     cpu: cpus()[0]?.model, logicalCpus: cpus().length }, samples: study.samples, warmups: study.warmups,
     protocol: { seed: 11, landforms: ["island", "coast-west"], settlements: 0, rivers: 0, lakes: 0, heightFormat: "f32",
       io: "local filesystem reads after fixture creation; OS cache not flushed; not cold I/O", scheduler: "CooperativeWork 2 ms target, explicit Node setImmediate task yields; not browser or default Node timer latency",
-      timing: "preparation and CPU surface constructor only; fixture synthesis, GC and fingerprints excluded; onSlice memory instrumentation included in wall time",
+      timing: "preparation includes atlas packing; packMs is now cooperative grid preparation + short surface constructor, NOT historic RGBA packing; fixture synthesis, GC and fingerprints excluded; onSlice memory instrumentation included in wall time",
       memory: "exact typed-array/texture-format accounting plus process checkpoints; checkpoints are not continuous peaks; driver/JS overhead excluded from format accounting",
       graphics: "no WebGL context; texture bytes are format accounting, not measured GPU time/VRAM; no planar/snapshot/caustics/terrain-renderer budget included" }, cases };
 }

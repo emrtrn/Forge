@@ -6210,6 +6210,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeOcean(): Promise<void> {
     if (!this.layout?.oceanWaters?.length && !this.oceans) return;
     this.oceans ??= new OceanWaterController({ scene: this.scene, renderer: this.renderer,
+      camera: () => this.camera,
       reflections: this.waterReflections, reflectionQuality: lakeQuality(this.qualitySettings).reflectionQuality,
       causticsAllowed: lakeQuality(this.qualitySettings).causticsAllowed,
       environmentProbes: () => this.eligibleProbeBakes(),

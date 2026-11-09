@@ -14,9 +14,10 @@ for (let i = 0; i < args.length; i += 2) assert.ok(["--out", "--samples", "--war
 const samples = Number(value("--samples", "5")), warmups = Number(value("--warmups", "2"));
 assert.ok(Number.isInteger(samples) && samples >= 1 && samples <= 30 && Number.isInteger(warmups) && warmups >= 0 && warmups <= 5);
 assert.equal(typeof globalThis.gc, "function", "Use node --expose-gc tools/ocean-budget-report.mjs");
-const output = resolve(repository, value("--out", "docs/reports/evidence/ocean-medium-large/budget.json"));
+const output = resolve(repository, value("--out", "docs/reports/evidence/ocean-medium-large/budget-atlas-medium.json"));
+assert.notEqual(output, resolve(repository, "docs/reports/evidence/ocean-medium-large/budget.json"), "The historical RGBA baseline must not be overwritten");
 const scratch = await mkdtemp(join(tmpdir(), "forge-ocean-budget-"));
-const sourcePaths = ["engine/scene/oceanWater.ts", "engine/worldbuilder/randomWorld.ts"];
+const sourcePaths = ["engine/scene/oceanBudget.ts", "engine/worldbuilder/randomWorld.ts"];
 const sha = text => createHash("sha256").update(text).digest("hex");
 const original = new Map(await Promise.all(sourcePaths.map(async file => [file, await readFile(join(repository, file), "utf8")])));
 const transforms = [];
@@ -26,18 +27,17 @@ try {
   await build({ ...settings, outfile: baselineFile, stdin: { resolveDir: repository, loader: "ts", contents:
     'export { OCEAN_LIMITS as limits } from "./engine/scene/oceanWater"; export { randomWorldBrief } from "./engine/worldbuilder/randomWorld"; export { prepareOceanTerrain } from "./engine/terrain/oceanPreparation";' } });
   await build({ ...settings, outfile: experimentFile, entryPoints: ["tools/perf/oceanBudgetStudy.ts"], plugins: [{ name: "diagnostic-only-ocean-budget", setup(builder) {
-    builder.onLoad({ filter: /[\\/]engine[\\/](scene[\\/]oceanWater|worldbuilder[\\/]randomWorld)\.ts$/ }, async ({ path }) => {
+    builder.onLoad({ filter: /[\\/]engine[\\/]scene[\\/]oceanBudget\.ts$/ }, async ({ path }) => {
       const file = sourcePaths.find(file => resolve(repository, file) === path); assert.ok(file, path);
       const before = original.get(file);
-      const needle = file.endsWith("oceanWater.ts") ? "cells: 262144, axisCells: 2048"
-        : 'if ((options.landform === "island" || options.landform === "coast") && options.size !== "small") throw new Error("Island/Coast currently supports Small worlds only (Ocean terrain budget)");';
+      const needle = before.match(/cells: \d+, axisCells: 2048/)?.[0]; assert.ok(needle, "Review the diagnostic cap transform");
       assert.equal(before.split(needle).length, 2, `Source drift: review the diagnostic transform for ${file}`);
-      const after = before.replace(needle, file.endsWith("oceanWater.ts") ? "cells: 4194304, axisCells: 2048" : "/* Diagnostic bundle only: allow the size study. */");
+      const after = before.replace(needle, "cells: 4194304, axisCells: 2048");
       transforms.push({ file, originalSha256: sha(before), experimentalSha256: sha(after), needle });
       return { contents: after, loader: "ts", resolveDir: dirname(path) };
     });
   } }] });
-  assert.equal(transforms.length, 2, "Exactly two in-memory diagnostic changes must be applied");
+  assert.equal(transforms.length, 1, "Only the in-memory cell cap may change; size policies derive from it");
   const baseline = await import(pathToFileURL(baselineFile).href), experiment = await import(pathToFileURL(experimentFile).href);
   const report = await experiment.runOceanBudgetStudy(baseline, { repository, directory: join(scratch, "fixtures"), samples, warmups });
   for (const [file, before] of original) assert.equal(await readFile(join(repository, file), "utf8"), before, `Production source changed during study: ${file}`);

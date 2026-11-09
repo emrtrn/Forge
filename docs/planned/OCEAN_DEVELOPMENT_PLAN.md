@@ -308,7 +308,8 @@ maskesine canlı bağlandı; arazi ve FFT kaynakları korunur.
 Sonraki sınırlı [yüzey geçişi düzeltmesi](../reports/WORLD_BUILDER_INLET_TRANSITION.md),
 River uçlarındaki sahte rapid köpüğünü kaldırır ve Ocean dalga/normal/köpüğünü
 inlet çevresinde yumuşatır; ayrı renderer'ların renk/ışık sınırı hâlâ açıktır.
-Ada'da nehir, orta/büyük dünya ve tam O9 görsel/performans kabulü açıktır.
+Devam diliminde Medium Island/Coast açıldı; Ada'da nehir, Large ve tam O9
+görsel/performans kabulü açıktır.
 Detaylar: [Random World planı](../world-builder/RANDOM_WORLD_PLAN.md).
 
 - [ ] Random World'a Ada/Kıyı landform'ları, Ocean verisi ve uyumlu önizleme.
@@ -328,17 +329,20 @@ Medium/Large düğmelerini açmak tek başına teslim sayılmaz.
    hesaplanan tahmin ile yalnız tanı amacıyla çalıştırılan deneyleri ayır;
    production limitlerini değiştirme. Çıkış: ölçüm raporu, ham sonuçlar ve
    ikinci adımın kararını destekleyen kaynak bütçesi.
-2. **Bütçeli kapsam hazırlama tasarımı — bekliyor.** Ölçümlere göre tam native
+2. **Bütçeli kapsam hazırlama tasarımı — tamamlandı.** Ölçümlere göre tam native
    domain, parçalara bölünmüş/streaming veya uzak bağlantı + yakın kesin kıyı
    seçeneklerini karşılaştır. Kuru/eksik/denize bağlı su ayrımı, tile sınırları,
    iptal/revision ve eski geçerli yüzeyin korunmasını tasarla. Çözünürlük
    düşürülerek gerçek kıyı veya kapalı çukur doğruluğu gizlice değiştirilmez.
    Çıkış: seçilen yaklaşım, bütçeler ve uygulama/kabul sınırları.
-3. **Önce Medium, sonra Large — bekliyor.** Seçilen yaklaşımı engine ve ortak
-   editör/runtime controller'a uygula; üretici ve istek doğrulamasıyla birlikte
-   yalnız kabulü geçen boyutu aç. Island ve dört deniz yönlü Coast ayrı
-   doğrulanır; önceki Small kayıtları ve River inlet eşlemesi korunur.
-4. **İşlev, görsel ve performans kabulü — bekliyor.** Kıyı/kapalı çukur/eksik
+3. **Önce Medium, sonra Large — Medium uygulandı; Large bekliyor.** Tek atlas,
+   cooperative hazırlık, band GPU upload ve revision/atomik yayın ortak
+   editör/runtime controller'a taşındı. Üretici, UI ve istek doğrulaması Medium'u
+   açar; Large kapalıdır. Medium Island/Coast Save/Reload/Play, dar/geniş ağız
+   ve undo/redo ile; dört Coast yönü engine kontrolleriyle doğrulandı. Small
+   kayıtları ve River inlet eşlemesi korunur. [Uygulama ve görüntüler](../reports/OCEAN_MEDIUM_WORLD_BUILDER.md).
+4. **İşlev, görsel ve performans kabulü — kısmi; tam kabul açık.** Medium işlev
+   ve görüntü kanıtları üçüncü adım raporundadır. Kalan kıyı/kapalı çukur/eksik
    tile, nehir ağzı, undo/redo, Save/Reload/Play, streaming/replacement döngüleri
    ve üretim paketi kontrol edilir. Hedef donanımda hazırlık dilimleri, transient
    tepe ve Ocean GPU bütçesi ayrıca ölçülür. Ada'da nehir ve kalan River/Ocean
@@ -347,9 +351,25 @@ Medium/Large düğmelerini açmak tek başına teslim sayılmaz.
 İlk adımın kanıtları: [Medium/Large bütçe incelemesi](../reports/OCEAN_MEDIUM_LARGE_BUDGET.md).
 İlk bulgu: mevcut biçimde Medium temel/replacement GPU hesabı 39,52/79,04 MiB,
 Large 87,55/175,10 MiB'dir; diğer su kaynakları hariçtir. Senkron CPU kurucusu
-da büyür. İkinci adımda kayıpsız kapsam formatı ve paketleme maliyeti,
-streaming/yakın kıyı seçenekleriyle birlikte karşılaştırılmalıdır. Boyut desteği
-ve gerçek browser/GPU kabulü henüz açılmamıştır.
+da büyür. İkinci adımda [tek R32F atlas tasarımı](OCEAN_MEDIUM_LARGE_COVERAGE_DESIGN.md)
+seçildi: native yükseklikler ve sekiz hücrenin kayıpsız bağlantı bitleri aynı
+sampler'da tutulur. Medium temel/replacement hesabı 28,00/55,99 MiB, Large
+41,51/83,01 MiB'dir; diğer su kaynakları hariçtir. Cooperative CPU hazırlığı,
+kontrollü GPU yüklemesi, terrain revision ve atomik yayın da tasarımın parçasıdır.
+Medium uygulamasında uzak seafloor'u örtmek için sekizinci dış ring eklendi;
+temel/replacement hesabı 28,11/56,23 MiB oldu. Gerçek GPU atlas doğruluğu ve
+Medium browser işlev akışları geçti. Tam cold/warm performans, tüm su kaynakları
+ve replacement tepe kabulü dördüncü adımda açıktır; Large desteği açılmamıştır.
+
+#### O9-C — Kara payı, kumsal, sığ kıyı ve ada biçimi
+
+9 Kasım 2026. [Onaylanan kıyı planı](WORLD_BUILDER_SHORELINE_PLAN.md) kaydedildi;
+uygulama başlamadı. İlk iş A1: Coast'ta yaklaşık %70 iç arazi, %30 kuru kumsal
+ve deniz; görünen kuru kumsal mevcut genişliğinin 2–3 katı (başlangıç 2,5 kat).
+Oran ve kumsal birlikte uygulanır. Sonraki A2, Island/Coast sığ taban profili;
+A3, toplam kara oranını koruyan, seed'e göre daha çeşitli koy/burun/yarımadalarla
+alanın farklı bölümlerine yayılan Island biçimleridir. A4 birleşik doğrulamadır.
+Kıyıya vurup kırılan dalgalar ayrı sonraki iştir; Large ve Ada'da nehir dahil değildir.
 
 ## 5. Önerilen modül yerleşimi
 

@@ -4,6 +4,15 @@
 birinci adım: hücre, bellek ve hazırlık maliyeti. Üretim boyut desteği açılmaz;
 ikinci adımın tasarım kararı için mevcut tam-domain yaklaşımı incelenir.
 
+Devamı: [ikinci adımın kapsam hazırlama tasarımı](../planned/OCEAN_MEDIUM_LARGE_COVERAGE_DESIGN.md).
+Bu rapordaki ölçümler mevcut RGBA32F yoluna aittir; seçilen tek atlasın
+sayısal kaynak hesabı ve kabul kapıları sonraki belgede ayrı tutulur.
+
+Güncel uygulama: [Medium Island/Coast ve atlas raporu](OCEAN_MEDIUM_WORLD_BUILDER.md).
+Medium desteği 1.048.576 hücre tavanıyla açılmıştır; Large kapalıdır. Bu belgedeki
+262.144 hücre sınırı, RGBA ölçümleri ve reddetme sonuçları birinci adımın tarihsel
+kanıtıdır. Ham `budget.json` korunur; atlas ölçümü ayrı dosyada tutulur.
+
 ## Mevcut sınır ve ölçüm yöntemi
 
 World Builder her boyutta 8×8 tile ve 2 m örnek aralığı kullanır. Tile başına

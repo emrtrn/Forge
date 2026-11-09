@@ -1,4 +1,6 @@
 import { validateWaterCaustics, type WaterCaustics } from "./waterCaustics";
+import { OCEAN_LIMITS } from "./oceanBudget";
+export { OCEAN_LIMITS } from "./oceanBudget";
 /** Ocean authoring contract. Runtime simulation/coverage never lives in a layout. */
 export type OceanEdge = "west" | "east" | "north" | "south";
 export type OceanReflectionMode = "off" | "environment" | "sharedPlanar";
@@ -29,7 +31,6 @@ export interface OceanWaterBody {
     roughness?: number; foamStrength?: number; reflectionMode?: OceanReflectionMode;
     reflectionGroup?: string; reflectionQuality?: OceanReflectionQuality; reflectionStrength?: number };
 }
-export const OCEAN_LIMITS = { bodies: 1, cells: 262144, axisCells: 2048 } as const;
 export const OCEAN_WAVES = { windSpeed: 9, windDirection: 20, fetchKm: 120,
   swellStrength: .7, swellDirection: 345, choppiness: .85, seed: 1337 };
 export const OCEAN_APPEARANCE = { shallowColor: "#28b5ac", deepColor: "#073448",

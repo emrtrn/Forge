@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { oceanPlanarSettings, validateOceanWater, validateOceanWaters, type OceanWaterBody } from "../../engine/scene/oceanWater";
 import { buildOceanCoverage, prepareOceanCoverage, sampleOceanCoverage } from "../../engine/terrain/oceanCoverage";
 import { CooperativeWork } from "../../engine/core/cooperativeWork";
-import { createOceanGrid } from "../../engine/render-three/ocean/oceanGrid";
+import { createOceanGrid, oceanGridLevels, prepareOceanGrid } from "../../engine/render-three/ocean/oceanGrid";
 import { readRoomLayout } from "../../engine/scene/layoutValidation";
 import { validateLayout } from "../../tools/saveValidator";
 import { collectDroppedFields } from "../../tools/droppedFields";
@@ -27,6 +27,8 @@ import { cloneSelection, parseSelectionId, selectionId, selectionsEqual, type Se
 import { moveWorldTerrain } from "../../engine/terrain/worldTerrainMove";
 import { OceanReflectionLease } from "../../engine/render-three/ocean/oceanReflection";
 import { WaterReflectionRegistry } from "../../engine/render-three/waterReflectionRegistry";
+import { createOceanCoverageStorage, packOceanCoverage } from "../../engine/terrain/oceanCoverageStorage";
+import { finishWork } from "../../engine/core/cooperativeWork";
 import type { PlanarReflectionSource } from "../../engine/render-three/planarReflectionSource";
 
 const body = (): OceanWaterBody => ({ schema: 1, kind: "ocean", coordinateSpace: "world", id: "sea",
@@ -49,6 +51,76 @@ function inletFixture() {
 }
 
 export async function registerOceanWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("ocean atlas: all 65536 flag words roundtrip without changing height bits; tail cells stay separate", async () => {
+    const storage = createOceanCoverageStorage(1024, 512), flags = new Uint8Array(524288);
+    storage.heights[0] = -17.12345; const firstBits = new Uint32Array(storage.data.buffer)[0];
+    for (let word = 0; word < 65536; word++) for (let j = 0; j < 8; j++) flags[word * 8 + j] = (word >> (j * 2)) & 3;
+    finishWork(packOceanCoverage(storage, flags));
+    for (let word = 0; word < 65536; word++) assert.equal(storage.data[storage.vertices + word], word);
+    assert.equal(new Uint32Array(storage.data.buffer)[0], firstBits);
+    assert.equal(storage.heights.buffer, storage.data.buffer);
+    const tail = createOceanCoverageStorage(5, 3), odd = Uint8Array.from({ length: 15 }, (_, i) => i & 3);
+    finishWork(packOceanCoverage(tail, odd));
+    for (let i = 0; i < odd.length; i++) assert.equal((tail.data[tail.vertices + (i >> 3)]! >> ((i & 7) * 2)) & 3, odd[i]);
+    assert.equal(tail.data[tail.vertices + 1]! >> 14, 0, "unused eighth cell cannot become connected");
+    assert.ok(tail.data.subarray(tail.vertices + 2).every(v => v === 0));
+  });
+  await check("ocean atlas: async staging cancels stale publication and retains dirty terrain during width edits", async () => {
+    const { document, sea, rivers } = inletFixture(), scene = new Scene();
+    let made = 0, freed = 0, activated = 0, complete: (() => void) | undefined;
+    const heights: number[] = [];
+    const controller = new OceanWaterController({ scene, renderer: {} as WebGLRenderer, document: () => document, rivers: () => rivers,
+      load: async () => { throw new Error("unexpected read"); }, create: async coverage => {
+        made++; heights.push(coverage.heights[0]!);
+        const visual = { object: new Object3D(), update() {}, applyAppearance() {}, applyInlets() {},
+          activate: () => { activated++; }, dispose: () => { freed++; } };
+        if (made === 2) await new Promise<void>(resolve => { complete = resolve; });
+        return visual;
+      } });
+    try {
+      await controller.rebuild([sea]); const previous = controller.object;
+      for (const tile of document.tiles.values()) tile.heights.fill(6);
+      const pending = controller.rebuild([sea], true);
+      for (let i = 0; !complete && i < 500; i++) await new Promise(resolve => setTimeout(resolve, 1));
+      assert.ok(complete); assert.equal(controller.object, previous);
+      rivers[0]!.widthScale = .5; await controller.rebuild([sea]);
+      assert.notEqual(controller.object, previous); assert.equal(made, 3); assert.equal(heights.at(-1), 6 + document.def.origin[1]);
+      const current = controller.object; complete(); await pending;
+      assert.equal(controller.object, current); assert.equal(activated, 2); assert.equal(freed, 2);
+      assert.equal(controller.results.get(sea.id)?.status, "ready");
+    } finally { complete?.(); controller.dispose(); }
+    assert.equal(freed, made);
+  });
+  await check("ocean atlas: context restore stages the latest body and never resurrects a removed Ocean", async () => {
+    const { document, sea } = inletFixture(), scene = new Scene(), canvas = new EventTarget();
+    let made = 0, freed = 0;
+    const controller = new OceanWaterController({ scene, renderer: { domElement: canvas } as unknown as WebGLRenderer,
+      document: () => document, load: async () => { throw new Error("unexpected read"); },
+      create: () => { made++; return { object: new Object3D(), update() {}, dispose: () => { freed++; } }; } });
+    try {
+      await controller.rebuild([sea]); canvas.dispatchEvent(new Event("webglcontextlost"));
+      assert.equal(controller.object, null); assert.equal(freed, 1);
+      await controller.rebuild([{ ...sea, name: "Latest" }]); assert.equal(made, 1);
+      canvas.dispatchEvent(new Event("webglcontextrestored"));
+      for (let i = 0; !controller.object && i < 500; i++) await new Promise(resolve => setTimeout(resolve, 1));
+      assert.ok(controller.object); assert.equal(made, 2);
+      canvas.dispatchEvent(new Event("webglcontextlost")); await controller.rebuild([]);
+      canvas.dispatchEvent(new Event("webglcontextrestored")); await new Promise(resolve => setTimeout(resolve, 5));
+      assert.equal(controller.object, null); assert.equal(made, 2);
+    } finally { controller.dispose(); }
+    assert.equal(freed, made);
+  });
+  await check("ocean atlas: Medium outer rings cover the complete overview domain without moving near samples", async () => {
+    const small = { ...body(), bounds: { min: [-512,-512] as [number,number], max: [512,512] as [number,number] } };
+    const medium = { ...body(), bounds: { min: [-1024,-1024] as [number,number], max: [1024,1024] as [number,number] } };
+    assert.equal(oceanGridLevels(small), 7); assert.equal(oceanGridLevels(medium), 8);
+    const before = createOceanGrid(), after = await prepareOceanGrid(new CooperativeWork({ yieldTask: async () => {} }), 64, oceanGridLevels(medium));
+    try {
+      const near = before.getAttribute("position").array;
+      assert.deepEqual(after.getAttribute("position").array.slice(0, near.length), near);
+      assert.ok(after.boundingBox!.max.z >= 1024 + 804, "far Medium seabed remains behind water from the overview camera");
+    } finally { before.dispose(); after.dispose(); }
+  });
   await check("ocean inlet: live widths, hidden/deleted owners, local coordinates and terrain movement resolve consistently", async () => {
     const { document, sea, rivers } = inletFixture();
     const original = structuredClone({ sea, rivers, def: document.def });

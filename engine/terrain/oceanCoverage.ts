@@ -1,7 +1,10 @@
 import { OCEAN_LIMITS, validateOceanWater, type OceanWaterBody } from "../scene/oceanWater";
 import { CooperativeWork, finishWork } from "../core/cooperativeWork";
+import { createOceanCoverageStorage, packOceanCoverage, type OceanCoverageStorage } from "./oceanCoverageStorage";
 
 export interface OceanCoverage {
+  storage: OceanCoverageStorage;
+  minBed: number;
   inlets?: readonly OceanInlet[];
   body: OceanWaterBody;
   spacing: number;
@@ -38,18 +41,19 @@ export function* oceanCoverageSteps(value: OceanWaterBody, spacing: number,
   if (!Number.isFinite(spacing) || spacing <= 0 || nx < 1 || nz < 1 || nx > OCEAN_LIMITS.axisCells || nz > OCEAN_LIMITS.axisCells
     || nx * nz > OCEAN_LIMITS.cells || Math.abs(nx * spacing - max[0] + min[0]) > 1e-6
     || Math.abs(nz * spacing - max[1] + min[1]) > 1e-6) throw new Error("Ocean requires an exact, bounded terrain grid");
-  const width = nx + 1, heights = new Float32Array(width * (nz + 1));
-  let missing = false;
+  const storage = createOceanCoverageStorage(nx, nz), width = nx + 1, heights = storage.heights;
+  let missing = false, minBed = Infinity;
   for (let z = 0; z <= nz; z++) {
     for (let x = 0; x <= nx; x++) {
       const h = heightAt(min[0] + x * spacing, min[1] + z * spacing);
       heights[z * width + x] = h !== null && Number.isFinite(h) ? h : NaN;
       if (!Number.isFinite(heights[z * width + x])) missing = true;
+      else minBed = Math.min(minBed, heights[z * width + x]!);
     }
     yield;
   }
   const triangles = new Uint8Array(nx * nz), count = nx * nz * 2;
-  const out: OceanCoverage = { body, spacing, nx, nz, heights, triangles, status: missing ? "missing-data" : "ready", wetFaces: 0, ...(inlets.length ? { inlets } : {}) };
+  const out: OceanCoverage = { storage, minBed, body, spacing, nx, nz, heights, triangles, status: missing ? "missing-data" : "ready", wetFaces: 0, ...(inlets.length ? { inlets } : {}) };
   // No new geometry may publish from an incomplete domain. Owners retain their previous coverage.
   if (missing) return out;
   const vertices = (t: number): [number, number, number] => {
@@ -75,7 +79,7 @@ export function* oceanCoverageSteps(value: OceanWaterBody, spacing: number,
     for (let e = 0; e < 3; e++) if (neighbours[e]! >= 0 && wetEdge(v[e]!, v[(e + 1) % 3]!)) add(neighbours[e]!);
     if ((head & 255) === 0) yield;
   }
-  out.wetFaces = tail; return out;
+  out.wetFaces = tail; yield* packOceanCoverage(storage, triangles); return out;
 }
 export const buildOceanCoverage = (body: OceanWaterBody, spacing: number, height: (x: number, z: number) => number | null, inlets: readonly OceanInlet[] = []) =>
   finishWork(oceanCoverageSteps(body, spacing, height, inlets));

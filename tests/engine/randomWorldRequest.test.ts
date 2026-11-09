@@ -24,16 +24,18 @@ function refuses(change: (body: Record<string, any>) => void, pattern: RegExp): 
 }
 
 export function registerRandomWorldRequestTests(check: Check): void {
-  check("random world request: Coast sea direction is bounded and medium/large coasts are rejected", () => {
+  check("random world request: Coast sea direction is bounded, Medium allowed and Large rejected", () => {
     const coast = { ...VALID, world: { ...VALID.world, landform: "coast", size: "small", seaSide: "east" } };
     assert.equal(validateRandomWorldRequest(coast).world.seaSide, "east");
     assert.throws(() => validateRandomWorldRequest({ ...coast, world: { ...coast.world, seaSide: "up" } }), /seaSide/);
-    for (const size of ["medium", "large"]) assert.throws(() => validateRandomWorldRequest({ ...coast, world: { ...coast.world, size } }), /Small worlds only/);
+    assert.equal(validateRandomWorldRequest({ ...coast, world: { ...coast.world, size: "medium" } }).world.size, "medium");
+    assert.throws(() => validateRandomWorldRequest({ ...coast, world: { ...coast.world, size: "large" } }), /Ocean terrain budget/);
   });
   check("random world request: island budget and river-mouth limits reject before writing", () => {
     const island = { ...VALID, world: { ...VALID.world, landform: "island", size: "small", rivers: 0 } };
     assert.equal(validateRandomWorldRequest(island).world.landform, "island");
-    for (const size of ["medium", "large"]) assert.throws(() => validateRandomWorldRequest({ ...island, world: { ...island.world, size } }), /Small worlds only/);
+    assert.equal(validateRandomWorldRequest({ ...island, world: { ...island.world, size: "medium" } }).world.size, "medium");
+    assert.throws(() => validateRandomWorldRequest({ ...island, world: { ...island.world, size: "large" } }), /Ocean terrain budget/);
     assert.throws(() => validateRandomWorldRequest({ ...island, world: { ...island.world, rivers: 1 } }), /river-mouth/);
   });
   check("random world request: the window's choices pass unchanged", () => {

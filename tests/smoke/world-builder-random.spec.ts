@@ -181,18 +181,19 @@ test("World Builder window: random world choices, live preview, Create builds in
   }
 });
 
-test("World Builder island: bounded choices, sea preview, Create, Save/Reload and real Play", async ({ page, context, request }, info) => {
-  test.setTimeout(600_000);
-  const path = `${FOLDER}/GeneratedIsland.level.json`;
-  const errors: Array<() => string[]> = [observeBrowserErrors(page)];
+for (const size of ["small", "medium"] as const) test(`World Builder island ${size}: bounded choices, sea preview, Create, Save/Reload and real Play`, async ({ page, context, request }, info) => {
+  test.setTimeout(900_000);
+  const path = `${FOLDER}/GeneratedIsland-${size}.level.json`;
+  const errors: Array<() => string[]> = [observeBrowserErrors(page, true)];
   await page.setViewportSize({ width: 1440, height: 900 });
   await openNewLevel(page, request, path);
   await openWorldBuilder(page);
   const panel = page.getByTestId("random-world-panel");
   let id = await nextPreview(page, 0);
   await panel.locator('[data-choice="landform"] button[data-value="island"]').click();
-  await expect(panel.locator('[data-choice="size"] button[data-value="small"]')).toHaveAttribute("aria-pressed", "true");
-  await expect(panel.locator('[data-choice="size"] button[data-value="medium"]')).toBeDisabled();
+  await panel.locator(`[data-choice="size"] button[data-value="${size}"]`).click();
+  await expect(panel.locator(`[data-choice="size"] button[data-value="${size}"]`)).toHaveAttribute("aria-pressed", "true");
+  await expect(panel.locator('[data-choice="size"] button[data-value="medium"]')).toBeEnabled();
   await expect(panel.locator('[data-choice="size"] button[data-value="large"]')).toBeDisabled();
   await expect(panel.locator('[data-choice="roads"] button[data-value="exits"]')).toBeDisabled();
   await expect(panel.locator('[data-count="rivers"]')).toBeDisabled();
@@ -223,6 +224,7 @@ test("World Builder island: bounded choices, sea preview, Create, Save/Reload an
   const sea = saved.oceanWaters[0];
   await page.locator('[data-object-id="ocean:0"]').click();
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator('[data-project-name]')).toHaveText(saved.name, { timeout: 90_000 });
   await page.getByTestId("editor-save").click();
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
   saved = JSON.parse(await readFile(smokePublicPath(path), "utf8"));
@@ -232,7 +234,7 @@ test("World Builder island: bounded choices, sea preview, Create, Save/Reload an
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
   await page.screenshot({ path: info.outputPath("island-editor.png") });
   const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
-  errors.push(observeBrowserErrors(runtime));
+  errors.push(observeBrowserErrors(runtime, true));
   const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
   await runtime.waitForLoadState("domcontentloaded");
   await expect(runtime.locator("#game-canvas")).toBeVisible({ timeout: 60_000 });
@@ -244,17 +246,19 @@ test("World Builder island: bounded choices, sea preview, Create, Save/Reload an
   expect(errors.flatMap(read => read())).toEqual([]);
 });
 
-test("World Builder coast: sea direction, live mouth width, undo, Save/Reload and Play", async ({ page, context, request }, info) => {
-  test.setTimeout(900_000);
-  const path = `${FOLDER}/GeneratedCoast.level.json`;
-  const errors: Array<() => string[]> = [observeBrowserErrors(page)];
+for (const size of ["small", "medium"] as const) test(`World Builder coast ${size}: sea direction, live mouth width, undo, Save/Reload and Play`, async ({ page, context, request }, info) => {
+  test.setTimeout(1200_000);
+  const path = `${FOLDER}/GeneratedCoast-${size}.level.json`;
+  const errors: Array<() => string[]> = [observeBrowserErrors(page, true)];
   await page.setViewportSize({ width: 1440, height: 900 });
   await openNewLevel(page, request, path);
   await openWorldBuilder(page);
   const panel = page.getByTestId("random-world-panel");
   let id = await nextPreview(page, 0);
   await panel.locator('[data-choice="landform"] button[data-value="coast"]').click();
-  await expect(panel.locator('[data-choice="size"] button[data-value="medium"]')).toBeDisabled();
+  await panel.locator(`[data-choice="size"] button[data-value="${size}"]`).click();
+  await expect(panel.locator('[data-choice="size"] button[data-value="medium"]')).toBeEnabled();
+  await expect(panel.locator('[data-choice="size"] button[data-value="large"]')).toBeDisabled();
   await expect(panel.locator('[data-choice="roads"] button[data-value="exits"]')).toBeEnabled();
   await expect(panel.locator('[data-count="rivers"]')).toBeEnabled();
   id = await nextPreview(page, id);
@@ -308,7 +312,7 @@ test("World Builder coast: sea direction, live mouth width, undo, Save/Reload an
   // Both widths must survive real Play, including the local optical transition.
   const capturePlay = async (image: string) => {
     const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
-    errors.push(observeBrowserErrors(runtime));
+    errors.push(observeBrowserErrors(runtime, true));
     const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
     await runtime.waitForLoadState("domcontentloaded");
     await expect.poll(() => messages.some(message => message.includes(saved.name)), { timeout: 90_000 }).toBe(true);

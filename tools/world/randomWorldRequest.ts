@@ -9,6 +9,7 @@
  */
 import { COVER_DENSITY_LEVELS } from "../../engine/worldbuilder/worldBrief";
 import { MAX_RANDOM_WATER } from "../../engine/worldbuilder/randomWater";
+import { SEA_SIDES } from "../../engine/worldbuilder/island";
 import {
   COVERS,
   LANDFORMS,
@@ -32,7 +33,7 @@ export interface RandomWorldRequest {
   world: RandomWorldChoices;
 }
 
-const WORLD_KEYS = ["seed", "size", "landform", "mountainHeight", "settlements", "roads", "rivers", "lakes", "cover", "densities"];
+const WORLD_KEYS = ["seed", "size", "landform", "mountainHeight", "settlements", "roads", "rivers", "lakes", "cover", "densities", "seaSide"];
 
 function record(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${label} must be an object`);
@@ -77,7 +78,7 @@ export function validateRandomWorldRequest(body: unknown): RandomWorldRequest {
   if (input.force !== undefined && typeof input.force !== "boolean") throw new Error("force must be true or false");
   const world = record(input.world, "world");
   onlyKeys(world, WORLD_KEYS, "world");
-  if (world.landform === "island" && world.size !== "small") throw new Error("Island currently supports Small worlds only (Ocean terrain budget)");
+  if ((world.landform === "island" || world.landform === "coast") && world.size !== "small") throw new Error("Island/Coast currently supports Small worlds only (Ocean terrain budget)");
   if (world.landform === "island" && (world.rivers ?? 0) !== 0) throw new Error("Island rivers require the river-mouth integration; choose 0 rivers");
   const seed = world.seed;
   if (typeof seed !== "number" || !Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error("world.seed must be a whole number 0–4294967295");
@@ -98,6 +99,7 @@ export function validateRandomWorldRequest(body: unknown): RandomWorldRequest {
       seed,
       size: oneOf(world.size, Object.keys(WORLD_SIZES) as Array<keyof typeof WORLD_SIZES>, "world.size"),
       landform: oneOf(world.landform, LANDFORMS, "world.landform"),
+      ...(world.seaSide !== undefined ? { seaSide: oneOf(world.seaSide, SEA_SIDES, "world.seaSide") } : {}),
       mountainHeight: oneOf(world.mountainHeight, MOUNTAIN_HEIGHTS, "world.mountainHeight"),
       settlements,
       roads: oneOf(world.roads, ROAD_NETWORKS, "world.roads"),

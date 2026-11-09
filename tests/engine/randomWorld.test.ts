@@ -33,6 +33,11 @@ import { normalizeGroundCover } from "../../engine/worldbuilder/groundCover";
 import { readRoomLayout } from "../../engine/scene/layoutValidation";
 import { validateSavePayload } from "../../tools/saveValidator";
 import { terrainTileLayerWeight } from "../../engine/terrain/terrainTypes";
+import { SEA_SIDES } from "../../engine/worldbuilder/island";
+import { prepareTerrainRiverWaterSource } from "../../engine/terrain/terrainRiverWater";
+import { resolveRiverWater } from "../../engine/scene/riverWater";
+import { buildRiverWaterRibbon } from "../../engine/render-three/riverWater";
+import { RiverSurfaceQuery } from "../../engine/terrain/riverSurface";
 
 type Check = (label: string, run: () => void) => void;
 type CheckAsync = (label: string, run: () => Promise<void>) => Promise<void>;
@@ -66,6 +71,72 @@ function waterGaps(world: WorldBrief): Array<{ id: string; gap: number }> {
 }
 
 export async function registerRandomWorldTests(check: Check, checkSlowAsync: CheckAsync): Promise<void> {
+  check("random world coast: four sea directions keep settlements and exits dry; rivers drain to sea", () => {
+    for (const seaSide of SEA_SIDES) {
+      let mouths = 0;
+      for (const seed of [4, 11, 29]) {
+        const options = { ...OPTIONS, landform: "coast" as const, seaSide, seed, rivers: 1, settlements: [{ type: "hamlet" as const }] };
+        const result = randomWorldBrief(options);
+        const normalized = normalizeWorldBrief(result.brief);
+        assert.deepEqual(normalized.issues, []);
+        assert.deepEqual(result, randomWorldBrief(options));
+        const world = normalized.brief!, ground = createBriefTerrain(world);
+        assert.equal(world.settlements.length, 1);
+        for (const node of world.roads.nodes) {
+          const [x, z] = briefToWorld(world, node.at);
+          assert.ok(ground.ocean!.distance(x, z) > 75, `${seaSide} ${seed} ${node.id} is on land`);
+        }
+        for (const course of ground.courses) if (course.water.outlet === "ocean") {
+          mouths++;
+          assert.equal(course.surface.at(-1), 0);
+          assert.ok(Math.abs(ground.ocean!.distance(...course.points.at(-1)!) - 4) < .15, "the mouth joins inside its shore channel");
+          assert.ok(ground.ocean!.distance(...course.points.at(-2)!) >= 79);
+          course.surface.slice(1).forEach((height, i) => assert.ok(height <= course.surface[i]!));
+        }
+      }
+      assert.ok(mouths > 0, `${seaSide}: at least one safe sea outlet across the fixtures`);
+    }
+  });
+
+  await checkSlowAsync("random world coast: native river mouth and Ocean own complementary surfaces and survive save/read", async () => {
+    const world = brief({ landform: "coast", seaSide: "west", seed: 11, rivers: 1, cover: "forest", settlements: [{ type: "hamlet" }] });
+    const profile = normalizeRegionProfile(JSON.parse(readFileSync(`public/${world.regionProfile}`, "utf8"))).profile;
+    const cover = normalizeGroundCover(JSON.parse(readFileSync(`public/${world.cover!.file}`, "utf8"))).cover!;
+    const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as { assets: Array<{ id: string; path: string }> };
+    const byPath = new Map(manifest.assets.map(asset => [asset.path, asset.id]));
+    const built = buildWorldFromBrief({ brief: world, levelPath: "assets/trial/Coast.level.json", profile, cover, assetIdForFile: file => byPath.get(file) ?? null });
+    const sea = built.layout.oceanWaters![0]!;
+    assert.equal(sea.offshorePolicy, "connectedBoundary");
+    assert.equal(sea.inlets?.length, 1, JSON.stringify(world.water));
+    const coverage = await prepareOceanTerrain({ def: built.def, tiles: built.tiles }, sea);
+    assert.equal(coverage.status, "ready");
+    assert.equal(sampleOceanCoverage(coverage, -800, 0).status, "wet");
+    assert.equal(sampleOceanCoverage(coverage, 800, 0).status, "dry", "the exterior mainland must not become sea");
+    const inlet = coverage.inlets![0]!;
+    const source = await prepareTerrainRiverWaterSource({ def: built.def, tiles: built.tiles }, resolveRiverWater(built.layout.riverWaters![0]));
+    const ribbon = buildRiverWaterRibbon(source.spline, { surfaceLevel: source.surfaceLevel, widthScale: 1, heightAt: source.heightAt, sampleSpacing: source.sampleSpacing });
+    const river = new RiverSurfaceQuery(ribbon, source.position);
+    assert.ok(ribbon.indices.length > 0);
+    const dx = inlet.end[0] - inlet.start[0], dz = inlet.end[1] - inlet.start[1], length = Math.hypot(dx, dz);
+    for (const share of [.2, .5, .9, .999]) {
+      const x = inlet.start[0] + dx * share, z = inlet.start[1] + dz * share;
+      assert.equal(sampleOceanCoverage(coverage, x, z).status, "dry", "the river owns its terminal reach");
+      assert.ok(river.sampleAt(x, z), "the excluded Ocean reach has a real wet River triangle");
+    }
+    let wetRiver = 0;
+    for (let along = length - 30; along < length - .5; along += 2) for (let across = -inlet.width + .5; across < inlet.width; across += 1) {
+      const x = inlet.start[0] + dx / length * along - dz / length * across;
+      const z = inlet.start[1] + dz / length * along + dx / length * across;
+      const sample = river.sampleAt(x, z);
+      if (sample) { wetRiver++; assert.equal(sampleOceanCoverage(coverage, x, z).status, "dry", "no duplicate surfaces across the mouth width"); }
+      else if ((built.sampleHeight(x, z) ?? Infinity) < sea.surfaceLevel) assert.equal(sampleOceanCoverage(coverage, x, z).status, "wet", "no water gap beside the ribbon");
+    }
+    assert.ok(wetRiver > 30);
+    assert.equal(sampleOceanCoverage(coverage, inlet.end[0] + dx / length * 2, inlet.end[1] + dz / length * 2).status, "wet", "Ocean starts immediately beyond the river end");
+    assert.equal(built.layout.riverWaters![0]!.waveAmplitude, 0, "terminal waterline remains coplanar with the Ocean");
+    assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(built.layout)), "coast").oceanWaters, [sea]);
+    assert.deepEqual(validateSavePayload({ layout: built.layout }).layout.oceanWaters, [sea]);
+  });
   check("random world island: deterministic coast, dry settlements and an internal road for a lone village", () => {
     for (const seed of [1, 11, 48213, 0xffffffff]) {
       const options = { landform: "island" as const, seed, rivers: 0, settlements: [{ type: "village" as const }] };
@@ -172,7 +243,7 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
 
   check("random world water: rivers run downhill to the edge, a lake or another river; water keeps off the settlements", () => {
     let lakes = 0;
-    for (const landform of LANDFORMS.filter(form => form !== "island")) {
+    for (const landform of LANDFORMS.filter(form => form !== "island" && form !== "coast")) {
       for (const seed of [3, 7, 11]) {
         const world = brief({ landform, seed, size: "medium", rivers: 2, lakes: 1 });
         const terrain = createBriefTerrain(world);
@@ -206,7 +277,7 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
   check("random world: every landform and size gives a valid brief; the same seed the same brief", () => {
     for (const landform of LANDFORMS) {
       for (const size of ["small", "medium", "large"] as const) {
-        if (landform === "island" && size !== "small") {
+        if ((landform === "island" || landform === "coast") && size !== "small") {
           assert.throws(() => brief({ landform, size }), /Small worlds only/);
           continue;
         }
@@ -222,7 +293,7 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
   });
 
   check("random world: settlements stay apart and on the map; a valley's sit on its floor", () => {
-    for (const landform of LANDFORMS.filter(form => form !== "island")) {
+    for (const landform of LANDFORMS.filter(form => form !== "island" && form !== "coast")) {
       for (const seed of [1, 2, 3]) {
         const world = brief({ landform, seed, size: "medium" });
         assert.equal(world.settlements.length, 3, `${landform} ${seed}`);

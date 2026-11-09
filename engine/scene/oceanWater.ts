@@ -18,6 +18,10 @@ export interface OceanWaterBody {
   openEdges: OceanEdge[];
   surfaceLevel: number;
   offshoreDepth: number;
+  /** Old Oceans author all exterior as sea; coasts extend only wet boundary portions. */
+  offshorePolicy?: "all" | "connectedBoundary";
+  /** Terminal straight river reaches whose ribbons own the water surface. */
+  inlets?: string[];
   caustics?: WaterCaustics;
   waves?: { windSpeed?: number; windDirection?: number; fetchKm?: number;
     swellStrength?: number; swellDirection?: number; choppiness?: number; seed?: number };
@@ -70,6 +74,15 @@ export function validateOceanWater(value: unknown): OceanWaterBody {
   const out: OceanWaterBody = { schema: 1, kind: "ocean", coordinateSpace: "world", id: v.id as string,
     terrainRef: v.terrainRef as string, bounds: { min, max }, openEdges: [...v.openEdges],
     surfaceLevel: number(v.surfaceLevel, -100000, 100000), offshoreDepth: number(v.offshoreDepth, 1, 10000) };
+  if (v.offshorePolicy !== undefined) {
+    if (v.offshorePolicy !== "all" && v.offshorePolicy !== "connectedBoundary") throw new Error("Invalid Ocean offshorePolicy");
+    out.offshorePolicy = v.offshorePolicy;
+  }
+  if (v.inlets !== undefined) {
+    if (!Array.isArray(v.inlets) || v.inlets.length > 3 || v.inlets.some(id => typeof id !== "string" || !id.trim() || id.length > 256)
+      || new Set(v.inlets).size !== v.inlets.length) throw new Error("Ocean supports at most three unique inlet spline references");
+    out.inlets = [...v.inlets];
+  }
   if (v.name !== undefined) {
     if (typeof v.name !== "string" || v.name.length > 256) throw new Error("Invalid Ocean name"); out.name = v.name;
   }

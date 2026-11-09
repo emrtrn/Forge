@@ -4,6 +4,11 @@ import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
 import { expect, test, type APIRequestContext, type Page } from "./test";
 import { expectNoSidewaysOverflow, openWorldBuilder } from "./worldBuilder";
 import { observeBrowserErrors } from "./browserErrors";
+import { PerspectiveCamera } from "three";
+
+// Explicit evidence images cover the visual states; a continuous WebGL filmstrip
+// adds heavy I/O without strengthening these authoring-flow assertions.
+test.use({ trace: { mode: "retain-on-failure", screenshots: false, snapshots: true, sources: true } });
 
 /**
  * World Builder window (RANDOM_WORLD_PLAN step 5): Add Actor → Terrain →
@@ -237,4 +242,87 @@ test("World Builder island: bounded choices, sea preview, Create, Save/Reload an
   await runtime.screenshot({ path: info.outputPath("island-runtime.png") });
   await runtime.close();
   expect(errors.flatMap(read => read())).toEqual([]);
+});
+
+test("World Builder coast: sea direction, river mouth, Save/Reload and Play", async ({ page, context, request }, info) => {
+  test.setTimeout(600_000);
+  const path = `${FOLDER}/GeneratedCoast.level.json`;
+  const errors: Array<() => string[]> = [observeBrowserErrors(page)];
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openNewLevel(page, request, path);
+  await openWorldBuilder(page);
+  const panel = page.getByTestId("random-world-panel");
+  let id = await nextPreview(page, 0);
+  await panel.locator('[data-choice="landform"] button[data-value="coast"]').click();
+  await expect(panel.locator('[data-choice="size"] button[data-value="medium"]')).toBeDisabled();
+  await expect(panel.locator('[data-choice="roads"] button[data-value="exits"]')).toBeEnabled();
+  await expect(panel.locator('[data-count="rivers"]')).toBeEnabled();
+  id = await nextPreview(page, id);
+  const west = await canvasPrint(page);
+  await panel.locator('[data-choice="seaSide"] button[data-value="east"]').click();
+  id = await nextPreview(page, id);
+  expect((await canvasPrint(page)).hash).not.toBe(west.hash);
+  await panel.locator('[data-choice="seaSide"] button[data-value="west"]').click();
+  const chips = page.getByTestId("random-world-settlement");
+  await panel.locator('[data-add-settlement="hamlet"]').click();
+  while (await chips.count() > 1) await chips.first().getByRole("button").click();
+  await panel.locator('[data-choice="roads"] button[data-value="exits"]').click();
+  await panel.locator('[data-count="rivers"]').fill("1"); await panel.locator('[data-count="rivers"]').press("Tab");
+  await panel.locator('[data-seed]').fill("11"); await panel.locator('[data-seed]').press("Tab");
+  await nextPreview(page, id);
+  await expectNoSidewaysOverflow(page);
+  await expect(page.getByTestId("random-world-create")).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: info.outputPath("coast-preview.png") });
+  await page.setViewportSize({ width: 900, height: 900 }); await expectNoSidewaysOverflow(page);
+  await expect(page.getByTestId("random-world-create")).toBeInViewport({ ratio: 1 });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await createWorld(page, path);
+  const saved = JSON.parse(await readFile(smokePublicPath(path), "utf8"));
+  const ocean = saved.oceanWaters[0];
+  expect(ocean.offshorePolicy).toBe("connectedBoundary"); expect(ocean.inlets).toHaveLength(1);
+  expect(saved.riverWaters).toHaveLength(1);
+  await page.locator('[data-object-id="ocean:0"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
+  expect(JSON.parse(await readFile(smokePublicPath(path), "utf8")).oceanWaters).toEqual([ocean]);
+  // Stage a repeatable mouth camera; the user flow still uses real Create/Save/Reload/Play controls.
+  const def = JSON.parse(await readFile(smokePublicPath(saved.landscapes[0].dataRef), "utf8"));
+  const river = def.splines.find((spline: { id: string }) => spline.id === ocean.inlets[0]);
+  const [x, y, z] = river.points.at(-1).position;
+  const camera = new PerspectiveCamera(); camera.position.set(x + 65, y + 50, z + 70); camera.lookAt(x, y, z);
+  const pose = { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), up: [0, 1, 0] };
+  await page.evaluate(({ key, pose }) => localStorage.setItem(key, JSON.stringify(pose)), { key: `forge.editor.cameraPose.${encodeURIComponent(path)}`, pose });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator('[data-object-id="ocean:0"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  await page.screenshot({ path: info.outputPath("coast-mouth-editor.png") });
+  const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
+  errors.push(observeBrowserErrors(runtime));
+  const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
+  await runtime.waitForLoadState("domcontentloaded");
+  await expect.poll(() => messages.some(message => message.includes(saved.name)), { timeout: 90_000 }).toBe(true);
+  await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  await runtime.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await runtime.screenshot({ path: info.outputPath("coast-mouth-runtime.png") }); await runtime.close();
+  expect(errors.flatMap(read => read())).toEqual([]);
+});
+
+test("World Builder preview: rapid seed changes never leave an old ready coast picture", async ({ page }, info) => {
+  await page.goto("/?editor", { waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await openWorldBuilder(page);
+  const panel = page.getByTestId("random-world-panel");
+  let id = await nextPreview(page, 0);
+  await panel.locator('[data-choice="landform"] button[data-value="coast"]').click();
+  await expect(panel).toHaveAttribute("data-preview-state", "pending");
+  id = await nextPreview(page, id);
+  const seed = panel.locator('[data-seed]');
+  await seed.fill("11"); await seed.press("Tab"); id = await nextPreview(page, id);
+  const first = await canvasPrint(page);
+  await panel.locator('[data-roll]').click();
+  await seed.fill("11"); await seed.press("Tab"); id = await nextPreview(page, id);
+  expect((await canvasPrint(page)).hash).toBe(first.hash);
+  await expect(page.getByTestId("random-world-create")).toBeInViewport({ ratio: 1 });
+  await page.screenshot({ path: info.outputPath("coast-controls.png") });
 });

@@ -354,7 +354,8 @@ export function createBriefTerrain(brief: WorldBrief): BriefTerrain {
     if (water.width === undefined || water.bedDepth === undefined || water.surfaceDepth === undefined) {
       throw new Error(`terrain: water ${water.id} needs width, bedDepth and surfaceDepth to carve its bed`);
     }
-    const { points, anchors } = centreline(water.line.map((point) => briefToWorld(brief, point)));
+    const line = water.line.map(point => briefToWorld(brief, point));
+    const { points, anchors } = water.outlet === "ocean" ? { points: line, anchors: line.map((_, index) => index) } : centreline(line);
     const level: number[] = [];
     for (const [x, z] of points) level.push(Math.min(ground(x, z), level.length ? level[level.length - 1]! : Infinity));
     courses.push({
@@ -363,8 +364,8 @@ export function createBriefTerrain(brief: WorldBrief): BriefTerrain {
       width: water.width,
       points,
       anchors,
-      surface: level.map((y) => y - water.surfaceDepth!),
-      bed: level.map((y) => y - water.bedDepth!),
+      surface: level.map((y) => water.outlet === "ocean" ? Math.max(ocean!.surfaceLevel, y - water.surfaceDepth!) : y - water.surfaceDepth!),
+      bed: level.map((y) => water.outlet === "ocean" ? Math.max(ocean!.surfaceLevel, y - water.surfaceDepth!) - (water.bedDepth! - water.surfaceDepth!) : y - water.bedDepth!),
     });
   }
 

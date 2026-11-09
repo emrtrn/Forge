@@ -167,7 +167,7 @@ Kıyı tohumdan türer; rölyef kıyıya ulaşmadan söner. Terrain'in bütün k
 deniz bandı kalmalıdır. Ocean aktörünün bounds'u gerçek, tile'a yuvarlanmış
 terrain alanıdır; dört kenar açıktır, dalga seed'i brief seed'idir.
 
-İlk sözleşme yalnız ada içindir: vadi veya nehirle birleştirme reddedilir.
+Ada sözleşmesinde vadi veya nehirle birleştirme reddedilir.
 İç göller desteklenir; rastgele üretici bunları kıyıdan uzak tutar.
 Ocean'ın mevcut native hücre/eksen bütçesi arazi ayrılmadan önce denetlenir.
 Küçük rastgele dünya tam hücre sınırındadır; orta/büyük Ada reddedilir.
@@ -180,6 +180,36 @@ Odaklı regresyonlar: `random world island`, `random world preview`,
 `random world request`; browser akışı `world-builder-random.spec.ts` içindeki
 `World Builder island` senaryosudur. Performans ve kullanıcı görsel kabulü
 bu testlerden ayrı değerlendirilir.
+
+### Kıyı ve nehir ağzı (ikinci dilim)
+
+Ada yerine `terrain.coast: { center: [east, north], seaSide:
+"west"|"east"|"north"|"south", shoreWidth, landHeight }` tanımlanabilir.
+`terrain.island` ve `terrain.coast` birlikte kullanılamaz; ikisi de `ocean`
+ister. Kıyı da Ocean'ın mevcut native grid bütçesine tabidir. Kıyı bir vadiyle
+birleştirilmez. Deniz tarafı ve kıyı dalgalanması terrain, önizleme ve kara
+üretim maskelerinde aynıdır. Kıyının kara tarafında harita dışı deniz açılmaz;
+haritanın ötesine gerçek anakara geometrisi üretilmez.
+
+`water[].outlet: "ocean"`, Kıyı'daki bir nehir çizgisinin deniz ağzıdır.
+Son kesit sabit genişlikli düz bir erişimdir; uç su kotu Ocean kotudur.
+Rastgele üretici bu ucu ham kıyının yaklaşık 4 m içinde, oyulmuş kanala koyar.
+Nehir yatağı deniz seviyesinde aşağı doğru devam eder. Ocean'ın `inlets`
+alanı bu terrain spline kimliklerini taşır (en çok üç); loader son düz
+kesitten yüzey sahipliği çıkarır. CPU su sorgusu, Ocean yüzeyi, yardımcı
+depth/normal çizimleri ve Ocean caustics aynı kesiti dışlar. Çizgi grafiğinin
+bu son kesiti `smooth: false` ve eşit genişliklidir. Outlet River'da geometrik
+dalga kapalıdır; mikro yüzey/akış sürer, ana renk/soğurma ayarları Ocean'a
+yakın seçilir. Bu kısıt hidrodinamik veya gerçek haliç modellemesi değildir.
+
+Üretilen Kıyı Ocean'ı `offshorePolicy: "connectedBoundary"` kullanır.
+Alanı olmayan eski Ocean'lar tüm domain dışını deniz saymaya devam eder.
+`inlets` ve `offshorePolicy` mevcut ortak Ocean read/save allowlist'inden
+geçer. Eksik, eğri, değişken genişlikli veya deniz kotunda bitmeyen inlet
+kayıtları hazırlığı hata ile durdurur; eksik kaynak suyla gizlenmez.
+Elle düzenlemede uç kotu/son kesit sözleşmesi korunmalıdır. Bu dilimde
+River aktörünün `widthScale` değerini 1'den değiştirmek Ocean kesitini
+otomatik güncellemez; otomatik genişlik eşlemesi takip işidir.
 
 ## Sonraki adımlar
 

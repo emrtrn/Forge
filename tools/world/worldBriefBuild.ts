@@ -86,7 +86,7 @@ import {
 } from "../../engine/worldbuilder/groundCover";
 import { lakeBedDistance } from "../../engine/scene/lakeBed";
 import { createLakeAppearance, LAKE_LIMITS } from "../../engine/scene/waterBody";
-import { OCEAN_LIMITS, validateOceanWater } from "../../engine/scene/oceanWater";
+import { OCEAN_APPEARANCE, OCEAN_LIMITS, validateOceanWater } from "../../engine/scene/oceanWater";
 import {
   paintWeights,
   plantRules,
@@ -549,6 +549,8 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
     riverWaters: ground.courses.map((course) => ({
       id: `${course.id}-water-1`, name: title(course.id), landscapeRef: terrain.id, splineRef: course.id, coordinateSpace: "world",
       surfaceLevel: Number(course.surface[0]!.toFixed(3)), reflectionQuality: "medium",
+      ...(course.water.outlet === "ocean" ? { waveAmplitude: 0, reflectionMode: "off", shallowColor: OCEAN_APPEARANCE.shallowColor,
+        deepColor: OCEAN_APPEARANCE.deepColor, absorptionDistance: OCEAN_APPEARANCE.absorptionDistance, surfaceRoughness: OCEAN_APPEARANCE.roughness } : {}),
     })),
     ...(waterBodies.length ? { waterBodies } : {}),
     ...(brief.ocean ? { oceanWaters: [validateOceanWater({
@@ -556,6 +558,8 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
       bounds: { min: [def.origin[0], def.origin[2]], max: [def.origin[0] + tilesX * tileSpan, def.origin[2] + tilesZ * tileSpan] },
       openEdges: ["west", "east", "north", "south"], surfaceLevel: briefElevationToWorld(brief, brief.ocean.surfaceElevation),
       offshoreDepth: brief.ocean.offshoreDepth, waves: { seed: brief.seed },
+      ...(brief.terrain.coast ? { offshorePolicy: "connectedBoundary" } : {}),
+      ...(ground.courses.some(course => course.water.outlet === "ocean") ? { inlets: ground.courses.filter(course => course.water.outlet === "ocean").map(course => course.id) } : {}),
     })] } : {}),
   } as unknown as RoomLayout;
 

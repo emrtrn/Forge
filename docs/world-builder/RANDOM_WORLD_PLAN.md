@@ -118,7 +118,14 @@ Level ve üretilmiş dünya verilerinin silinmesi:
   `npm.cmd run world:random -- --out assets/Worlds/MyIsland.level.json --size small --landform island --rivers 0 --roads between --seed 11`.
   Ocean kayıtları `oceanWaters` üzerinden mevcut editör/runtime yolunu kullanır.
   Nehir ağzı entegrasyonu gelene kadar Ada'da nehir isteği reddedilir.
-  Kıyı landform'u ve orta/büyük Ocean hazırlığı bu dilime dahil değildir.
+  Orta/büyük Ocean hazırlığı bu dilime dahil değildir.
+  İkinci dilim: `coast` ile Small kıyı, West/East/North/South deniz yönü,
+  karada kalan yol çıkışları ve kıyı kanalında Ocean'a ulaşan nehirler eklendi.
+  `--landform coast --size small --sea-side west --rivers 1 --seed 11` aynı
+  kurucuyu kullanır. Ocean yalnız bağlı ıslak sınır bölümlerinden harita dışına
+  devam eder. Son düz nehir kesiti River'a ayrılır; Ocean aynı yüzeyi çizmez.
+  Bu, sonsuz anakara üretimi veya akışkan simülasyonu değildir. Ada'da nehir
+  seçeneği bu ikinci dilimde de kapalıdır. Ayrıntılar: [Kıyı raporu](../reports/WORLD_BUILDER_COAST.md).
 
 ## Takip işi: yerleşim yollarında araç geçişi
 

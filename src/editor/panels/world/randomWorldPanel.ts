@@ -23,6 +23,7 @@ import {
   type SettlementType,
 } from "@engine/worldbuilder/randomWorld";
 import { MAX_RANDOM_WATER } from "@engine/worldbuilder/randomWater";
+import { SEA_SIDES, type SeaSide } from "@engine/worldbuilder/island";
 import type { RandomWorldPreview } from "@engine/worldbuilder/randomWorldPreview";
 import type { RandomWorldPreviewRequest, RandomWorldPreviewResponse } from "@engine/worldbuilder/workers/randomWorldPreviewWorker";
 import { COVER_DENSITY_LEVELS, WORLD_BUILD_STEPS, type CoverDensityLevel } from "@engine/worldbuilder/worldBrief";
@@ -45,6 +46,7 @@ export interface RandomWorldChoices {
   seed: number;
   size: keyof typeof WORLD_SIZES;
   landform: (typeof LANDFORMS)[number];
+  seaSide: SeaSide;
   mountainHeight: (typeof MOUNTAIN_HEIGHTS)[number];
   settlements: SettlementType[];
   roads: (typeof ROAD_NETWORKS)[number];
@@ -101,6 +103,7 @@ export function defaultRandomWorldChoices(seed = newSeed()): RandomWorldChoices 
     seed,
     size: "medium",
     landform: "hills",
+    seaSide: "west",
     mountainHeight: "medium",
     settlements: ["village", "hamlet"],
     roads: "exits",
@@ -127,6 +130,7 @@ function readStored(): StoredState {
   const pick = <T extends string>(value: unknown, allowed: readonly T[], current: T): T => (allowed.includes(value as T) ? (value as T) : current);
   choices.size = pick(given.size, Object.keys(WORLD_SIZES) as RandomWorldChoices["size"][], choices.size);
   choices.landform = pick(given.landform, LANDFORMS, choices.landform);
+  choices.seaSide = pick(given.seaSide, SEA_SIDES, choices.seaSide);
   choices.mountainHeight = pick(given.mountainHeight, MOUNTAIN_HEIGHTS, choices.mountainHeight);
   choices.roads = pick(given.roads, ROAD_NETWORKS, choices.roads);
   choices.cover = pick(given.cover, Object.keys(COVERS) as CoverName[], choices.cover);
@@ -143,6 +147,7 @@ function readStored(): StoredState {
     choices.densities[key] = pick(given.densities?.[key], COVER_DENSITY_LEVELS, choices.densities[key]);
   }
   if (choices.landform === "island") { choices.size = "small"; choices.roads = "between"; choices.rivers = 0; }
+  if (choices.landform === "coast") choices.size = "small";
   return { choices };
 }
 
@@ -152,7 +157,8 @@ function escapeHtml(value: string): string {
 
 const LABELS = {
   size: { small: "Small", medium: "Medium", large: "Large" },
-  landform: { plain: "Plain", hills: "Hills", mountains: "Mountains", valley: "Valley", island: "Island" },
+  landform: { plain: "Plain", hills: "Hills", mountains: "Mountains", valley: "Valley", island: "Island", coast: "Coast" },
+  seaSide: { west: "West", east: "East", north: "North", south: "South" },
   mountainHeight: { low: "Low", medium: "Medium", high: "High" },
   roads: { between: "Between", exits: "Exits" },
   density: { low: "Low", medium: "Medium", high: "High" },
@@ -260,6 +266,8 @@ export class RandomWorldPanel {
           ${row("Size", TIPS.size, segmented("size", Object.keys(WORLD_SIZES) as RandomWorldChoices["size"][], LABELS.size))}
           ${row("Landform", TIPS.landform, segmented("landform", LANDFORMS, LABELS.landform))}
           <div class="random-world-hint" data-island-info hidden>Ada: Small (1 km), Ocean ve kıyı otomatik oluşturulur. Yollar ada içinde kalır. Nehir ağzı desteği sonraki aşamada; göl için yeterli iç alan aranır.</div>
+          <div data-coast-options hidden>${row("Sea Side", "Denizin haritanın hangi tarafında olacağı. Yol çıkışları karada kalır.", segmented("seaSide", SEA_SIDES, LABELS.seaSide))}
+            <div class="random-world-hint">Kıyı: Small (1 km). Denize ulaşan nehirler ortak su kotunda birleşir; yol çıkışları karadan seçilir.</div></div>
           ${row("Mountains", TIPS.mountainHeight, segmented("mountainHeight", MOUNTAIN_HEIGHTS, LABELS.mountainHeight))}
           ${row("Settlements", TIPS.settlements, `<div class="random-world-settlements">
               <div class="random-world-chips" data-settlement-list></div>
@@ -374,6 +382,7 @@ export class RandomWorldPanel {
       this.state.choices.roads = "between";
       this.state.choices.rivers = 0;
     }
+    if (this.state.choices.landform === "coast") this.state.choices.size = "small";
     this.store();
     if (redraw) this.syncControls();
     else this.syncSettlementButtons();
@@ -399,7 +408,8 @@ export class RandomWorldPanel {
         const active = button.dataset.value === current;
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-pressed", String(active));
-        button.disabled = choices.landform === "island" && ((name === "size" && button.dataset.value !== "small") || (name === "roads" && button.dataset.value === "exits"));
+        button.disabled = ((choices.landform === "island" || choices.landform === "coast") && name === "size" && button.dataset.value !== "small")
+          || (choices.landform === "island" && name === "roads" && button.dataset.value === "exits");
       }
     }
     for (const name of ["rivers", "lakes"] as const) {
@@ -417,6 +427,7 @@ export class RandomWorldPanel {
       .map((type, index) => `<span class="random-world-chip" data-testid="random-world-settlement">${LABELS.settlement[type]}<button type="button" data-remove-settlement="${index}" aria-label="Remove ${LABELS.settlement[type]}" title="Yerleşimi çıkar">×</button></span>`)
       .join("");
     this.element<HTMLElement>("[data-island-info]").hidden = choices.landform !== "island";
+    this.element<HTMLElement>("[data-coast-options]").hidden = choices.landform !== "coast";
     this.syncSettlementButtons();
     this.syncPath();
   }
@@ -451,6 +462,7 @@ export class RandomWorldPanel {
       seed: choices.seed,
       size: choices.size,
       landform: choices.landform,
+      seaSide: choices.seaSide,
       mountainHeight: choices.mountainHeight,
       settlements: choices.settlements.map((type) => ({ type })),
       roads: choices.roads,
@@ -476,6 +488,10 @@ export class RandomWorldPanel {
 
   private schedulePreview(delay: number): void {
     if (this.previewTimer !== null) window.clearTimeout(this.previewTimer);
+    // Invalidate an in-flight worker immediately, including during the debounce.
+    // A ready picture must always describe the current choices, never the last request.
+    this.previewId++;
+    this.root.dataset.previewState = "pending";
     this.previewTimer = window.setTimeout(() => {
       this.previewTimer = null;
       void this.requestPreview();
@@ -641,6 +657,7 @@ export class RandomWorldPanel {
     const { choices } = this.state;
     const world = {
       seed: choices.seed, size: choices.size, landform: choices.landform, mountainHeight: choices.mountainHeight,
+      seaSide: choices.seaSide,
       settlements: choices.settlements.map((type) => ({ type })), roads: choices.roads, rivers: choices.rivers, lakes: choices.lakes,
       cover: choices.cover, densities: { ...choices.densities },
     };

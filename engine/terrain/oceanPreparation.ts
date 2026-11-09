@@ -1,6 +1,6 @@
 import { CooperativeWork } from "../core/cooperativeWork";
 import { OCEAN_LIMITS, validateOceanWater, type OceanWaterBody } from "../scene/oceanWater";
-import { prepareOceanCoverage, type OceanCoverage } from "./oceanCoverage";
+import { prepareOceanCoverage, type OceanCoverage, type OceanInlet } from "./oceanCoverage";
 import type { WorldTerrainDocument } from "./terrainLoader";
 import { tileKey, type TerrainTileData } from "./terrainTypes";
 
@@ -12,6 +12,15 @@ export async function prepareOceanTerrain(document: WorldTerrainDocument, value:
   signal?: AbortSignal): Promise<OceanCoverage> {
   work.check(); signal?.throwIfAborted();
   const body = validateOceanWater(value), def = structuredClone(document.def);
+  const inlets: OceanInlet[] = (body.inlets ?? []).map(id => {
+    const spline = def.splines?.find(entry => entry.id === id);
+    if (!spline || spline.coordinateSpace !== "world" || spline.smooth || spline.points.length < 2)
+      throw new Error(`Ocean inlet ${id} requires a world-space polyline with a straight terminal reach`);
+    const a = spline.points.at(-2)!, b = spline.points.at(-1)!;
+    if (Math.abs(b.position[1] - body.surfaceLevel) > .002 || Math.hypot(b.position[0] - a.position[0], b.position[2] - a.position[2]) < 1
+      || a.width !== b.width) throw new Error(`Ocean inlet ${id} must end at sea level with a constant-width terminal reach`);
+    return { start: [a.position[0], a.position[2]], end: [b.position[0], b.position[2]], width: b.width };
+  });
   const nx = def.tilesX * def.tileQuads, nz = def.tilesZ * def.tileQuads;
   if (nx * nz > OCEAN_LIMITS.cells || nx > OCEAN_LIMITS.axisCells || nz > OCEAN_LIMITS.axisCells)
     throw new Error("over-budget: Ocean native terrain exceeds the preparation grid limit");
@@ -66,5 +75,5 @@ export async function prepareOceanTerrain(document: WorldTerrainDocument, value:
     signal?.throwIfAborted();
     const gx = Math.round((x - def.origin[0]) / def.spacing), gz = Math.round((z - def.origin[2]) / def.spacing);
     return heights[gz * (nx + 1) + gx] ?? null;
-  }, work);
+  }, work, inlets);
 }

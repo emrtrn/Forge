@@ -37,6 +37,18 @@ const body = (): OceanWaterBody => ({ schema: 1, kind: "ocean", coordinateSpace:
     reflectionMode: "sharedPlanar", reflectionGroup: "water", reflectionQuality: "medium", reflectionStrength: .8 } });
 
 export async function registerOceanWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("ocean: coastal offshore follows wet boundary portions, while old Oceans keep all-offshore behavior", async () => {
+    const sea = { ...body(), surfaceLevel: 0, offshorePolicy: "connectedBoundary" as const };
+    const coast = buildOceanCoverage(sea, 1, x => x);
+    assert.equal(sampleOceanCoverage(coast, -100, 0).status, "wet");
+    assert.equal(sampleOceanCoverage(coast, 100, 0).status, "dry");
+    assert.equal(sampleOceanCoverage(coast, -4, -100).status, "wet");
+    assert.equal(sampleOceanCoverage(coast, 4, -100).status, "dry");
+    assert.equal(sampleOceanCoverage(buildOceanCoverage({ ...sea, offshorePolicy: "all" }, 1, x => x), 100, 0).status, "wet");
+    assert.throws(() => validateOceanWater({ ...sea, offshorePolicy: "guess" }));
+    assert.throws(() => validateOceanWater({ ...sea, inlets: ["a", "a"] }));
+    assert.throws(() => buildOceanCoverage({ ...sea, inlets: ["a"] }, 1, x => x), /inlet sources/);
+  });
   await check("ocean: caustics borrow exact coverage and FFT time, hot edits retain patterns, quality/hide/disposal release leases", async () => {
     const sea = body(), coverage = buildOceanCoverage(sea, 1, () => 5), scene = new Scene();
     const textures = Array.from({ length: 7 }, () => new Texture());

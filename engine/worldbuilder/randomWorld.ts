@@ -15,7 +15,7 @@
  * builder's: this module only lays out where things go.
  */
 import { DEFAULT_RELIEF_CLEAR, type BriefModel, type BriefRelief, type CoverDensityLevel } from "./worldBrief";
-import { islandOcean } from "./island";
+import { islandOcean, type SeaSide } from "./island";
 import type { RoadClass } from "./vocabulary";
 import { randomWater } from "./randomWater";
 
@@ -25,7 +25,7 @@ export type WorldSize = keyof typeof WORLD_SIZES;
 export const WORLD_TILES = 8;
 export const WORLD_SPACING = 2;
 
-export const LANDFORMS = ["plain", "hills", "mountains", "valley", "island"] as const;
+export const LANDFORMS = ["plain", "hills", "mountains", "valley", "island", "coast"] as const;
 export type Landform = (typeof LANDFORMS)[number];
 
 export const MOUNTAIN_HEIGHTS = ["low", "medium", "high"] as const;
@@ -93,6 +93,8 @@ export interface RandomWorldOptions {
   /** Rivers and lakes, 0–3 each (`randomWater.ts`); none by default. */
   rivers?: number;
   lakes?: number;
+  /** Which side of a Coast world faces the open sea. */
+  seaSide?: SeaSide;
   regionProfile?: string;
   models?: readonly BriefModel[];
 }
@@ -126,15 +128,16 @@ export function worldExtent(size: WorldSize): number {
 }
 
 export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
-  if (options.landform === "island" && options.size !== "small") throw new Error("Island currently supports Small worlds only (Ocean terrain budget)");
+  if ((options.landform === "island" || options.landform === "coast") && options.size !== "small") throw new Error("Island/Coast currently supports Small worlds only (Ocean terrain budget)");
   if (options.landform === "island" && (options.rivers ?? 0) > 0) throw new Error("Island rivers require the river-mouth integration; choose 0 rivers");
   const notes: string[] = [];
   const next = random(options.seed);
   const extent = worldExtent(options.size);
   const half = extent / 2;
   const island = options.landform === "island" ? { center: [0, 0] as Point, radius: round(extent * .37), shoreWidth: 60, landHeight: 12 } : undefined;
-  const ocean = island ? { id: "ocean", surfaceElevation: 0, offshoreDepth: 40 } : undefined;
-  const coast = island && ocean ? islandOcean({ terrain: { island }, ocean, frame: { east: 0, north: 0, elevation: 0 }, seed: options.seed }) : undefined;
+  const coastal = options.landform === "coast" ? { center: [0, 0] as Point, seaSide: options.seaSide ?? "west", shoreWidth: 60, landHeight: 12 } : undefined;
+  const ocean = island || coastal ? { id: "ocean", surfaceElevation: 0, offshoreDepth: 40 } : undefined;
+  const coast = ocean ? islandOcean({ terrain: { ...(island ? { island } : {}), ...(coastal ? { coast: coastal } : {}) }, ocean, frame: { east: 0, north: 0, elevation: 0 }, seed: options.seed }) : undefined;
   if (island && options.roads === "exits") notes.push("island: roads stay on the island; no off-map exits");
   // Smaller worlds get lower, tighter mountains so their slopes stay walkable.
   const scale = extent / 4096;
@@ -240,10 +243,13 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
     };
     // The valley's exits run along it, north and south.
     const largest = [...placed].sort((a, b) => b.population - a.population)[0]!;
-    const first = valley ? (largest.at[1] >= 0 ? 0 : 2) : sideNearest(largest.at);
-    const opposite = (first + 2) % 4;
-    const second = [...placed].sort((a, b) => distance(a.at, border(a.at, opposite)) - distance(b.at, border(b.at, opposite)))[0]!;
-    const exits: Array<[typeof largest, number]> = placed.length === 1 && options.roads === "between" ? [[largest, first]] : [[largest, first], [second, opposite]];
+    const drySides = [0, 1, 2, 3].filter(side => !coast || coast.distance(border(largest.at, side)[0], -border(largest.at, side)[1]) > 80);
+    const nearest = sideNearest(largest.at);
+    const first = valley ? (largest.at[1] >= 0 ? 0 : 2) : drySides.includes(nearest) ? nearest : drySides[0]!;
+    const opposite = drySides.includes((first + 2) % 4) ? (first + 2) % 4 : drySides.find(side => side !== first) ?? first;
+    const second = placed.filter(entry => !coast || coast.distance(border(entry.at, opposite)[0], -border(entry.at, opposite)[1]) > 80)
+      .sort((a, b) => distance(a.at, border(a.at, opposite)) - distance(b.at, border(b.at, opposite)))[0]!;
+    const exits: Array<[typeof largest, number]> = (placed.length === 1 && options.roads === "between") || opposite === first ? [[largest, first]] : [[largest, first], [second, opposite]];
     exits.forEach(([settlement, side], index) => {
       const id = `exit-${index + 1}`;
       nodes.push({ id, at: border(settlement.at, side), kind: "end" });
@@ -268,7 +274,7 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
   };
   if (options.landform === "plain") relief.hills = { height: 3, wavelength: 260 };
   if (options.landform === "hills") relief.hills = { height: hillHeight, wavelength: 320 };
-  if (island) {
+  if (island || coastal) {
     relief.hills = { height: hillHeight * .5, wavelength: 260 };
     relief.mountains = { ...mountains, height: round(mountains.height * .55), lift: round(mountains.lift * .55) };
   }
@@ -301,6 +307,7 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
       heightRange: [-60, Math.ceil(peak + 60)],
       relief,
       ...(island ? { island } : {}),
+      ...(coastal ? { coast: coastal } : {}),
     },
     regionProfile: options.regionProfile ?? DEFAULT_REGION_PROFILE,
     ...(options.cover ? {

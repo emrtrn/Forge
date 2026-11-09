@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // npm run world:random -- --out <*.level.json under public/> [--size small|medium|large]
-//   [--landform plain|hills|mountains|valley|island] [--mountains low|medium|high]
+//   [--landform plain|hills|mountains|valley|island|coast] [--sea-side west|east|north|south] [--mountains low|medium|high]
 //   [--settlements village,hamlet,...] [--roads between|exits] [--rivers 0-3] [--lakes 0-3]
 //   [--cover forest|meadow|farmland|steppe|desert|alpine] [--forest|--rocks|--fields low|medium|high] [--seed N] [--force]
 // Builds a whole greybox world from a few choices (docs/world-builder/RANDOM_WORLD_PLAN.md).
@@ -15,11 +15,12 @@ import { fileURLToPath } from "node:url";
 // the window's request JSON from stdin (validated by tools/world/randomWorldRequest.ts)
 // and prints one `@@<json>` event line per build step, then a `done` or `error` event.
 const usage = "Usage: npm run world:random -- --out <*.level.json under public/> [--size small|medium|large] "
-  + "[--landform plain|hills|mountains|valley|island] [--mountains low|medium|high] [--settlements village,hamlet] [--roads between|exits] [--rivers 0-3] [--lakes 0-3] "
+  + "[--landform plain|hills|mountains|valley|island|coast] [--sea-side west|east|north|south] [--mountains low|medium|high] [--settlements village,hamlet] [--roads between|exits] [--rivers 0-3] [--lakes 0-3] "
   + "[--cover forest|meadow|farmland|steppe|desert|alpine] [--forest|--rocks|--fields low|medium|high] [--seed N] [--force]";
 const CHOICES = {
   size: ["small", "medium", "large"],
-  landform: ["plain", "hills", "mountains", "valley", "island"],
+  landform: ["plain", "hills", "mountains", "valley", "island", "coast"],
+  "sea-side": ["west", "east", "north", "south"],
   mountains: ["low", "medium", "high"],
   roads: ["between", "exits"],
   cover: ["forest", "meadow", "farmland", "steppe", "desert", "alpine"],
@@ -84,7 +85,7 @@ async function main() {
     await request(args[1]);
     return;
   }
-  const values = { size: "medium", landform: "hills", mountains: "medium", settlements: "village,hamlet", roads: "exits", rivers: "0", lakes: "0", cover: "forest", forest: "medium", rocks: "medium", fields: "medium", seed: String(Date.now() % 100000) };
+  const values = { size: "medium", landform: "hills", "sea-side": "west", mountains: "medium", settlements: "village,hamlet", roads: "exits", rivers: "0", lakes: "0", cover: "forest", forest: "medium", rocks: "medium", fields: "medium", seed: String(Date.now() % 100000) };
   let out = null;
   let force = false;
   for (let index = 0; index < args.length; index += 1) {
@@ -123,6 +124,7 @@ async function main() {
   const result = await runRandomWorld({
     root, out, force,
     world: { seed, size: values.size, landform: values.landform, mountainHeight: values.mountains, settlements, roads: values.roads, rivers, lakes,
+      seaSide: values["sea-side"],
       cover: values.cover, densities: { forest: values.forest, rocks: values.rocks, fields: values.fields } },
   });
   for (const note of result.notes) console.warn(`[world:random] ${note}`);

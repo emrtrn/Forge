@@ -132,7 +132,7 @@ export function waterSpline(course: WaterCourse): WorldTerrainSpline {
   return {
     id: course.id,
     name: course.id.charAt(0).toUpperCase() + course.id.slice(1),
-    smooth: true,
+    smooth: course.water.outlet !== "ocean",
     coordinateSpace: "world",
     points,
     segments: points.slice(1).map((point, index) => ({ id: `s${index}`, startPointId: points[index]!.id, endPointId: point.id })),

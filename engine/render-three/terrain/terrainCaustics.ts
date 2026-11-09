@@ -1,6 +1,7 @@
 import { Color, DataArrayTexture, LinearFilter, LinearMipmapLinearFilter, RepeatWrapping, RGBAFormat, UnsignedByteType, Vector2, Vector4, type DataTexture, type Object3D, type Scene } from "three";
 import { resolveOceanAppearance, type OceanWaterBody } from "../../scene/oceanWater";
-import type { OceanCoverage } from "../../terrain/oceanCoverage";
+import type { OceanCoverage, OceanInlet } from "../../terrain/oceanCoverage";
+import { createOceanInletUniforms, OCEAN_INLETS_GLSL } from "../ocean/oceanInlets";
 import { WATER_EXTINCTION_GLSL } from "../waterOptics";
 import type { LayoutLakeWaterBody } from "../../scene/layout";
 import { resolveLakeAppearance } from "../../scene/waterBody";
@@ -17,7 +18,7 @@ const SIDE = 256, MAX_BODIES = 8;
  * light network was too faint to read at normal editor distances. Saved values
  * stay as authored; only the uniform is scaled, so 0 still disables the lake. */
 const CAUSTICS_STRENGTH_GAIN = 2;
-interface Source { ocean?: { body: OceanWaterBody; texture: DataTexture; clock: () => number }; lake?: LayoutLakeWaterBody; water?: ResolvedRiverWater; coverage: NonNullable<LakeGeometry["coverage"]>; object: Object3D; river?: RiverSurfaceQuery; flowSpeed?: number }
+interface Source { ocean?: { body: OceanWaterBody; texture: DataTexture; clock: () => number; inlets: readonly OceanInlet[] }; lake?: LayoutLakeWaterBody; water?: ResolvedRiverWater; coverage: NonNullable<LakeGeometry["coverage"]>; object: Object3D; river?: RiverSurfaceQuery; flowSpeed?: number }
 interface Registry { sources: Map<Object3D, Source>; texture: DataArrayTexture | null; dirty: boolean; layers: Source[]; atlasSources: RiverSurfaceQuery[]; atlas?: ReturnType<typeof riverCausticAtlas> | undefined }
 const registries = new WeakMap<Scene, Registry>();
 
@@ -61,7 +62,7 @@ export function registerLakeCaustics(scene: Scene, lake: LayoutLakeWaterBody, ge
 export function registerOceanCaustics(scene: Scene, body: OceanWaterBody, coverage: OceanCoverage,
   texture: DataTexture, object: Object3D, clock: () => number, replacing?: Object3D) {
   if (coverage.status !== "ready") throw new Error("Cannot publish Ocean caustics from missing terrain");
-  const source: Source = { ocean: { body, texture, clock }, object,
+  const source: Source = { ocean: { body, texture, clock, inlets: coverage.inlets ?? [] }, object,
     coverage: { min: body.bounds.min, nx: coverage.nx, nz: coverage.nz, spacing: coverage.spacing, triangles: new Uint8Array(0) } };
   const dispose = registerSource(scene, source, replacing);
   return { update: (next: OceanWaterBody) => { source.ocean!.body = next; }, dispose };
@@ -97,7 +98,7 @@ export function terrainRiverSurfaceIndex(scene: Scene, object: Object3D): number
 }
 
 export function createTerrainCausticsUniforms() {
-  return { uOceanCausticMap: { value: null as DataTexture | null }, uOceanCausticIndex: { value: -1 },
+  return { ...createOceanInletUniforms(), uOceanCausticConnectedOffshore: { value: 0 }, uOceanCausticMap: { value: null as DataTexture | null }, uOceanCausticIndex: { value: -1 },
     uOceanCausticTime: { value: 0 }, uOceanCausticAbsorption: { value: 9 }, uOceanCausticColor: { value: new Color() },
     uRiverCausticData: { value: null as DataTexture | null }, uRiverCausticWidth: { value: 1 }, uRiverCausticCount: { value: 0 },
     uCausticRiver: { value: Array.from({length:MAX_BODIES},()=>new Vector4(-1,0,0,0)) }, uCausticMask: { value: null }, uCausticCount: { value: 0 }, uCausticTime: { value: 0 },
@@ -162,6 +163,13 @@ export function updateTerrainCaustics(uniforms: TerrainUniforms, scene: Scene, t
       uniforms.uOceanCausticTime!.value = ocean.clock();
       uniforms.uOceanCausticAbsorption!.value = appearance.absorptionDistance;
       (uniforms.uOceanCausticColor!.value as Color).set(appearance.deepColor);
+      uniforms.oceanInletCount!.value = ocean.inlets.length;
+      uniforms.uOceanCausticConnectedOffshore!.value = ocean.body.offshorePolicy === "connectedBoundary" ? 1 : 0;
+      for (let index = 0; index < 3; index++) {
+        const inlet = ocean.inlets[index];
+        (uniforms.oceanInletStart!.value as Vector4[])[index]!.set(...(inlet?.start ?? [0, 0]), inlet?.width ?? 0, 0);
+        (uniforms.oceanInletEnd!.value as Vector4[])[index]!.set(...(inlet?.end ?? [0, 0]), 0, 0);
+      }
     }
     let visible = true;
     for (let parent: Object3D | null = object; parent; parent = parent.parent) visible &&= parent.visible;
@@ -192,12 +200,17 @@ uniform int uOceanCausticIndex;
 uniform float uOceanCausticTime;
 uniform float uOceanCausticAbsorption;
 uniform vec3 uOceanCausticColor;
+uniform float uOceanCausticConnectedOffshore;
+${OCEAN_INLETS_GLSL}
 ${WATER_EXTINCTION_GLSL}
 // Same packed bits and b-c interpolation as OceanSurface, including a partly
 // submerged face. Refracted sunlight must enter a connected, wet surface too.
 bool forgeOceanCausticWet(vec2 world, vec4 grid, vec4 area, bool offshore) {
+  if(oceanInletContains(world)) return false;
   vec2 p=(world-grid.xy)*grid.z;
-  if(any(lessThan(p,vec2(0.)))||p.x>grid.w||p.y>area.x)return offshore;
+  bool exterior=any(lessThan(p,vec2(0.)))||p.x>grid.w||p.y>area.x;
+  if(exterior&&(!offshore||uOceanCausticConnectedOffshore<.5))return offshore;
+  p=clamp(p,vec2(0.),vec2(grid.w,area.x));
   ivec2 cell=ivec2(min(floor(p),vec2(grid.w,area.x)-1.));vec2 f=p-vec2(cell);
   vec4 a=texelFetch(uOceanCausticMap,cell,0);
   float b=texelFetch(uOceanCausticMap,cell+ivec2(1,0),0).r;

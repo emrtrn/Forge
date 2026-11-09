@@ -9,6 +9,7 @@ import type { WaterEnvironmentProbes } from "../waterEnvironment";
 import { createOceanOpticsUniforms, updateOceanOptics, OCEAN_NORMAL_GLSL, OCEAN_OPTICS_GLSL } from "./oceanOptics";
 import type { PlanarReflectionBinding, PlanarReflectionSource } from "../planarReflectionSource";
 import { createOceanReflectionUniforms, OCEAN_PLANAR_GLSL } from "./oceanReflection";
+import { createOceanInletUniforms, OCEAN_INLETS_GLSL } from "./oceanInlets";
 
 const COVERAGE = /* glsl */ `
 uniform sampler2D coverageMap;
@@ -16,8 +17,11 @@ uniform vec4 domain;
 uniform vec2 cells;
 uniform float seaLevel;
 uniform float offshoreDepth;
+uniform float connectedOffshore;
+${OCEAN_INLETS_GLSL}
 // (depth, wet). Triangles and interpolated bed share the terrain b-c diagonal.
 vec2 waterCoverage(vec2 world){
+  if(oceanInletContains(world)) return vec2(0.);
   vec2 g=(world-domain.xy)/domain.z;
   float outside=length(max(max(-g,g-cells),vec2(0.)))*domain.z;
   g=clamp(g,vec2(0.),cells);
@@ -29,7 +33,10 @@ vec2 waterCoverage(vec2 world){
   bool first=f.x+f.y<=1.; int mask=int(a.g+.5);
   bool connected=first?(mask&1)!=0:(mask&2)!=0;
   float bed=first?a.r*(1.-f.x-f.y)+b*f.x+c*f.y:d*(f.x+f.y-1.)+c*(1.-f.x)+b*(1.-f.y);
-  if(outside>0.)return vec2(mix(max(0.,seaLevel-bed),offshoreDepth,smoothstep(0.,${OCEAN_OFFSHORE_TRANSITION.toFixed(1)},outside)),1.);
+  if(outside>0.) {
+    if(connectedOffshore>.5&&(!connected||bed>=seaLevel)) return vec2(0.);
+    return vec2(mix(max(0.,seaLevel-bed),offshoreDepth,smoothstep(0.,${OCEAN_OFFSHORE_TRANSITION.toFixed(1)},outside)),1.);
+  }
   return vec2(max(0.,seaLevel-bed),connected&&bed<seaLevel?1.:0.);
 }`;
 const WAVES = /* glsl */ `
@@ -201,6 +208,7 @@ export class OceanSurface extends Mesh<ReturnType<typeof createOceanGrid>, Shade
       transparent: true, depthWrite: false, fog: true, lights: true, uniforms: {
         ...UniformsUtils.clone(UniformsLib.fog), ...UniformsUtils.clone(UniformsLib.lights), ...createOceanOpticsUniforms(),
         ...createOceanReflectionUniforms(),
+        ...createOceanInletUniforms(coverage.inlets), connectedOffshore: { value: body.offshorePolicy === "connectedBoundary" ? 1 : 0 },
         coverageMap: { value: texture }, domain: { value: new Vector4(...body.bounds.min, coverage.spacing, 0) },
         cells: { value: new Vector2(nx, nz) }, seaLevel: { value: body.surfaceLevel }, offshoreDepth: { value: body.offshoreDepth },
         anchor: { value: new Vector2() }, lengths: { value: new Vector4(...simulation.lengths) },

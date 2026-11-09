@@ -2,6 +2,7 @@ import { OCEAN_LIMITS, validateOceanWater, type OceanWaterBody } from "../scene/
 import { CooperativeWork, finishWork } from "../core/cooperativeWork";
 
 export interface OceanCoverage {
+  inlets?: readonly OceanInlet[];
   body: OceanWaterBody;
   spacing: number;
   nx: number;
@@ -13,6 +14,13 @@ export interface OceanCoverage {
   status: "ready" | "missing-data";
   wetFaces: number;
 }
+export interface OceanInlet { start: [number, number]; end: [number, number]; width: number }
+export function oceanInletContains(inlet: OceanInlet, x: number, z: number): boolean {
+  const dx = inlet.end[0] - inlet.start[0], dz = inlet.end[1] - inlet.start[1], length = Math.hypot(dx, dz);
+  const along = ((x - inlet.start[0]) * dx + (z - inlet.start[1]) * dz) / length;
+  const across = Math.abs((x - inlet.start[0]) * dz - (z - inlet.start[1]) * dx) / length;
+  return along >= 0 && along <= length && across <= inlet.width;
+}
 export type OceanSample = { status: "wet"; bed: number; depth: number; offshore: boolean }
   | { status: "dry" | "unknown" };
 /** Explicit offshore depth ramp avoids a rectangular colour seam at the domain edge. */
@@ -20,8 +28,11 @@ export const OCEAN_OFFSHORE_TRANSITION = 64;
 
 /** Source spacing must match rendered terrain; preparation is revision-driven, never per frame. */
 export function* oceanCoverageSteps(value: OceanWaterBody, spacing: number,
-  heightAt: (x: number, z: number) => number | null): Generator<void, OceanCoverage> {
+  heightAt: (x: number, z: number) => number | null, inlets: readonly OceanInlet[] = []): Generator<void, OceanCoverage> {
   const body = validateOceanWater(value), { min, max } = body.bounds;
+  if ((body.inlets?.length ?? 0) !== inlets.length) throw new Error("Ocean inlet sources must be resolved before coverage preparation");
+  if (inlets.some(inlet => ![...inlet.start, ...inlet.end, inlet.width].every(Number.isFinite) || inlet.width <= 0
+    || Math.hypot(inlet.end[0] - inlet.start[0], inlet.end[1] - inlet.start[1]) < 1)) throw new Error("Invalid resolved Ocean inlet reach");
   const nx = Math.round((max[0] - min[0]) / spacing), nz = Math.round((max[1] - min[1]) / spacing);
   if (!Number.isFinite(spacing) || spacing <= 0 || nx < 1 || nz < 1 || nx > OCEAN_LIMITS.axisCells || nz > OCEAN_LIMITS.axisCells
     || nx * nz > OCEAN_LIMITS.cells || Math.abs(nx * spacing - max[0] + min[0]) > 1e-6
@@ -37,7 +48,7 @@ export function* oceanCoverageSteps(value: OceanWaterBody, spacing: number,
     yield;
   }
   const triangles = new Uint8Array(nx * nz), count = nx * nz * 2;
-  const out: OceanCoverage = { body, spacing, nx, nz, heights, triangles, status: missing ? "missing-data" : "ready", wetFaces: 0 };
+  const out: OceanCoverage = { body, spacing, nx, nz, heights, triangles, status: missing ? "missing-data" : "ready", wetFaces: 0, ...(inlets.length ? { inlets } : {}) };
   // No new geometry may publish from an incomplete domain. Owners retain their previous coverage.
   if (missing) return out;
   const vertices = (t: number): [number, number, number] => {
@@ -65,16 +76,17 @@ export function* oceanCoverageSteps(value: OceanWaterBody, spacing: number,
   }
   out.wetFaces = tail; return out;
 }
-export const buildOceanCoverage = (body: OceanWaterBody, spacing: number, height: (x: number, z: number) => number | null) =>
-  finishWork(oceanCoverageSteps(body, spacing, height));
+export const buildOceanCoverage = (body: OceanWaterBody, spacing: number, height: (x: number, z: number) => number | null, inlets: readonly OceanInlet[] = []) =>
+  finishWork(oceanCoverageSteps(body, spacing, height, inlets));
 export const prepareOceanCoverage = (body: OceanWaterBody, spacing: number, height: (x: number, z: number) => number | null,
-  work = new CooperativeWork()) => work.run("ocean-coverage", oceanCoverageSteps(body, spacing, height));
+  work = new CooperativeWork(), inlets: readonly OceanInlet[] = []) => work.run("ocean-coverage", oceanCoverageSteps(body, spacing, height, inlets));
 
 /** Exact source triangle interpolation. Sampling outside the domain is authored offshore, not missing data. */
 export function sampleOceanCoverage(c: OceanCoverage, x: number, z: number): OceanSample {
   if (!Number.isFinite(x) || !Number.isFinite(z)) return { status: "unknown" };
   const { body: b, spacing, nx, nz, heights: h } = c, { min, max } = b.bounds;
   if (c.status !== "ready") return { status: "unknown" };
+  if (c.inlets?.some(inlet => oceanInletContains(inlet, x, z))) return { status: "dry" };
   const clampedX = Math.min(max[0], Math.max(min[0], x)), clampedZ = Math.min(max[1], Math.max(min[1], z));
   const outside = Math.hypot(x - clampedX, z - clampedZ);
   const gx = (clampedX - min[0]) / spacing, gz = (clampedZ - min[1]) / spacing;
@@ -83,6 +95,7 @@ export function sampleOceanCoverage(c: OceanCoverage, x: number, z: number): Oce
   const bed = first ? h[a]! * (1 - fx - fz) + h[a + 1]! * fx + h[a + nx + 1]! * fz
     : h[a + nx + 2]! * (fx + fz - 1) + h[a + nx + 1]! * (1 - fx) + h[a + 1]! * (1 - fz);
   if (outside > 0) {
+    if (b.offshorePolicy === "connectedBoundary" && (!(c.triangles[iz * nx + ix]! & (first ? 1 : 2)) || bed >= b.surfaceLevel)) return { status: "dry" };
     const t = Math.min(1, outside / OCEAN_OFFSHORE_TRANSITION), fade = t * t * (3 - 2 * t);
     const depth = Math.max(0, b.surfaceLevel - bed) * (1 - fade) + b.offshoreDepth * fade;
     return { status: "wet", depth, bed: b.surfaceLevel - depth, offshore: true };

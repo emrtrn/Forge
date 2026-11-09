@@ -44,6 +44,16 @@ function meanColor(world: RandomWorldPreview): [number, number, number] {
 }
 
 export function registerRandomWorldPreviewTests(check: Check): void {
+  check("random world preview: Coast sea direction changes the visible water side", () => {
+    for (const seaSide of ["west", "east", "north", "south"] as const) {
+      const a = preview({ landform: "coast", seaSide, size: "small", rivers: 0 }, 64);
+      const waterAt = (i: number, j: number) => PREVIEW_WATER_COLOR.every((v, channel) => a.pixels[(j * 64 + i) * 4 + channel] === v);
+      const sides = { west: [0, 32], east: [63, 32], north: [32, 0], south: [32, 63] } as const;
+      const opposite = { west: "east", east: "west", north: "south", south: "north" } as const;
+      assert.equal(waterAt(...sides[seaSide]), true);
+      assert.equal(waterAt(...sides[opposite[seaSide]]), false);
+    }
+  });
   check("random world preview: an island has open sea around dry land, with the builder's shoreline", () => {
     const options = { ...OPTIONS, landform: "island" as const, rivers: 0 };
     const a = preview(options, 64), b = preview(options, 64);

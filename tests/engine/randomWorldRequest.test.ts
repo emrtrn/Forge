@@ -24,6 +24,12 @@ function refuses(change: (body: Record<string, any>) => void, pattern: RegExp): 
 }
 
 export function registerRandomWorldRequestTests(check: Check): void {
+  check("random world request: Coast sea direction is bounded and medium/large coasts are rejected", () => {
+    const coast = { ...VALID, world: { ...VALID.world, landform: "coast", size: "small", seaSide: "east" } };
+    assert.equal(validateRandomWorldRequest(coast).world.seaSide, "east");
+    assert.throws(() => validateRandomWorldRequest({ ...coast, world: { ...coast.world, seaSide: "up" } }), /seaSide/);
+    for (const size of ["medium", "large"]) assert.throws(() => validateRandomWorldRequest({ ...coast, world: { ...coast.world, size } }), /Small worlds only/);
+  });
   check("random world request: island budget and river-mouth limits reject before writing", () => {
     const island = { ...VALID, world: { ...VALID.world, landform: "island", size: "small", rivers: 0 } };
     assert.equal(validateRandomWorldRequest(island).world.landform, "island");

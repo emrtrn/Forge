@@ -104,6 +104,7 @@ export interface BriefTerrain {
   relief?: BriefRelief;
   /** Star-shaped island; the coast is shared by all generators. */
   island?: { center: BriefPoint; radius: number; shoreWidth: number; landHeight: number };
+  coast?: { center: BriefPoint; seaSide: "west" | "east" | "north" | "south"; shoreWidth: number; landHeight: number };
 }
 
 export interface BriefOcean {
@@ -196,6 +197,8 @@ export interface BriefRegion extends BriefProvenance {
 }
 
 export interface BriefWater extends BriefProvenance {
+  /** A coastal river ends at the shared Ocean surface. */
+  outlet?: "ocean";
   id: string;
   /** Token such as `river`, `stream`, `lake`. */
   kind: string;
@@ -418,7 +421,7 @@ function normalizeTerrain(ctx: Ctx, value: unknown): BriefTerrain | null {
   const heightRange = eastPair(ctx, "terrain.heightRange", value.heightRange);
   if (heightRange && heightRange[0] === heightRange[1]) issue(ctx, "terrain.heightRange", "must span some height");
   for (const key of Object.keys(value)) {
-    if (!["id", "name", "tileQuads", "spacing", "heightRange", "relief", "island"].includes(key)) issue(ctx, `terrain.${key}`, "is not a terrain field");
+    if (!["id", "name", "tileQuads", "spacing", "heightRange", "relief", "island", "coast"].includes(key)) issue(ctx, `terrain.${key}`, "is not a terrain field");
   }
   const relief = value.relief === undefined ? undefined : normalizeRelief(ctx, value.relief);
   let island: BriefTerrain["island"];
@@ -434,8 +437,21 @@ function normalizeTerrain(ctx: Ctx, value: unknown): BriefTerrain | null {
     if (shoreWidth >= radius) issue(ctx, "terrain.island.shoreWidth", "must be smaller than radius");
     island = { center, radius, shoreWidth, landHeight };
   }
+  let coast: BriefTerrain["coast"];
+  if (value.coast !== undefined) {
+    if (!isRecord(value.coast)) return reject(ctx, "terrain.coast", "must be an object");
+    const raw = value.coast;
+    for (const key of Object.keys(raw)) if (!["center", "seaSide", "shoreWidth", "landHeight"].includes(key)) issue(ctx, `terrain.coast.${key}`, "is not a coast field");
+    const center = requirePoint(ctx, "terrain.coast.center", raw.center);
+    const seaSide = isOneOf(["west", "east", "north", "south"] as const, raw.seaSide) ? raw.seaSide : reject(ctx, "terrain.coast.seaSide", "must be west, east, north or south");
+    const shoreWidth = positive(ctx, "terrain.coast.shoreWidth", raw.shoreWidth, 1000);
+    const landHeight = positive(ctx, "terrain.coast.landHeight", raw.landHeight, 1000);
+    if (!center || !seaSide || shoreWidth === null || landHeight === null) return null;
+    coast = { center, seaSide, shoreWidth, landHeight };
+  }
+  if (island && coast) issue(ctx, "terrain", "choose island or coast, not both");
   if (id === null || name === null || tileQuads === null || spacing === null || heightRange === null || relief === null) return null;
-  return { id, name, tileQuads, spacing, heightRange, ...(relief ? { relief } : {}), ...(island ? { island } : {}) };
+  return { id, name, tileQuads, spacing, heightRange, ...(relief ? { relief } : {}), ...(island ? { island } : {}), ...(coast ? { coast } : {}) };
 }
 
 function normalizeRelief(ctx: Ctx, value: unknown): BriefRelief | null {
@@ -578,7 +594,7 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
       if (oceanId !== null && surfaceElevation !== null && offshoreDepth !== null) ocean = { id: oceanId, surfaceElevation, offshoreDepth };
     }
   }
-  if (Boolean(terrain?.island) !== Boolean(ocean)) issue(ctx, "ocean", "this version requires ocean and terrain.island together");
+  if (Boolean(terrain?.island || terrain?.coast) !== Boolean(ocean)) issue(ctx, "ocean", "requires ocean together with terrain.island or terrain.coast");
   if (terrain?.island && area) {
     const { center, radius } = terrain.island;
     const reach = radius * 1.11 + terrain.spacing * 2;
@@ -625,6 +641,7 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
     const width = optional(entry.width, () => positive(c, `${p}.width`, entry.width, 10_000));
     const bedDepth = optional(entry.bedDepth, () => positive(c, `${p}.bedDepth`, entry.bedDepth, 1_000));
     const surfaceDepth = optional(entry.surfaceDepth, () => requireNumber(c, `${p}.surfaceDepth`, entry.surfaceDepth, 0, 1_000));
+    const outlet = entry.outlet === undefined ? undefined : entry.outlet === "ocean" ? "ocean" as const : reject(c, `${p}.outlet`, "must be ocean");
     if (bedDepth !== undefined && surfaceDepth !== undefined && surfaceDepth >= bedDepth) {
       issue(c, `${p}.surfaceDepth`, "must be less than bedDepth");
     }
@@ -633,9 +650,11 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
       id: waterId, kind, ...(line ? { line } : {}), ...(polygon ? { polygon } : {}),
       ...(width === undefined ? {} : { width }), ...(bedDepth === undefined ? {} : { bedDepth }),
       ...(surfaceDepth === undefined ? {} : { surfaceDepth }), ...provenance(c, p, entry),
+      ...(outlet ? { outlet } : {}),
     };
   });
-  if (ocean && water.some(entry => entry.line)) issue(ctx, "water", "island rivers require the river-mouth integration; only inland lakes are supported");
+  if (terrain?.island && water.some(entry => entry.line)) issue(ctx, "water", "island rivers require the river-mouth integration; only inland lakes are supported");
+  if (water.some(entry => entry.outlet && (!entry.line || !terrain?.coast || !ocean))) issue(ctx, "water.outlet", "Ocean outlets require a river line in a Coast world");
   if (ocean && valleys.length) issue(ctx, "valleys", "island terrain cannot also define valleys");
 
   const roadsInput = value.roads === undefined ? {} : value.roads;

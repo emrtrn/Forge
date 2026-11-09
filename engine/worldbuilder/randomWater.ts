@@ -181,7 +181,7 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
   const order: number[] = [];
   const heap = new CellHeap(filled);
   for (let index = 0; index < count; index += 1) {
-    if (edgeGap(index) === 0 && !blocked[index]) {
+    if ((terrain.ocean ? terrain.ocean.distance(...at(index)) <= -12 : edgeGap(index) === 0) && !blocked[index]) {
       filled[index] = height[index]!;
       heap.push(index);
     }
@@ -299,12 +299,12 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
     lakes.find((lake) => insidePolygon(point[0], point[1], lake.polygon)) ?? null;
   /** River cells and the course each belongs to. */
   const riverCells = new Map<number, number>();
-  const courses: Array<{ cells: number[]; endsIn: "edge" | "lake" | "river"; joins?: number }> = [];
+  const courses: Array<{ cells: number[]; endsIn: "edge" | "lake" | "river" | "ocean"; joins?: number }> = [];
   if (rivers > 0) {
-    const open = order.filter((index) => !blocked[index] && edgeGap(index) >= 0.15 * extent);
+    const open = order.filter((index) => !blocked[index] && edgeGap(index) >= 0.15 * extent && (!terrain.ocean || terrain.ocean.distance(...at(index)) > 100));
     const heights = open.map((index) => height[index]!).sort((a, b) => a - b);
     const high = heights[Math.floor(0.65 * heights.length)] ?? Infinity;
-    const sources = open.filter((index) => height[index]! >= high && length[index]! >= 0.4 * extent).sort((a, b) => a - b);
+    const sources = open.filter((index) => height[index]! >= high && length[index]! >= (terrain.ocean ? 0.18 : 0.4) * extent).sort((a, b) => a - b);
     const picked: WorldPoint[] = [];
     for (let attempt = 0; attempt < 200 && courses.length < rivers && sources.length; attempt += 1) {
       const source = sources[Math.floor(next() * sources.length)]!;
@@ -312,7 +312,7 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
       if (picked.some((point) => Math.hypot(point[0] - start[0], point[1] - start[1]) < 0.25 * extent)) continue;
       if (insideLake(start)) continue;
       const cells: number[] = [];
-      let endsIn: "edge" | "lake" | "river" = "edge";
+      let endsIn: "edge" | "lake" | "river" | "ocean" = "edge";
       let joins: number | undefined;
       for (let current = source; current >= 0; current = down[current]!) {
         const [ci, cj] = [current % side, Math.floor(current / side)];
@@ -322,6 +322,7 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
           }
         }
         cells.push(current);
+        if (terrain.ocean && terrain.ocean.distance(...at(current)) <= -12) { endsIn = "ocean"; break; }
         if (joins !== undefined) {
           endsIn = "river";
           break;
@@ -333,7 +334,7 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
           break;
         }
       }
-      if (cells.length * cell < 0.25 * extent && endsIn !== "lake") continue;
+      if (cells.length * cell < (terrain.ocean ? 0.14 : 0.25) * extent && endsIn !== "lake") continue;
       picked.push(start);
       for (const index of cells) riverCells.set(index, courses.length);
       courses.push({ cells, endsIn, ...(joins === undefined ? {} : { joins }) });
@@ -391,10 +392,35 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
       const mean: WorldPoint = [sx / (2 * window + 1), sz / (2 * window + 1)];
       return settlementGap(mean, "river") < 0 ? point : mean;
     });
-    const line = smooth.filter((_, k) => k % stride === 0 || k === smooth.length - 1).map(([x, z]) => {
+    let line = smooth.filter((_, k) => k % stride === 0 || k === smooth.length - 1).map(([x, z]) => {
       // The edge cell sits on the area's border; keep the line just inside it.
       return toBrief([Math.min(bounds.max[0] - 2, Math.max(bounds.min[0] + 2, x)), Math.min(bounds.max[1] - 2, Math.max(bounds.min[1] + 2, z))]);
     });
+    if (course.endsIn === "ocean") {
+      // Join inside the shoreline channel, rather than projecting a flat ribbon
+      // into open sea. The end lies where the uncarved ground is just above sea.
+      let shore = line.length - 1;
+      while (shore >= 0 && terrain.ocean!.distance(...briefToWorld(brief, line[shore]!)) < 4) shore--;
+      if (shore < 0 || shore === line.length - 1) { notes.push(`river ${index + 1}: no shoreline crossing`); return; }
+      let a = briefToWorld(brief, line[shore]!), b = briefToWorld(brief, line[shore + 1]!);
+      for (let step = 0; step < 20; step++) {
+        const mid: WorldPoint = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if (terrain.ocean!.distance(...mid) > 4) a = mid; else b = mid;
+      }
+      const end = toBrief([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]);
+      const endpoint = briefToWorld(brief, end);
+      let inletStart = line.length - 1;
+      while (inletStart >= 0 && terrain.ocean!.distance(...briefToWorld(brief, line[inletStart]!)) < 80) inletStart--;
+      if (inletStart < 0) { notes.push(`river ${index + 1}: no safe terminal reach to the Ocean`); return; }
+      const start = briefToWorld(brief, line[inletStart]!);
+      let safe = true;
+      for (let step = 0; step <= 32; step++) {
+        const point: WorldPoint = [start[0] + (endpoint[0] - start[0]) * step / 32, start[1] + (endpoint[1] - start[1]) * step / 32];
+        if (settlementGap(point, "river") < 0 || insideLake(point)) safe = false;
+      }
+      if (!safe) { notes.push(`river ${index + 1}: Ocean mouth would enter a settlement or lake; left out`); return; }
+      line = [...line.slice(0, inletStart + 1), end];
+    }
     // A tributary ends on the line of the river it joins.
     const joined = course.joins === undefined ? undefined : lines[course.joins];
     if (joined) {
@@ -403,7 +429,7 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
         (Math.hypot(point[0] - end[0], point[1] - end[1]) < Math.hypot(best[0] - end[0], best[1] - end[1]) ? point : best)));
     }
     lines[index] = line;
-    if (line.length >= 2) water.push({ id: `river-${index + 1}`, kind: "river", line, width, bedDepth, surfaceDepth });
+    if (line.length >= 2) water.push({ id: `river-${index + 1}`, kind: "river", line, width, bedDepth, surfaceDepth, ...(course.endsIn === "ocean" ? { outlet: "ocean" } : {}) });
   });
   for (const lake of lakes) {
     water.push({ id: lake.id, kind: "lake", polygon: lake.polygon.map(toBrief), bedDepth: RANDOM_LAKE_DEPTH });

@@ -63,6 +63,11 @@ bu altı dosyayı doğrudan kullandığı doğrulandı. Yalnız bu yollar review
 baseline'a alındı; artık çözülmüş `SaveLoadMenu.ui.json` kaydı kaldırıldı.
 Manifest taraması, yeni uyarı kapısı ve runtime davranışı değiştirilmedi.
 
+CI'daki mevcut optional JSON/SPA fallback sorunu da ayrı ve küçük bir
+[içerik yükleme düzeltmesiyle](CONTENT_JSON_ACCEPT_FIX.md) ele alındı.
+Eksik optional sidecar'ların doğrulanmış HTTP 404 network-console satırları
+native smoke'ta sınıflandırılır; uygulama/shader hataları filtrelenmez.
+
 ## Açık işler
 
 O4 tamamlanmış değildir. Sıradaki parça ortak planar reflection registry'ye

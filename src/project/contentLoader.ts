@@ -5,7 +5,11 @@ import { publicFileUrl } from "./publicUrl";
 export async function readContentJson(path: string, optional = false): Promise<unknown> {
   let response: Response;
   try {
-    response = await fetch(publicFileUrl(path, import.meta.env?.BASE_URL ?? "/"), { cache: "no-cache" });
+    // JSON requests must not opt into a dev/static server's HTML SPA fallback.
+    // An absent optional sidecar needs a real 404, not index.html with status 200.
+    response = await fetch(publicFileUrl(path, import.meta.env?.BASE_URL ?? "/"), {
+      cache: "no-cache", headers: { Accept: "application/json" },
+    });
   } catch (cause) {
     throw new ContentLoadError(path, "network", "network request failed", { cause });
   }

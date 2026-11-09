@@ -36,8 +36,15 @@ test("ocean: native editor create/edit/undo/save/reload and runtime Play render 
     graphics: { selectedQualityLevel: "custom", manuallySelected: true, adaptiveOptimizationEnabled: false,
       customSettings: { renderScale: .5, maxPixelRatio: 1, shadowsEnabled: false, aoAllowed: false, bloomAllowed: false, dofAllowed: false, smaaAllowed: false, particleDensity: 0, grassDensity: 0 } },
   } })));
-  const errors: string[] = [];
-  const observe = (target: typeof page) => { target.on("pageerror", e => errors.push(e.message)); target.on("console", m => { if (m.type() === "error") errors.push(m.text()); }); };
+  const errors: { message: string; url: string }[] = [], missingSidecars = new Set<string>();
+  const observe = (target: typeof page) => {
+    target.on("pageerror", e => errors.push({ message: e.message, url: "" }));
+    target.on("response", response => {
+      if (response.status() === 404 && /\.(?:collision|materials|uvw|skeleton|vertexcolors|fracture|deformable)\.json(?:\?|$)/.test(response.url()))
+        missingSidecars.add(response.url());
+    });
+    target.on("console", m => { if (m.type() === "error") errors.push({ message: m.text(), url: m.location().url }); });
+  };
   observe(page);
   await page.goto("/?editor", { waitUntil: "domcontentloaded" });
   await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
@@ -70,5 +77,7 @@ test("ocean: native editor create/edit/undo/save/reload and runtime Play render 
   await page.getByRole("button", { name: "Delete Ocean", exact: true }).click();
   await expect(page.locator('[data-object-id="ocean:0"]')).toHaveCount(0);
   await page.getByTestId("editor-undo").click(); await expect(page.locator('[data-object-id="ocean:0"]')).toHaveCount(1);
-  expect(errors).toEqual([]);
+  // Optional sidecars legitimately return 404 and use defaults. Chrome emits a
+  // network-console line too; only confirmed 404s at those exact URLs qualify.
+  expect(errors.filter(error => !(missingSidecars.has(error.url) && /^Failed to load resource:.*404/.test(error.message)))).toEqual([]);
 });

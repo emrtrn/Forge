@@ -47,7 +47,7 @@ vec3 oceanNormal(float depth) {
   if(analyticMode>.5)slope=analyticWave(p).yz;
   vec3 geometric=normalize(cross(dFdx(vWorld),dFdy(vWorld)));
   if(geometric.y<0.)geometric=-geometric;
-  vec3 normal=normalize(mix(vec3(0.,1.,0.),vec3(-slope.x,1.,-slope.y),smoothstep(0.,4.,depth)));
+  vec3 normal=normalize(mix(vec3(0.,1.,0.),vec3(-slope.x,1.,-slope.y),smoothstep(0.,4.,depth)*oceanInletWaveWeight(p)));
   return normalize(normal+geometric*.15);
 }`;
 

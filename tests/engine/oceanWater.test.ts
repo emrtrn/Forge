@@ -127,6 +127,7 @@ export async function registerOceanWaterTests(check: (label: string, fn: () => P
         surface.applyInlets(resolveOceanInlets(document.def, sea, rivers));
         binding.update(sea, true); updateTerrainCaustics(u, scene, "terrain");
         assert.equal(surface.material.uniforms.oceanInletStart!.value[0].z, widthScale * 8);
+        assert.equal(surface.material.uniforms.oceanInletStart!.value[0].w, Math.max(8, Math.min(24, widthScale * 12)), "calm collar follows the live width within a bounded local band");
         assert.equal(u.oceanInletStart.value[0]!.z, widthScale * 8);
         assert.equal(u.uCausticMask.value, pattern); assert.equal(simulation.stats.time, 12);
       }

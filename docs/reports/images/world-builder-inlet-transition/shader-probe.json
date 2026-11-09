@@ -1,0 +1,491 @@
+{
+  "rows": [
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0,
+      "side": "cap",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0,
+      "side": "side",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0,
+      "side": "corner",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0.25,
+      "side": "cap",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0.25,
+      "side": "side",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0.25,
+      "side": "corner",
+      "weight": 4.736952136422633e-15,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0.625,
+      "side": "cap",
+      "weight": 0.4999990463256836,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0.625,
+      "side": "side",
+      "weight": 0.49999988079071045,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 0.625,
+      "side": "corner",
+      "weight": 0.500000536441803,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 1,
+      "side": "cap",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 1,
+      "side": "side",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 1,
+      "side": "corner",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 2,
+      "side": "cap",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 2,
+      "side": "side",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 0.3,
+      "band": 8,
+      "factor": 2,
+      "side": "corner",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0,
+      "side": "cap",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0,
+      "side": "side",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0,
+      "side": "corner",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0.25,
+      "side": "cap",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0.25,
+      "side": "side",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0.25,
+      "side": "corner",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0.625,
+      "side": "cap",
+      "weight": 0.4999990463256836,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0.625,
+      "side": "side",
+      "weight": 0.49999988079071045,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 0.625,
+      "side": "corner",
+      "weight": 0.500000536441803,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 1,
+      "side": "cap",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 1,
+      "side": "side",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 1,
+      "side": "corner",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 2,
+      "side": "cap",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 2,
+      "side": "side",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 3,
+      "band": 8,
+      "factor": 2,
+      "side": "corner",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0,
+      "side": "cap",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0,
+      "side": "side",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0,
+      "side": "corner",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0.25,
+      "side": "cap",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0.25,
+      "side": "side",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0.25,
+      "side": "corner",
+      "weight": 1.3473992971704818e-13,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0.625,
+      "side": "cap",
+      "weight": 0.49999940395355225,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0.625,
+      "side": "side",
+      "weight": 0.49999988079071045,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 0.625,
+      "side": "corner",
+      "weight": 0.5000002384185791,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 1,
+      "side": "cap",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 1,
+      "side": "side",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 1,
+      "side": "corner",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 2,
+      "side": "cap",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 2,
+      "side": "side",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 9,
+      "band": 13.5,
+      "factor": 2,
+      "side": "corner",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0,
+      "side": "cap",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0,
+      "side": "side",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0,
+      "side": "corner",
+      "weight": 0,
+      "contains": 1
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0.25,
+      "side": "cap",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0.25,
+      "side": "side",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0.25,
+      "side": "corner",
+      "weight": 0,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0.625,
+      "side": "cap",
+      "weight": 0.4999997019767761,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0.625,
+      "side": "side",
+      "weight": 0.4999995827674866,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 0.625,
+      "side": "corner",
+      "weight": 0.499999463558197,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 1,
+      "side": "cap",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 1,
+      "side": "side",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 1,
+      "side": "corner",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 2,
+      "side": "cap",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 2,
+      "side": "side",
+      "weight": 1,
+      "contains": 0
+    },
+    {
+      "width": 60,
+      "band": 24,
+      "factor": 2,
+      "side": "corner",
+      "weight": 1,
+      "contains": 0
+    }
+  ],
+  "inactive": [
+    1,
+    0,
+    0,
+    1
+  ],
+  "glError": 0
+}

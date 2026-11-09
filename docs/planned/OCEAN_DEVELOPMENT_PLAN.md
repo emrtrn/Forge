@@ -305,6 +305,9 @@ kapatır. İkinci dilimde Small `coast`, dört deniz yönü, kuru yol çıkışl
 bağlı offshore politikası ve sabit genişlikli düz nehir ağzının River/Ocean
 yüzey sahipliği eklendi. Devam diliminde River genişliği/görünürlüğü inlet
 maskesine canlı bağlandı; arazi ve FFT kaynakları korunur.
+Sonraki sınırlı [yüzey geçişi düzeltmesi](../reports/WORLD_BUILDER_INLET_TRANSITION.md),
+River uçlarındaki sahte rapid köpüğünü kaldırır ve Ocean dalga/normal/köpüğünü
+inlet çevresinde yumuşatır; ayrı renderer'ların renk/ışık sınırı hâlâ açıktır.
 Ada'da nehir, orta/büyük dünya ve tam O9 görsel/performans kabulü açıktır.
 Detaylar: [Random World planı](../world-builder/RANDOM_WORLD_PLAN.md).
 

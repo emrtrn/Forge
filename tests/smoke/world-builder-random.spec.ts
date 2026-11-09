@@ -290,7 +290,7 @@ test("World Builder coast: sea direction, live mouth width, undo, Save/Reload an
   const def = JSON.parse(await readFile(smokePublicPath(saved.landscapes[0].dataRef), "utf8"));
   const river = def.splines.find((spline: { id: string }) => spline.id === ocean.inlets[0]);
   const [x, y, z] = river.points.at(-1).position;
-  const camera = new PerspectiveCamera(); camera.position.set(x + 65, y + 50, z + 70); camera.lookAt(x, y, z);
+  const camera = new PerspectiveCamera(); camera.position.set(x - 35, y + 23, z + 27); camera.lookAt(x + 5, y, z - 5);
   const pose = { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), up: [0, 1, 0] };
   await page.evaluate(({ key, pose }) => localStorage.setItem(key, JSON.stringify(pose)), { key: `forge.editor.cameraPose.${encodeURIComponent(path)}`, pose });
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -305,6 +305,21 @@ test("World Builder coast: sea direction, live mouth width, undo, Save/Reload an
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await page.screenshot({ path: info.outputPath("coast-mouth-narrow.png") });
+  // Both widths must survive real Play, including the local optical transition.
+  const capturePlay = async (image: string) => {
+    const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
+    errors.push(observeBrowserErrors(runtime));
+    const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
+    await runtime.waitForLoadState("domcontentloaded");
+    await expect.poll(() => messages.some(message => message.includes(saved.name)), { timeout: 90_000 }).toBe(true);
+    await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+    await runtime.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await runtime.screenshot({ path: info.outputPath(image) }); await runtime.close();
+  };
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
+  expect(JSON.parse(await readFile(smokePublicPath(path), "utf8")).riverWaters[0].widthScale).toBe(.5);
+  await capturePlay("coast-mouth-narrow-runtime.png");
   await page.locator('[data-water-kind="river"]').click();
   await width.fill("1.5"); await width.press("Tab"); await expect(width).toHaveValue("1.5");
   await page.locator('[data-water-kind="ocean"]').click();
@@ -317,14 +332,7 @@ test("World Builder coast: sea direction, live mouth width, undo, Save/Reload an
   await page.locator('[data-object-id="ocean:0"]').click();
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
   await page.screenshot({ path: info.outputPath("coast-mouth-editor.png") });
-  const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
-  errors.push(observeBrowserErrors(runtime));
-  const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
-  await runtime.waitForLoadState("domcontentloaded");
-  await expect.poll(() => messages.some(message => message.includes(saved.name)), { timeout: 90_000 }).toBe(true);
-  await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
-  await runtime.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  await runtime.screenshot({ path: info.outputPath("coast-mouth-runtime.png") }); await runtime.close();
+  await capturePlay("coast-mouth-runtime.png");
   expect(errors.flatMap(read => read())).toEqual([]);
 });
 

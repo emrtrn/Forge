@@ -62,7 +62,7 @@ vec4 displacement(vec2 world,float stepSize){
   return vec4(a.xyz+b.xyz+c.xyz,min(a.w,min(b.w,c.w)));
 }
 vec3 shallowDisplacement(vec2 world,float stepSize){
-  vec2 cover=waterCoverage(world);float fade=smoothstep(0.,5.,cover.x)*cover.y;
+  vec2 cover=waterCoverage(world);float fade=smoothstep(0.,5.,cover.x)*cover.y*oceanInletWaveWeight(world);
   vec3 d=displacement(world,stepSize).xyz*fade;
   // The final displaced point must still be wet. Never displace through an island.
   vec2 destination=waterCoverage(world+d.xz);
@@ -162,7 +162,7 @@ void main(){
   // Initial FFT crest presentation only; three-layer Ocean foam is a later delivery.
   float broken=1.-smoothstep(.1,.7,vFoam);
   float pattern=waterNoise(p*1.5)*.65+waterNoise(p*4.3)*.35;
-  float foam=smoothstep(.3,.75,broken*foamStrength-pattern*.45)*smoothstep(.05,1.,cover.x);
+  float foam=smoothstep(.3,.75,broken*foamStrength-pattern*.45)*smoothstep(.05,1.,cover.x)*oceanInletWaveWeight(p);
   vec3 foamColor=vec3(.78,.87,.86)*(ambient+waterSunColor*max(dot(normal,waterSunDirection),0.)*.318309886*sunVisibility);
   float shoreBlend=smoothstep(.002,.12,edgeDepth);
   gl_FragColor=waterComposite(base,1.-waterTransmission(columnDepth,path,1.,absorptionDistance),reflected,reflectionAmount,foamColor,foam,glint);

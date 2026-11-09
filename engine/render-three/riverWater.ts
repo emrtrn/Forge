@@ -221,7 +221,10 @@ export function buildRiverWaterRibbon(
       const nextDz = next.position[2] - sample.position[2];
       const previousLength = Math.hypot(previousDx, previousDz) || 1;
       const nextLength = Math.hypot(nextDx, nextDz) || 1;
-      const turn = 1 - Math.max(-1, Math.min(1, (previousDx * nextDx + previousDz * nextDz) / (previousLength * nextLength)));
+      // Endpoints have only one tangent: a missing neighbour is not a 90-degree
+      // bend. Otherwise every calm ribbon ends in a false whitewater strip.
+      const turn = index === 0 || index === chain.length - 1 ? 0
+        : 1 - Math.max(-1, Math.min(1, (previousDx * nextDx + previousDz * nextDz) / (previousLength * nextLength)));
       const slope = Math.abs(next.position[1] - previous.position[1]) / Math.max(length, EPSILON);
       const localRapidness = Math.min(1, turn * 1.5 + slope * 0.75);
       const profile = profiles.get(sample.segmentId);

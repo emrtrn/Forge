@@ -1,5 +1,9 @@
 # Ocean–River canlı genişlik eşlemesi
 
+Devam: [River/Ocean yüzey geçişi](WORLD_BUILDER_INLET_TRANSITION.md).
+Canlı genişlik eşlemesi korunarak uç köpüğü ve Ocean geçiş bandı iyileştirildi;
+ayrı renderer'ların tam optik eşleşmesi hâlâ açık.
+
 9 Kasım 2026. Kıyı aşaması `9dc5e7be` ile commit edildikten sonra,
 o teslimde açık kalan River genişlik eşlemesi ele alındı.
 

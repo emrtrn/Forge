@@ -35,6 +35,30 @@ function fixture() {
 }
 
 export async function registerTerrainRiverWaterTests(checkAsync: CheckAsync): Promise<void> {
+  await checkAsync("terrain river: calm endpoints do not manufacture rapids; slopes, bends and profiles remain", async () => {
+    const spline = { id: "calm", smooth: false, points: [
+      { id: "a", position: [0, 0, 0] as [number, number, number], width: 6, falloff: 2 },
+      { id: "b", position: [0, 0, 30] as [number, number, number], width: 6, falloff: 2 },
+    ], segments: [{ id: "ab", startPointId: "a", endPointId: "b" }] };
+    const options = { surfaceLevel: 0, widthScale: 1, sampleSpacing: 1, heightAt: () => -2 };
+    for (const widthScale of [.5, 1.5]) {
+      const calm = buildRiverWaterRibbon(spline, { ...options, widthScale });
+      assert.ok(calm.rapidness.every(value => value === 0));
+      assert.ok(calm.foamMasks.every(value => value === 0), "no false whitewater at either cap");
+    }
+    const sloped = structuredClone(spline); sloped.points[1]!.position[1] = -3;
+    const slope = buildRiverWaterRibbon(sloped, options);
+    assert.ok(Math.abs(slope.rapidness.at(-1)! - .075) < 1e-6, "one-sided physical slope remains");
+    const authored = buildRiverWaterRibbon(spline, { ...options, segmentProfiles: [{ splineSegmentRef: "ab", rapidness: .8, flowSpeedMultiplier: 1 }] });
+    assert.equal(authored.rapidness.at(-1), .8); assert.equal(authored.foamMasks.at(-1), .8);
+    const bent = structuredClone(spline);
+    bent.points.push({ id: "c", position: [30, 0, 30], width: 6, falloff: 2 });
+    bent.segments.push({ id: "bc", startPointId: "b", endPointId: "c" });
+    const bend = buildRiverWaterRibbon(bent, options);
+    assert.ok(bend.rapidness.some(value => value > .5), "real interior bend still makes rapids");
+    assert.equal(bend.rapidness.at(-1), 0);
+    assert.ok(bend.foamMasks.at(-1)! > 0, "real upstream foam still decays downstream");
+  });
   await checkAsync("terrain river: AO uses the live wave interface and restores beauty after failure", async () => {
     const { def, tiles, water } = fixture();
     const source = await prepareTerrainRiverWaterSource({ def, tiles }, water);

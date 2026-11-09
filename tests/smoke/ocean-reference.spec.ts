@@ -5,7 +5,8 @@ test.use({ viewport: { width: 960, height: 600 }, launchOptions: {
   args: ["--enable-unsafe-swiftshader"],
 } });
 
-test("ocean: FFT draws, pause and analytic comparison, dry basin and safe rebuilds", async ({ page }, testInfo) => {
+test("ocean: FFT, shared optics, darkness, depth/normal overrides and safe rebuilds", async ({ page }, testInfo) => {
+  test.setTimeout(300_000);
   const errors: string[] = [];
   page.on("pageerror", e => errors.push(e.message));
   page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
@@ -14,6 +15,7 @@ test("ocean: FFT draws, pause and analytic comparison, dry basin and safe rebuil
   const initial = await page.evaluate(() => window.__oceanLab.stats());
   expect(initial.errors).toEqual([]); expect(initial.island).toBe("dry"); expect(initial.basin).toBe("dry"); expect(initial.offshore).toBe("wet");
   expect(initial.fftBytes).toBeGreaterThan(22 * 1024 ** 2); expect(initial.draws).toBeGreaterThanOrEqual(21);
+  expect(initial.transmission).toBe(1); expect(initial.snapshots).toBeGreaterThan(0);
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   const frozen = await page.evaluate(() => window.__oceanLab.stats().time);
   const probe = await page.evaluate(() => window.__oceanLab.probe());
@@ -26,6 +28,22 @@ test("ocean: FFT draws, pause and analytic comparison, dry basin and safe rebuil
   await page.screenshot({ path: testInfo.outputPath("ocean-coast.png") });
   await page.getByRole("button", { name: "Open sea", exact: true }).click();
   await page.screenshot({ path: testInfo.outputPath("ocean-open-sea.png") });
+  const day = await page.evaluate(() => window.__oceanLab.measure());
+  expect(day.finite).toBe(true); expect(day.radiance).toBeGreaterThan(.0001);
+  await page.evaluate(() => window.__oceanLab.setDark(true));
+  const dark = await page.evaluate(() => window.__oceanLab.measure());
+  expect(dark.finite).toBe(true); expect(dark.radiance).toBeLessThan(day.radiance * .01);
+  await testInfo.attach("surface-radiance", { body: JSON.stringify({ day, dark }), contentType: "application/json" });
+  await page.evaluate(() => window.__oceanLab.setDark(false));
+  for (const kind of ["normal", "depth"] as const) {
+    const auxiliary = await page.evaluate(kind => window.__oceanLab.override(kind), kind);
+    expect(auxiliary.frozen).toBe(true); expect(auxiliary.variation).toBeGreaterThan(4);
+  }
+  await page.evaluate(() => window.__oceanLab.setTransmission(false));
+  await expect.poll(() => page.evaluate(() => window.__oceanLab.stats().transmission)).toBe(0);
+  await page.screenshot({ path: testInfo.outputPath("ocean-direct-fallback.png") });
+  await page.evaluate(() => window.__oceanLab.setTransmission(true));
+  await expect.poll(() => page.evaluate(() => window.__oceanLab.stats().transmission)).toBe(1);
   await page.locator("#backend").selectOption("analytic");
   expect(await page.evaluate(() => window.__oceanLab.stats().backend)).toBe("analytic");
   await page.screenshot({ path: testInfo.outputPath("ocean-analytic.png") });

@@ -1,5 +1,6 @@
 import { ACESFilmicToneMapping, AmbientLight, BufferGeometry, Color, DirectionalLight, Float32BufferAttribute,
-  FogExp2, Mesh, MeshStandardMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
+  FloatType, FogExp2, Mesh, MeshDepthMaterial, MeshNormalMaterial, MeshStandardMaterial, PerspectiveCamera, RGBADepthPacking,
+  Scene, Vector3, WebGLRenderer, WebGLRenderTarget } from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { Sky } from "three/addons/objects/Sky.js";
 import { OceanFft } from "../../../engine/render-three/ocean/oceanFft";
@@ -7,12 +8,20 @@ import { OceanSurface } from "../../../engine/render-three/ocean/oceanSurface";
 import { prepareOceanCoverage, sampleOceanCoverage } from "../../../engine/terrain/oceanCoverage";
 import { CooperativeWork } from "../../../engine/core/cooperativeWork";
 import type { OceanWaterBody } from "../../../engine/scene/oceanWater";
+import { WaterSceneSnapshot } from "../../../engine/render-three/waterSceneSnapshot";
+import { renderSceneWithLakeOverride } from "../../../engine/render-three/lakeWater";
+import { captureSkyEnvironment } from "../../../engine/render-three/reflection";
+import { resolveSkyAtmosphere } from "../../../engine/scene/skyAtmosphere";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { postProcessToneMappingExposure } from "../../../engine/render-three/postProcess";
 
 const canvas = document.querySelector<HTMLCanvasElement>("canvas")!;
 const status = document.querySelector<HTMLOutputElement>("#status")!;
 const renderer = new WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)); renderer.toneMapping = ACESFilmicToneMapping;
-renderer.toneMappingExposure = .85;
+renderer.toneMappingExposure = postProcessToneMappingExposure(.85);
 const scene = new Scene(), camera = new PerspectiveCamera(55, innerWidth / innerHeight, .15, 6000);
 const skyColor = new Color("#aec2cf"); scene.background = skyColor; scene.fog = new FogExp2(skyColor, .001);
 const controls = new OrbitControls(camera, canvas); controls.maxPolarAngle = Math.PI * .495;
@@ -21,7 +30,14 @@ const sky = new Sky(); sky.scale.setScalar(5000); scene.add(sky);
 sky.material.uniforms.turbidity!.value = 5; sky.material.uniforms.rayleigh!.value = 1.7;
 const sun = new Vector3(-.4, .7, -.6).normalize(); sky.material.uniforms.sunPosition!.value.copy(sun);
 const light = new DirectionalLight("#fff3da", 2.5); light.position.copy(sun).multiplyScalar(100); scene.add(light);
-scene.add(new AmbientLight("#c9e1ef", 1.2));
+const ambient = new AmbientLight("#c9e1ef", 1.2); scene.add(ambient);
+const environment = captureSkyEnvironment(renderer, resolveSkyAtmosphere({ turbidity: 5, rayleigh: 1.7 }), sun, 64);
+scene.environment = environment.texture;
+renderer.shadowMap.enabled = true; light.castShadow = true; light.shadow.mapSize.set(128, 128);
+light.shadow.camera.left = light.shadow.camera.bottom = -100; light.shadow.camera.right = light.shadow.camera.top = 100;
+const composer = new EffectComposer(renderer); composer.addPass(new RenderPass(scene, camera)); composer.addPass(new OutputPass());
+const snapshots = new WaterSceneSnapshot(scene);
+let transmission = true;
 const body: OceanWaterBody = { schema: 1, kind: "ocean", coordinateSpace: "world", id: "reference-ocean",
   terrainRef: "reference-terrain", name: "Ocean study", bounds: { min: [-128, -128], max: [128, 128] },
   openEdges: ["west", "east", "north", "south"], surfaceLevel: 0, offshoreDepth: 40 };
@@ -43,6 +59,7 @@ for (let z = 0; z < 256; z++) for (let x = 0; x < 256; x++) {
 geometry.setAttribute("position", new Float32BufferAttribute(positions, 3));
 geometry.setAttribute("color", new Float32BufferAttribute(colors, 3)); geometry.setIndex(indices); geometry.computeVertexNormals();
 const terrain = new Mesh(geometry, new MeshStandardMaterial({ vertexColors: true, roughness: .85 })); scene.add(terrain);
+terrain.castShadow = terrain.receiveShadow = true;
 let simulation: OceanFft | undefined, surface: OceanSurface | undefined, paused = false, last = 0, frame = 0;
 let backend = "fft", generation = 0, aborter = new AbortController(), rebuilding = false, disposed = false;
 let needsRender = true;
@@ -85,7 +102,7 @@ document.querySelector<HTMLSelectElement>("#backend")!.onchange = event => {
   needsRender = true;
 };
 document.querySelector<HTMLButtonElement>("#rebuild")!.onclick = () => { void rebuild(); };
-const resize = () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); needsRender = true; };
+const resize = () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); composer.setSize(innerWidth, innerHeight); needsRender = true; };
 addEventListener("resize", resize); resize(); view("coast");
 function animate(now: number): void {
   if (disposed) return;
@@ -97,20 +114,59 @@ function animate(now: number): void {
       status.textContent = `${backend === "fft" ? "FFT · 4 × 256²" : "Analytical comparison"} · ${simulation.stats.time.toFixed(1)} s\n`
         + `${surface.coverage.wetFaces.toLocaleString()} connected faces · ${(simulation.stats.textureBytes / 1024 ** 2).toFixed(2)} MiB FFT textures`;
   }
-  if (!paused || needsRender) { renderer.render(scene, camera); needsRender = false; }
+  if (!paused || needsRender) {
+    snapshots.begin(camera, [composer.renderTarget1, composer.renderTarget2]);
+    if(transmission) composer.render(); else renderer.render(scene, camera);
+    needsRender = false;
+  }
   frame++; requestAnimationFrame(animate);
 }
 function dispose(): void {
   if (disposed) return; disposed = true; ++generation; aborter.abort();
   surface?.dispose(); simulation?.dispose(); controls.dispose(); geometry.dispose(); terrain.material.dispose();
+  snapshots.dispose(); composer.dispose(); environment.dispose(); light.shadow.dispose();
   sky.geometry.dispose(); sky.material.dispose(); renderer.dispose(); removeEventListener("resize", resize);
 }
 const lab = {
   rebuild, dispose,
+  setTransmission: (enabled: boolean) => { transmission = enabled; needsRender = true; },
+  setDark: (dark: boolean) => {
+    light.intensity = dark ? 0 : 2.5; ambient.intensity = dark ? 0 : 1.2;
+    scene.environment = dark ? null : environment.texture; needsRender = true;
+  },
+  measure: () => {
+    // Isolate surface radiance from the day sky/terrain, without another FFT step.
+    const target = new WebGLRenderTarget(32, 32, { type: FloatType });
+    const previous = renderer.getRenderTarget(), background = scene.background;
+    const skyVisible = sky.visible, terrainVisible = terrain.visible, clear = renderer.getClearColor(new Color()).clone(), alpha = renderer.getClearAlpha();
+    const pixels = new Float32Array(32 * 32 * 4);
+    try {
+      sky.visible = terrain.visible = false; scene.background = null; renderer.setClearColor(0, 0);
+      renderer.setRenderTarget(target); renderer.render(scene, camera); renderer.readRenderTargetPixels(target, 0, 0, 32, 32, pixels);
+      let radiance = 0; for (let i = 0; i < pixels.length; i += 4) radiance += pixels[i]! + pixels[i+1]! + pixels[i+2]!;
+      return { finite: pixels.every(Number.isFinite), radiance: radiance / (32 * 32 * 3) };
+    } finally {
+      renderer.setRenderTarget(previous); renderer.setClearColor(clear, alpha); scene.background = background;
+      sky.visible = skyVisible; terrain.visible = terrainVisible; target.dispose(); needsRender = true;
+    }
+  },
+  override: (kind: "normal" | "depth") => {
+    const target = new WebGLRenderTarget(32, 32), previous = renderer.getRenderTarget();
+    const override = scene.overrideMaterial;
+    const material = kind === "normal" ? new MeshNormalMaterial() : new MeshDepthMaterial({ depthPacking: RGBADepthPacking });
+    const pixels = new Uint8Array(32 * 32 * 4), time = simulation!.stats.time;
+    try {
+      renderer.setRenderTarget(target); scene.overrideMaterial = material;
+      renderSceneWithLakeOverride(scene, kind, () => renderer.render(scene, camera));
+      renderer.readRenderTargetPixels(target, 0, 0, 32, 32, pixels);
+      return { variation: new Set(pixels).size, frozen: time === simulation!.stats.time };
+    } finally { scene.overrideMaterial = override; renderer.setRenderTarget(previous); target.dispose(); material.dispose(); needsRender = true; }
+  },
   probe: () => simulation?.probe() ?? Promise.resolve([]),
   stats: () => ({ ready: !!surface, backend, paused, frame, rebuilding, maxSliceMs, errors: [...errors],
     time: simulation?.stats.time ?? 0, updates: simulation?.stats.updates ?? 0, draws: simulation?.stats.draws ?? 0,
     fftBytes: simulation?.stats.textureBytes ?? 0, textures: renderer.info.memory.textures,
+    transmission: surface?.material.uniforms.waterSceneEnabled!.value ?? 0, snapshots: snapshots.copies,
     geometries: renderer.info.memory.geometries, triangles: renderer.info.render.triangles,
     island: surface ? sampleOceanCoverage(surface.coverage, 10, 0).status : "unknown",
     basin: surface ? sampleOceanCoverage(surface.coverage, 0, 0).status : "unknown",

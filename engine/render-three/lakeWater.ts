@@ -18,6 +18,7 @@ import type { PlanarReflectionBinding, PlanarReflectionSource } from "./planarRe
 import { createWaterEnvironmentUniforms, updateWaterEnvironment, WATER_ENVIRONMENT_GLSL } from "./waterEnvironment";
 import { WATER_OPTICS_GLSL } from "./waterOptics";
 import { createWaterSceneUniforms, readWaterScene, WATER_SCENE_GLSL } from "./waterSceneSnapshot";
+import { OceanSurface } from "./ocean/oceanSurface";
 
 import { createLakeFoamMask, WATER_FOAM_GLSL, createWaterContactUniforms, WATER_CONTACT_GLSL } from "./waterFoam";
 import { createRiverSunShadowUniforms, updateRiverSunShadow, RIVER_SUN_SHADOW_GLSL } from "./riverSunShadow";
@@ -445,17 +446,20 @@ export class LakeWaterObject extends Mesh<BufferGeometry, ShaderMaterial> {
     this.source?.removeConsumer(this); this.source = null; this.setPlanarReflectionBinding(null); this.geometry.dispose(); this.material.dispose(); super.dispose(); }
 }
 
-/** Replace the existing override-pass water draw with its displacing variant. */
+/** Replace Lake/Ocean override draws with the same displaced surface.
+ * The existing export name keeps post-process callers compatible. */
 export function renderSceneWithLakeOverride(scene: Object3D, kind: "normal" | "depth", render: () => void): void {
-  const lakes: LakeWaterObject[] = [];
-  scene.traverseVisible(object => { if (object instanceof LakeWaterObject && object.waveParameters.height > 0) lakes.push(object); });
-  if (!lakes.length) { render(); return; }
-  for (const lake of lakes) lake.visible = false;
+  const surfaces: (LakeWaterObject | OceanSurface)[] = [];
+  scene.traverseVisible(object => {
+    if (object instanceof OceanSurface || object instanceof LakeWaterObject && object.waveParameters.height > 0) surfaces.push(object);
+  });
+  if (!surfaces.length) { render(); return; }
+  for (const surface of surfaces) surface.visible = false;
   const previous = scene.onAfterRender;
   scene.onAfterRender = (renderer, renderedScene, camera, geometry, material, group) => {
     previous.call(scene, renderer, renderedScene, camera, geometry, material, group);
-    for (const lake of lakes) lake.renderWaveOverride(renderer, camera, kind);
+    for (const surface of surfaces) surface.renderWaveOverride(renderer, camera, kind);
   };
   try { render(); }
-  finally { scene.onAfterRender = previous; for (const lake of lakes) lake.visible = true; }
+  finally { scene.onAfterRender = previous; for (const surface of surfaces) surface.visible = true; }
 }

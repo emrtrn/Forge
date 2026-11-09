@@ -11,7 +11,11 @@ import type { RoomLayout } from "../../engine/scene/layout";
 import { prepareOceanTerrain } from "../../engine/terrain/oceanPreparation";
 import { createLakeFixture } from "./fixtures/lakeFixture";
 import { OceanWaterController } from "../../src/scene/oceanWaterController";
-import { Object3D, PerspectiveCamera, Scene, type WebGLRenderer } from "three";
+import { AmbientLight, DirectionalLight, HemisphereLight, Object3D, PerspectiveCamera, Scene, Texture, WebGLCubeRenderTarget, type WebGLRenderer } from "three";
+import { OceanSurface } from "../../engine/render-three/ocean/oceanSurface";
+import type { OceanFft } from "../../engine/render-three/ocean/oceanFft";
+import { createOceanOpticsUniforms, updateOceanOptics } from "../../engine/render-three/ocean/oceanOptics";
+import { renderSceneWithLakeOverride } from "../../engine/render-three/lakeWater";
 import { SceneApp } from "../../src/scene/SceneApp";
 import { cloneSelection, parseSelectionId, selectionId, selectionsEqual, type Selection } from "../../editor/core/selection";
 import { moveWorldTerrain } from "../../engine/terrain/worldTerrainMove";
@@ -23,6 +27,58 @@ const body = (): OceanWaterBody => ({ schema: 1, kind: "ocean", coordinateSpace:
   appearance: { shallowColor: "#28b5ac", deepColor: "#073448", absorptionDistance: 9, roughness: .16, foamStrength: .75 } });
 
 export async function registerOceanWaterTests(check: (label: string, fn: () => Promise<void>) => Promise<void>): Promise<void> {
+  await check("ocean: optics borrows live environment/probes and follows daylight, darkness and hidden ambient", async () => {
+    const scene = new Scene(), camera = new PerspectiveCamera(), u = createOceanOpticsUniforms();
+    const renderer = { getRenderTarget: () => null } as unknown as WebGLRenderer;
+    const target = new WebGLCubeRenderTarget(16);
+    (target.texture as Texture & { isPMREMTexture: boolean }).isPMREMTexture = true;
+    target.texture.mipmaps = [{}, {}]; scene.environment = target.texture;
+    const ambient = new AmbientLight(0xffffff, .3), hemisphere = new HemisphereLight(0xffffff, 0x000000, .2);
+    const hidden = new AmbientLight(0xffffff, 5); hidden.visible = false;
+    const sun = new DirectionalLight(0xffffff, 2); sun.position.set(4, 6, 1);
+    scene.add(ambient, hemisphere, hidden, sun); scene.updateMatrixWorld(true);
+    let probesRead = 0;
+    const probe = { target, position: [0, 0, 0] as [number, number, number], radius: 100, priority: 0, intensity: .5, resolution: 16, parallax: false, near: .1, far: 100 };
+    assert.equal(updateOceanOptics(u, renderer, scene, camera, () => { probesRead++; return [probe]; }), false);
+    assert.equal(probesRead, 1); assert.equal(u.waterEnvironment.value, target.texture); assert.equal(u.waterProbe.value, target.texture);
+    assert.deepEqual(u.oceanAmbient.value.toArray(), [.5, .5, .5]);
+    assert.ok(u.waterSunDirection.value.distanceTo(sun.position.clone().normalize()) < 1e-6);
+    assert.deepEqual(u.waterSunColor.value.toArray(), [2, 2, 2]);
+    sun.visible = ambient.visible = hemisphere.visible = false; scene.environment = null;
+    updateOceanOptics(u, renderer, scene, camera);
+    assert.equal(u.oceanAmbient.value.length(), 0); assert.equal(u.waterSunColor.value.length(), 0);
+    assert.equal(u.waterEnvironmentIntensity.value, 0); assert.equal(u.waterProbe.value, null);
+    assert.equal(u.waterSceneEnabled.value, 0); assert.equal(u.waterSceneColor.value, null); target.dispose();
+  });
+  await check("ocean: depth/normal overrides preserve owner clock, shared textures, visibility and render state on errors", async () => {
+    const sea = { ...body(), surfaceLevel: 0 }, coverage = buildOceanCoverage(sea, 1, () => -3);
+    const textures = Array.from({ length: 7 }, () => new Texture()); let borrowedFreed = 0;
+    textures.forEach(texture => texture.addEventListener("dispose", () => { borrowedFreed++; }));
+    const simulation = { lengths: [600, 85, 12, 2.1], displacement: textures.slice(0, 3), slopes: textures.slice(3), stats: { time: 12 } } as unknown as OceanFft;
+    const surface = new OceanSurface(coverage, simulation), scene = new Scene(), camera = new PerspectiveCamera();
+    camera.position.set(3, 10, 5); camera.updateMatrixWorld(true); surface.updateView(camera); scene.add(surface);
+    assert.equal(surface.material.uniforms.waveClock!.value, 12);
+    const anchor = surface.material.uniforms.anchor!.value.clone(), before = surface.material.uniforms;
+    let draws = 0, materialsFreed = 0, previousCalls = 0;
+    const previous = scene.onAfterRender = () => { previousCalls++; };
+    const renderer = { autoClear: true, render: (object: Object3D) => {
+      const proxy = object as OceanSurface; assert.equal(proxy.material.uniforms.waveClock, before.waveClock);
+      proxy.material.addEventListener("dispose", () => { materialsFreed++; }); draws++;
+    } } as unknown as WebGLRenderer;
+    for (const kind of ["normal", "depth"] as const) renderSceneWithLakeOverride(scene, kind, () => {
+      assert.equal(surface.visible, false);
+      scene.onAfterRender(renderer, scene, camera, surface.geometry, surface.material, null);
+    });
+    assert.equal(draws, 2); assert.equal(previousCalls, 2); assert.equal(renderer.autoClear, true);
+    assert.equal(scene.onAfterRender, previous); assert.equal(surface.visible, true);
+    assert.throws(() => renderSceneWithLakeOverride(scene, "normal", () => { throw new Error("pass failed"); }), /pass failed/);
+    assert.equal(surface.visible, true); assert.equal(scene.onAfterRender, previous);
+    renderer.render = () => { throw new Error("GPU failed"); };
+    assert.throws(() => surface.renderWaveOverride(renderer, camera, "normal"), /GPU failed/); assert.equal(renderer.autoClear, true);
+    assert.equal(simulation.stats.time, 12); assert.ok(surface.material.uniforms.anchor!.value.equals(anchor));
+    surface.dispose(); surface.dispose(); assert.equal(materialsFreed, 2); assert.equal(borrowedFreed, 0);
+    textures.forEach(texture => texture.dispose());
+  });
   await check("ocean: real layout save/read and partition keep the complete sparse Ocean contract", async () => {
     const ocean = body(), layout: RoomLayout = { schema: 1, name: "Coast", loadGroups: [], instances: [], characters: [], oceanWaters: [ocean] };
     const saved = validateLayout(layout) as RoomLayout;

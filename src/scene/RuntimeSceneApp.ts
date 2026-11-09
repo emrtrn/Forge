@@ -6208,6 +6208,7 @@ export class RuntimeSceneApp implements RuntimeStatsApp {
   private async buildRuntimeOcean(): Promise<void> {
     if (!this.layout?.oceanWaters?.length && !this.oceans) return;
     this.oceans ??= new OceanWaterController({ scene: this.scene, renderer: this.renderer,
+      environmentProbes: () => this.eligibleProbeBakes(),
       document: id => this.worldTerrainDocuments.get(id),
       load: async (id, key, signal) => {
         const actor = this.layout?.landscapes?.find(a => a.id === id), document = this.worldTerrainDocuments.get(id);

@@ -7,6 +7,7 @@ import type { WorldTerrainDocument } from "@engine/terrain/terrainLoader";
 import type { TerrainTileData } from "@engine/terrain/terrainTypes";
 import { OceanFft } from "@engine/render-three/ocean/oceanFft";
 import { OceanSurface } from "@engine/render-three/ocean/oceanSurface";
+import type { WaterEnvironmentProbes } from "@engine/render-three/waterEnvironment";
 
 export interface OceanPresentation {
   object: Object3D;
@@ -19,6 +20,7 @@ export interface OceanWaterHost {
   document(id: string): WorldTerrainDocument | undefined;
   load(id: string, key: string, signal?: AbortSignal): Promise<TerrainTileData>;
   changed?: () => void;
+  environmentProbes?: WaterEnvironmentProbes;
   /** Host/diagnostic injection keeps lifecycle tests independent of a real GPU. */
   create?: (coverage: OceanCoverage) => OceanPresentation;
 }
@@ -73,7 +75,7 @@ export class OceanWaterController {
   private create(coverage: OceanCoverage): OceanPresentation {
     const simulation = new OceanFft(this.host.renderer, coverage.body);
     try {
-      simulation.update(0); const surface = new OceanSurface(coverage, simulation);
+      simulation.update(0); const surface = new OceanSurface(coverage, simulation, this.host.environmentProbes);
       surface.userData.oceanWaterId = coverage.body.id;
       return { object: surface, update: (delta, camera) => { simulation.update(delta); surface.updateView(camera); },
         dispose: () => { surface.dispose(); simulation.dispose(); } };

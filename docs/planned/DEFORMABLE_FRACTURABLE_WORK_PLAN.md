@@ -1061,7 +1061,8 @@ impact normalidir (`normal` `a`'dan `b`'ye gider; `a` göçüyorsa işaret çevr
 - **Test Hit kopya üstünde:** modelin kendisine yazmaz, yoksa açık kalan önizleme
   fracture bake'ini, `sourceHash`'i ve hull üretimini kirletirdi.
 - **Test asset'leri:** `SM_DentPanel` (10 086 vertex, level'da araç yolunun dışında
-  iki adet), Reference Car `sedan-sports.deformable.json` + `Deformable` component.
+  iki adet), Reference Car `assets/vehicles/reference-car/ReferenceCar.deformable.json`
+  + `Deformable` component (Kenney modelinin yerini Forge'un kendi referans modeli aldı).
 - **`.fracture.json` model yeniden adlandırılınca/silinince taşınmıyordu**,
   `MODEL_SIDECAR_SUFFIXES` listesine `.deformable.json` ile birlikte eklendi.
 - Kapanış sayıları: `Deformable.Dent` mesajı, `Deformable.Dented` yayını, `?debug`

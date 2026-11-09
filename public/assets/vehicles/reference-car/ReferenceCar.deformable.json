@@ -2,7 +2,7 @@
   "version": 1,
   "enabled": true,
   "mode": "impact",
-  "dentImpulse": 1500,
+  "dentImpulse": 4500,
   "fullImpulse": 9000,
   "radius": 0.55,
   "maxDepth": 0.2,

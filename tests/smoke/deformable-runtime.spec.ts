@@ -41,7 +41,7 @@ async function panelState(page: Page): Promise<{ count: number; delta: number; o
       scene.traverse((node) => {
         const object = node as Node;
         if (object.isMesh && (object.parent?.name ?? "").startsWith("sm-dent-panel-clone-")) panels.push(object);
-        if (object.isMesh && /^(body|spoiler|wheel-)/.test(object.name ?? "") && object.geometry!.userData.forgeDeformClone === true) car.push(object.name!);
+        if (object.isMesh && /^(body|cabin|wheel-)/.test(object.name ?? "") && object.geometry!.userData.forgeDeformClone === true) car.push(object.name!);
       });
     }
     let delta = 0;
@@ -110,8 +110,9 @@ test("deformable runtime: driving into a panel dents that panel, the car stays s
 
   const line = (await readDeform(page))!;
   console.log(`[deform smoke] ${JSON.stringify(line)} at ${speedAtHit} km/h`);
-  // A low-poly car can take a hit with no vertex near it; those are counted, not dents.
-  expect(line.dents).toBeGreaterThan(line.missed);
+  // Some collider contacts miss the visible mesh. Both struck objects must
+  // actually dent; inspect their geometry below rather than comparing contact counts.
+  expect(line.dents).toBeGreaterThanOrEqual(2);
 
   const state = await panelState(page);
   console.log(`[deform smoke] ${JSON.stringify(state)}`);

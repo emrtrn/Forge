@@ -21040,16 +21040,15 @@
       "license": "CC0"
     },
     {
-      "id": "kenney-sedan-sports",
-      "name": "Sedan Sports",
+      "id": "reference-car-mesh",
+      "name": "Reference Car Mesh",
       "assetType": "staticMesh",
       "category": "Vehicles",
-      "path": "assets/kenney-car-kit/sedan-sports.glb",
-      "thumbnail": "assets/kenney-car-kit/sedan-sports.png",
+      "path": "assets/vehicles/reference-car/ReferenceCar.glb",
       "tags": [
         "vehicle",
         "car",
-        "Kenney"
+        "reference"
       ],
       "placeable": true,
       "placement": {
@@ -21063,24 +21062,23 @@
         "castShadow": true,
         "receiveShadow": true,
         "collision": true,
-        "bytes": 177676
+        "bytes": 54964
       },
       "source": {
-        "origin": "Kenney",
-        "pack": "Car Kit",
-        "packVersion": "3.1"
+        "origin": "Forge",
+        "path": "art/vehicles/reference-car/generate.mjs"
       },
       "license": "CC0"
     },
     {
-      "id": "kenney-car-kit-colormap",
-      "name": "Car Kit Colormap",
+      "id": "reference-car-palette",
+      "name": "Reference Car Palette",
       "assetType": "texture",
       "category": "Vehicles",
-      "path": "assets/kenney-car-kit/Textures/colormap.png",
-      "thumbnail": "assets/kenney-car-kit/Textures/colormap.png",
+      "path": "assets/vehicles/reference-car/ReferenceCarPalette.png",
+      "thumbnail": "assets/vehicles/reference-car/ReferenceCarPalette.png",
       "tags": [
-        "Kenney"
+        "reference"
       ],
       "placeable": false,
       "placement": {
@@ -21094,12 +21092,11 @@
         "castShadow": false,
         "receiveShadow": false,
         "collision": false,
-        "bytes": 12371
+        "bytes": 81
       },
       "source": {
-        "origin": "Kenney",
-        "pack": "Car Kit",
-        "packVersion": "3.1"
+        "origin": "Forge",
+        "path": "art/vehicles/reference-car/generate.mjs"
       },
       "license": "CC0"
     },

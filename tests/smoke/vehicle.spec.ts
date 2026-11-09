@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
 import { resolve } from "node:path";
 import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
+import { defaultUserSettings } from "../../engine/persistence/userSettingsStore";
 
 /**
  * Vehicle plan Faz 1b: the starter Reference Car drives in a real browser.
@@ -508,7 +509,7 @@ test("vehicle drivetrain shows RPM shifts to second reverses and resets in the b
   expect(pageErrors).toEqual([]);
 });
 
-test("Kenney sedan uses its textured body and four animated model wheels", async ({ page }, testInfo) => {
+test("reference car uses its textured body and four animated model wheels", async ({ page }, testInfo) => {
   // Three's existing devtools observation hook lets this test inspect the live
   // render scene without exposing test globals in the production application.
   await page.addInitScript(() => {
@@ -521,8 +522,8 @@ test("Kenney sedan uses its textured body and four animated model wheels", async
       if (object?.isWebGLRenderer) w.__vehicleRenderer = object;
     });
   });
-  const modelResponse = page.waitForResponse((response) => response.url().includes("kenney-car-kit/sedan-sports.glb"));
-  const textureResponse = page.waitForResponse((response) => response.url().includes("kenney-car-kit/Textures/colormap.png"));
+  const modelResponse = page.waitForResponse((response) => response.url().includes("vehicles/reference-car/ReferenceCar.glb"));
+  const textureResponse = page.waitForResponse((response) => response.url().includes("vehicles/reference-car/ReferenceCarPalette.png"));
   const pageErrors = await openVehicleTest(page);
   expect((await modelResponse).ok()).toBe(true);
   expect((await textureResponse).ok()).toBe(true);
@@ -548,10 +549,10 @@ test("Kenney sedan uses its textured body and four animated model wheels", async
   });
   await expect.poll(async () => (await snapshot())?.wheels.length).toBe(4);
   const parked = (await snapshot())!;
-  expect(parked.meshes).toBe(6); // body, spoiler, four original wheels
+  expect(parked.meshes).toBe(6); // body, cabin, four model wheels
   expect(parked.textured).toBe(true);
   expect(parked.wheels.every((wheel: any) => wheel.childCount === 1 && wheel.name.startsWith("wheel-"))).toBe(true);
-  await page.screenshot({ path: testInfo.outputPath("kenney-sedan-parked.png") });
+  await page.screenshot({ path: testInfo.outputPath("reference-car-parked.png") });
   await page.locator("#game-canvas").click();
   await page.keyboard.down("KeyD");
   await expect.poll(async () => Math.abs((await snapshot())!.wheels[0].steer)).toBeGreaterThan(0.1);
@@ -561,7 +562,7 @@ test("Kenney sedan uses its textured body and four animated model wheels", async
   await expect.poll(async () => Math.abs((await snapshot())!.wheels[2].spin)).toBeGreaterThan(1);
   await expect.poll(async () => (await readVehicleCamera(page)).kmh).toBeGreaterThan(5);
   await page.keyboard.up("KeyW");
-  await page.screenshot({ path: testInfo.outputPath("kenney-sedan-driving.png") });
+  await page.screenshot({ path: testInfo.outputPath("reference-car-driving.png") });
   // A separate plain-lit inspection view distinguishes the imported material
   // from the authored VehicleTest atmosphere/lighting. No layout is saved.
   await page.route(`**/${VEHICLE_LEVEL}`, async (route) => {
@@ -598,11 +599,19 @@ test("Kenney sedan uses its textured body and four animated model wheels", async
     };
   });
   await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
-  await page.screenshot({ path: testInfo.outputPath("kenney-sedan-lit-preview.png") });
+  await page.screenshot({ path: testInfo.outputPath("reference-car-lit-preview.png") });
   expect(pageErrors).toEqual([]);
 });
 
 test("vehicle authoring: place a car from Add Actor, save, Play, and drive it", async ({ page, context }) => {
+  // This checks authoring and driving, not graphics quality. Keep software GL
+  // from compiling expensive effects for both the editor and the Play tab.
+  const defaults = defaultUserSettings();
+  await context.addInitScript((value) => localStorage.setItem("forge.userSettings", value), JSON.stringify({
+    schema: 1, updatedAt: new Date().toISOString(), payload: { ...defaults,
+      graphics: { ...defaults.graphics, selectedQualityLevel: "low", manuallySelected: true, adaptiveOptimizationEnabled: false },
+    },
+  }));
   // The editor opens this run's isolated smoke level. Serve it as a flat,
   // car-free copy of VehicleTest in
   // forge.vehicle mode, so the placed car is the only vehicle to possess.
@@ -636,10 +645,18 @@ test("vehicle authoring: place a car from Add Actor, save, Play, and drive it", 
   await runtime.waitForLoadState("domcontentloaded");
   await expect(runtime.locator("#game-canvas")).toBeVisible();
   const runtimeErrors: string[] = [];
+  const runtimeMessages: string[] = [];
   runtime.on("pageerror", (error) => runtimeErrors.push(error.message));
+  runtime.on("console", (message) => runtimeMessages.push(message.text()));
 
   // Same saved level, with the overlay that reads back the car's speed.
+  await page.close(); // The editor's saved state is now owned by the Play tab.
+  await runtime.bringToFront();
+  runtimeMessages.length = 0;
   await runtime.goto(`/?debug&vehicleAuthoring=${Date.now()}`);
+  // The loader is initially absent during module startup. Wait for the saved
+  // scene to load before checking that the loading overlay has gone away.
+  await waitForConsoleText(runtime, runtimeMessages, VEHICLE_LOADED);
   await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
   const stats = runtime.locator("#debug-stats");
   await expect(stats).toContainText(/vehicle-chase pawn:actor:0/, { timeout: 30_000 });

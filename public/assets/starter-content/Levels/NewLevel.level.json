@@ -35,9 +35,6 @@
     "viewDistance": 3000,
     "gameMode": "forge.vehicle"
   },
-  "worldCells": [
-    "2_2"
-  ],
   "skyAtmosphere": {
     "name": "Sky Atmosphere",
     "rayleigh": 1,

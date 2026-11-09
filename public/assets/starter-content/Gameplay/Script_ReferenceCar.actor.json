@@ -38,7 +38,7 @@
       "id": "body",
       "component": "MeshRenderer",
       "props": {
-        "assetId": "kenney-sedan-sports",
+        "assetId": "reference-car-mesh",
         "scale": [
           1.6,
           1.6,

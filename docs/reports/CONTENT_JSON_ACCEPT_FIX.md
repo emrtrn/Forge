@@ -17,10 +17,19 @@ gerçek 404 verir; mevcut optional loader varsayılana döner. Bozuk JSON hâlâ
 davranışı korunur. Endpoint veya save/load şeması değiştirilmedi.
 
 Chromium eksik optional dosyanın 404 yanıtını ayrıca network-console satırı
-olarak raporlar. Native Ocean smoke yalnız gerçekten 404 döndüğü kaydedilen
-optional sidecar URL'lerinin bu satırlarını ayırır. Page errors, shader ve diğer
-console hataları başarısızlık olmaya devam eder; content uyarıları gizlenmez.
+olarak raporlar. Ortak `tests/smoke/browserErrors.ts` yardımcısı yalnız gerçekten
+404 döndüğü kaydedilen optional sidecar URL'lerinin bu satırlarını ayırır.
+Ocean, editor-authoring, checkpoint, playflow ve production release testleri
+aynı sınıflandırmayı kullanır. Page errors, shader ve diğer console hataları
+başarısızlık olmaya devam eder; content uyarıları gizlenmez. Production ağ
+kontrolü de yalnız optional sidecar 404'lerine izin verir; gereken içerikteki
+404 ve diğer HTTP/ağ hataları testi başarısız kılar.
 
 Doğrulama: gerçek Vite sunucusunda yedi `content-loading.spec.ts` testi geçti;
 bozuk collision tanısı dahil mevcut test beklentileri zayıflatılmadı. Son tam
-build ve native Ocean koşuları ana teslim raporuyla birlikte kaydedilir.
+build 2.583 kontrolle ve native Ocean Save/Reload/Play testi 4,2 dakikada geçti.
+İlk düzeltmeden sonraki CI, başka üç smoke testinin de beklenen optional 404
+satırlarını uygulama hatası saydığını gösterdi; ortak yardımcı bu tutarsızlığı
+giderir. Ortak yardımcıyla 16 kritik browser testi yerelde geçti (2,9 dakika).
+Production paketinin kalan [boyut bütçesi engeli](OCEAN_RELEASE_BUDGET_CHECK.md)
+bu düzeltmeden ve Ocean öncesinden ayrılarak ölçüldü.

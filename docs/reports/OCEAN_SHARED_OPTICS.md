@@ -67,6 +67,9 @@ CI'daki mevcut optional JSON/SPA fallback sorunu da ayrı ve küçük bir
 [içerik yükleme düzeltmesiyle](CONTENT_JSON_ACCEPT_FIX.md) ele alındı.
 Eksik optional sidecar'ların doğrulanmış HTTP 404 network-console satırları
 native smoke'ta sınıflandırılır; uygulama/shader hataları filtrelenmez.
+Kritik browser akışı ortak yardımcıyla 16 testte başarılıdır. Production
+[paket boyutu](OCEAN_RELEASE_BUDGET_CHECK.md) kapısı Ocean öncesinde de aşılıyor;
+tam CI/production kabulü bu nedenle hâlâ açıktır.
 
 ## Açık işler
 

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "./test";
+import { observeBrowserErrors } from "./browserErrors";
 
 const SOURCE_SCENE_NAME = "__playwright-smoke";
 
@@ -40,16 +41,14 @@ test("runtime checkpoint smoke: walking into the sensor autosaves + load respawn
   context,
 }) => {
   const consoleMessages: string[] = [];
-  const pageErrors: string[] = [];
+  const pageErrors = observeBrowserErrors(page);
 
   await context.addInitScript(() => {
     localStorage.clear();
   });
-  page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
     const text = message.text();
     consoleMessages.push(text);
-    if (message.type() === "error") pageErrors.push(text);
   });
 
   await page.goto(`/?debug&checkpointSmoke=${Date.now()}`);
@@ -95,5 +94,5 @@ test("runtime checkpoint smoke: walking into the sensor autosaves + load respawn
     .poll(async () => pawnZ(stats), { timeout: 15_000 })
     .toBeGreaterThan(beforeLoadZ + 1.5);
 
-  expect(pageErrors).toEqual([]);
+  expect(pageErrors()).toEqual([]);
 });

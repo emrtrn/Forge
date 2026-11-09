@@ -1,17 +1,18 @@
 import { expect, test } from "@playwright/test";
+import { isOptionalSidecarUrl, observeBrowserErrors } from "../smoke/browserErrors";
 
 for (const debug of [false, true]) {
 test(`packaged runtime${debug ? " with debug" : ""}: model, texture, terrain, save/load and level travel`, async ({ page, baseURL }, testInfo) => {
   const errors: string[] = [], messages: string[] = [], loaded = new Set<string>();
+  const browserErrors = observeBrowserErrors(page, true);
   const outsideBase: string[] = [];
   // A duplicate request the browser cancels mid-flight on a slow machine (CI's
   // software-rendered Chromium) is not a failure, as long as that file loaded.
   const aborted = new Set<string>();
+  const missingOptional = new Set<string>();
   const base = new URL(baseURL!);
-  page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
     messages.push(message.text());
-    if (message.type() === "error" && !message.text().includes("favicon.ico")) errors.push(message.text());
   });
   page.on("request", (request) => {
     const url = new URL(request.url());
@@ -21,6 +22,9 @@ test(`packaged runtime${debug ? " with debug" : ""}: model, texture, terrain, sa
   page.on("response", (response) => {
     const url = new URL(response.url());
     if (url.pathname.endsWith("favicon.ico")) return;
+    if (response.status() === 404 && isOptionalSidecarUrl(response.url())) {
+      missingOptional.add(url.pathname.slice(base.pathname.length)); return;
+    }
     if (response.status() >= 400) errors.push(`${response.status()} ${url.pathname}`);
     else loaded.add(url.pathname.slice(base.pathname.length));
   });
@@ -69,7 +73,7 @@ test(`packaged runtime${debug ? " with debug" : ""}: model, texture, terrain, sa
   // Negative check: this server never serves a missing JSON URL as index.html.
   expect((await page.request.get(new URL("missing.level.json", baseURL).href)).status()).toBe(404);
   expect(outsideBase).toEqual([]);
-  expect([...aborted].filter((file) => !loaded.has(file)), "aborted requests never served").toEqual([]);
-  expect(errors).toEqual([]);
+  expect([...aborted].filter((file) => !loaded.has(file) && !missingOptional.has(file)), "aborted requests never resolved").toEqual([]);
+  expect([...errors, ...browserErrors()]).toEqual([]);
 });
 }

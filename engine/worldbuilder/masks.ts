@@ -14,13 +14,23 @@
  * Built on `field.ts`; pure, deterministic, dependency-free.
  */
 import { splineToPolyline } from "../scene/landscape";
-import { boxMask, bandMask, distanceField, maskOr, polygonMask, type DistanceSource, type Field, type GridSpec } from "./field";
+import { boxMask, bandMask, cellCenter, createField, distanceField, maskOr, polygonMask, type DistanceSource, type Field, type GridSpec } from "./field";
 import type { WorldPoint } from "./normalize";
 import type { StageInput } from "./stage";
 import { roadClassWidth } from "./roadClass";
 import type { RoadClass } from "./vocabulary";
 
-export type MaskInput = Pick<StageInput, "recipe" | "profile" | "terrains">;
+export type MaskInput = Pick<StageInput, "recipe" | "profile" | "terrains" | "ocean">;
+
+/** Coast clearance includes half a cell diagonal, keeping coarse grids conservative. */
+export function oceanMask(spec: GridSpec, input: MaskInput, clearance = 0): Field {
+  const field = createField(spec);
+  if (input.ocean) for (let j = 0; j < spec.depth; j++) for (let i = 0; i < spec.width; i++) {
+    const [x, z] = cellCenter(spec, i, j);
+    field.values[j * spec.width + i] = input.ocean.distance(x, z) <= clearance + spec.cellSize * Math.SQRT1_2 ? 1 : 0;
+  }
+  return field;
+}
 
 export interface SourceSet {
   sources: DistanceSource[];
@@ -179,7 +189,7 @@ export function exclusionMasks(spec: GridSpec, input: MaskInput, options: Exclus
   const roadSet = roadSources(input);
   const waterSet = waterSources(input, options);
   const roads = clearance(spec, roadSet.sources, roadClearance, falloff);
-  const water = clearance(spec, waterSet.sources, waterClearance, falloff);
+  const water = maskOr(clearance(spec, waterSet.sources, waterClearance, falloff), oceanMask(spec, input, waterClearance + falloff));
   const guarded = protectedMask(spec, input);
   return {
     mask: maskOr(roads, water, guarded.field),

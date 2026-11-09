@@ -103,7 +103,7 @@ export function randomWorldPreview(
       const [x, z] = worldAt(i, j);
       let rgb: [number, number, number];
       const lake = terrain.lake(x, z);
-      if (lake && lake.inside > 0) {
+      if ((terrain.ocean && terrain.ocean.distance(x, z) < 0) || (lake && lake.inside > 0)) {
         rgb = [...PREVIEW_WATER_COLOR];
       } else {
         const weights = paint(x, z, slopes[k]!, heights[k]!);

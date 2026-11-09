@@ -158,6 +158,29 @@ aynı çıktı verdi. Bilinçli iki fark vardır:
 Kullanıcının pilot level'daki düzenlemeleri (World Partition, `forge.vehicle`, Doruk K-180,
 `viewDistance`) commit'lenmemiş durdukça pilot level yeniden üretilmez.
 
+## Ada ve Ocean (9 Kasım 2026, ilk dilim)
+
+`terrain.island: { center: [east, north], radius, shoreWidth, landHeight }` ve
+`ocean: { id, surfaceElevation, offshoreDepth }` birlikte tanımlanır. Ölçüler
+metredir; `surfaceElevation` brief datumundadır ve dünya kotuna bir kez çevrilir.
+Kıyı tohumdan türer; rölyef kıyıya ulaşmadan söner. Terrain'in bütün kenarlarında
+deniz bandı kalmalıdır. Ocean aktörünün bounds'u gerçek, tile'a yuvarlanmış
+terrain alanıdır; dört kenar açıktır, dalga seed'i brief seed'idir.
+
+İlk sözleşme yalnız ada içindir: vadi veya nehirle birleştirme reddedilir.
+İç göller desteklenir; rastgele üretici bunları kıyıdan uzak tutar.
+Ocean'ın mevcut native hücre/eksen bütçesi arazi ayrılmadan önce denetlenir.
+Küçük rastgele dünya tam hücre sınırındadır; orta/büyük Ada reddedilir.
+Kara maskesi yerleşim yeri, çekirdek büyümesi, yol, sokak ve parsellerde ortaktır.
+Deniz tabanı ve kıyı örtünün `bed` katmanına boyanır; mevcut kara bitkileri
+bu katmanda yetişmez. Kullanıcıya ait mevcut level'ı koruyan bir ekleme modu
+değildir: Create'in mevcut level'ı yeniden kurma onayı ve davranışı sürer.
+
+Odaklı regresyonlar: `random world island`, `random world preview`,
+`random world request`; browser akışı `world-builder-random.spec.ts` içindeki
+`World Builder island` senaryosudur. Performans ve kullanıcı görsel kabulü
+bu testlerden ayrı değerlendirilir.
+
 ## Sonraki adımlar
 
 3. Geçici adımlar genelleşir. ~~3a makro arazi + su yatakları~~ (`briefTerrain.ts`, 7 Kasım).

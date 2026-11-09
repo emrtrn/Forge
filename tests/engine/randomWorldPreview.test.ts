@@ -44,6 +44,22 @@ function meanColor(world: RandomWorldPreview): [number, number, number] {
 }
 
 export function registerRandomWorldPreviewTests(check: Check): void {
+  check("random world preview: an island has open sea around dry land, with the builder's shoreline", () => {
+    const options = { ...OPTIONS, landform: "island" as const, rivers: 0 };
+    const a = preview(options, 64), b = preview(options, 64);
+    assert.deepEqual(a.pixels, b.pixels);
+    const { brief } = normalizeWorldBrief(randomWorldBrief(options).brief);
+    const terrain = createBriefTerrain(brief!);
+    let wet = 0, dry = 0;
+    for (let j = 0; j < 64; j++) for (let i = 0; i < 64; i++) {
+      const at = (j * 64 + i) * 4;
+      const water = PREVIEW_WATER_COLOR.every((v, channel) => a.pixels[at + channel] === v);
+      const x = -512 + (i + .5) * 16, z = -512 + (j + .5) * 16;
+      assert.equal(water, terrain.ground(x, z) < terrain.ocean!.surfaceLevel, `${x},${z}`);
+      if (water) wet++; else dry++;
+    }
+    assert.ok(wet > 1200 && dry > 1200, `${wet} sea pixels, ${dry} land pixels`);
+  });
   check("random world preview: same choices, same picture", () => {
     const a = preview({});
     const b = preview({});

@@ -102,6 +102,15 @@ export interface BriefTerrain {
   heightRange: [number, number];
   /** Hills and mountains over the valleys (`engine/worldbuilder/briefTerrain.ts`); absent: none. */
   relief?: BriefRelief;
+  /** Star-shaped island; the coast is shared by all generators. */
+  island?: { center: BriefPoint; radius: number; shoreWidth: number; landHeight: number };
+}
+
+export interface BriefOcean {
+  id: string;
+  /** Elevation in the brief's datum, converted once when building. */
+  surfaceElevation: number;
+  offshoreDepth: number;
 }
 
 /** Distance band, metres: no mountain within `inner`, full height `falloff` further out. */
@@ -281,6 +290,7 @@ export interface WorldBrief {
   valleys: BriefValley[];
   regions: BriefRegion[];
   water: BriefWater[];
+  ocean?: BriefOcean;
   roads: { nodes: BriefRoadNode[]; edges: BriefRoadEdge[] };
   landmarks: BriefLandmark[];
   settlements: BriefSettlement[];
@@ -308,7 +318,7 @@ export interface WorldBriefNormalization {
 
 const TOP_LEVEL_FIELDS = new Set([
   "schema", "type", "id", "name", "seed", "frame", "area", "terrain", "regionProfile", "cover", "reference", "playerStart",
-  "valleys", "regions", "water", "roads", "landmarks", "settlements", "props", "environment", "models",
+  "valleys", "regions", "water", "ocean", "roads", "landmarks", "settlements", "props", "environment", "models",
 ]);
 
 /** `<Level>.worldbrief.json` beside a `.level.json` / `.layout.json` level. */
@@ -408,11 +418,24 @@ function normalizeTerrain(ctx: Ctx, value: unknown): BriefTerrain | null {
   const heightRange = eastPair(ctx, "terrain.heightRange", value.heightRange);
   if (heightRange && heightRange[0] === heightRange[1]) issue(ctx, "terrain.heightRange", "must span some height");
   for (const key of Object.keys(value)) {
-    if (!["id", "name", "tileQuads", "spacing", "heightRange", "relief"].includes(key)) issue(ctx, `terrain.${key}`, "is not a terrain field");
+    if (!["id", "name", "tileQuads", "spacing", "heightRange", "relief", "island"].includes(key)) issue(ctx, `terrain.${key}`, "is not a terrain field");
   }
   const relief = value.relief === undefined ? undefined : normalizeRelief(ctx, value.relief);
+  let island: BriefTerrain["island"];
+  if (value.island !== undefined) {
+    if (!isRecord(value.island)) return reject(ctx, "terrain.island", "must be an object");
+    const raw = value.island;
+    for (const key of Object.keys(raw)) if (!["center", "radius", "shoreWidth", "landHeight"].includes(key)) issue(ctx, `terrain.island.${key}`, "is not an island field");
+    const center = requirePoint(ctx, "terrain.island.center", raw.center);
+    const radius = positive(ctx, "terrain.island.radius", raw.radius, 10000);
+    const shoreWidth = positive(ctx, "terrain.island.shoreWidth", raw.shoreWidth, 1000);
+    const landHeight = positive(ctx, "terrain.island.landHeight", raw.landHeight, 1000);
+    if (!center || radius === null || shoreWidth === null || landHeight === null) return null;
+    if (shoreWidth >= radius) issue(ctx, "terrain.island.shoreWidth", "must be smaller than radius");
+    island = { center, radius, shoreWidth, landHeight };
+  }
   if (id === null || name === null || tileQuads === null || spacing === null || heightRange === null || relief === null) return null;
-  return { id, name, tileQuads, spacing, heightRange, ...(relief ? { relief } : {}) };
+  return { id, name, tileQuads, spacing, heightRange, ...(relief ? { relief } : {}), ...(island ? { island } : {}) };
 }
 
 function normalizeRelief(ctx: Ctx, value: unknown): BriefRelief | null {
@@ -544,6 +567,24 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
   const frame = normalizeFrame(ctx, value.frame);
   const area = normalizeArea(ctx, value.area);
   const terrain = normalizeTerrain(ctx, value.terrain);
+  let ocean: BriefOcean | undefined;
+  if (value.ocean !== undefined) {
+    if (!isRecord(value.ocean)) issue(ctx, "ocean", "must be an object");
+    else {
+      for (const key of Object.keys(value.ocean)) if (!["id", "surfaceElevation", "offshoreDepth"].includes(key)) issue(ctx, `ocean.${key}`, "is not an ocean field");
+      const oceanId = requireId(ctx, "ocean", value.ocean.id);
+      const surfaceElevation = requireNumber(ctx, "ocean.surfaceElevation", value.ocean.surfaceElevation, -100000, 100000);
+      const offshoreDepth = requireNumber(ctx, "ocean.offshoreDepth", value.ocean.offshoreDepth, 1, 10000);
+      if (oceanId !== null && surfaceElevation !== null && offshoreDepth !== null) ocean = { id: oceanId, surfaceElevation, offshoreDepth };
+    }
+  }
+  if (Boolean(terrain?.island) !== Boolean(ocean)) issue(ctx, "ocean", "this version requires ocean and terrain.island together");
+  if (terrain?.island && area) {
+    const { center, radius } = terrain.island;
+    const reach = radius * 1.11 + terrain.spacing * 2;
+    if (center[0] - reach <= area.west || center[0] + reach >= area.east || center[1] - reach <= area.south || center[1] + reach >= area.north)
+      issue(ctx, "terrain.island", "must leave an offshore band on every terrain edge");
+  }
   const regionProfile = optional(value.regionProfile, () =>
     normalizeAssetPath(value.regionProfile, ".regionprofile.json") ?? reject(ctx, "regionProfile", "must be a public-root-relative *.regionprofile.json"));
   const cover = optional(value.cover, (): BriefCover | null => {
@@ -594,6 +635,8 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
       ...(surfaceDepth === undefined ? {} : { surfaceDepth }), ...provenance(c, p, entry),
     };
   });
+  if (ocean && water.some(entry => entry.line)) issue(ctx, "water", "island rivers require the river-mouth integration; only inland lakes are supported");
+  if (ocean && valleys.length) issue(ctx, "valleys", "island terrain cannot also define valleys");
 
   const roadsInput = value.roads === undefined ? {} : value.roads;
   if (!isRecord(roadsInput)) issue(ctx, "roads", "must be an object");
@@ -681,7 +724,7 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
     brief: {
       schema: WORLD_BRIEF_SCHEMA_VERSION, type: "worldBrief", id, ...(name ? { name } : {}), seed, frame, area, terrain,
       ...(regionProfile ? { regionProfile } : {}), ...(cover ? { cover } : {}), ...(reference ? { reference } : {}), ...(playerStart ? { playerStart } : {}),
-      valleys, regions, water, roads: { nodes, edges }, landmarks, settlements, props,
+      valleys, regions, water, ...(ocean ? { ocean } : {}), roads: { nodes, edges }, landmarks, settlements, props,
       ...(environment ? { environment } : {}), models,
     },
     issues: [],

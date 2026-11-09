@@ -95,6 +95,10 @@ export const roadsStage: WorldStage = {
         warnings.push(`road ${edge.id} has zero length; skipped`);
         continue;
       }
+      if (input.ocean && route.points.some(([x, z]) => input.ocean!.distance(x, z) <= spec.width / 2 + 20)) {
+        warnings.push(`road ${edge.id} has no safe route clear of the Ocean; skipped`);
+        continue;
+      }
       const heights = routeHeights(route.points, input.sampleHeight);
       if (!heights) {
         warnings.push(`road ${edge.id} has no terrain height along its route; skipped`);

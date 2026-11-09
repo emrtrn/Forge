@@ -298,6 +298,12 @@ kontrolü/oynanışı kendiliğinden engine Ocean kapsamına alınmaz.
 
 ### O9 — World Builder Ada/Kıyı
 
+9 Kasım 2026: ilk Ada dilimi `island` landform'uyla bağlandı. Small sınırı,
+ortak kıyı/zemin/önizleme, Ocean aktörü, kara üretim maskeleri ve tek köyün
+iç erişim yolu mevcut. Pencere desteklenmeyen boyut/çıkış/nehir seçeneklerini
+kapatır. Kıyı landform'u, nehir ağzı, orta/büyük dünya ve tam O9 kabulü açıktır.
+Detaylar: [Random World planı](../world-builder/RANDOM_WORLD_PLAN.md).
+
 - [ ] Random World'a Ada/Kıyı landform'ları, Ocean verisi ve uyumlu önizleme.
 - [ ] Denizden bağlantı, yerleşim/yol güvenliği ve nehir ağzı kapsamı.
 - [ ] Aynı seed ile tekrar üretim; var olan dünya seçeneklerinde regresyon yok.

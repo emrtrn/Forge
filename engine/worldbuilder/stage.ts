@@ -30,6 +30,7 @@ import type { WorldPoint } from "./normalize";
 import type { ProgramExtension } from "./program";
 import { normalizeWorldRecipe, type OwnershipEntry, type SplineOwnershipEntry, type WorldRecipe } from "./recipe";
 import type { RegionProfile } from "./regionProfile";
+import type { OceanContext } from "./island";
 
 /** A World Terrain of the level, as stages see it. */
 export interface StageTerrain {
@@ -46,6 +47,8 @@ export interface StageTerrain {
 }
 
 export interface StageInput {
+  /** Shared coastline of a generated island, with its actual sea level. */
+  readonly ocean?: OceanContext;
   readonly recipe: WorldRecipe;
   readonly layout: RoomLayout;
   /** The recipe's region profile, when it has one and it loaded. */

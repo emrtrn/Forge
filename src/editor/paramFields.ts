@@ -106,9 +106,10 @@ export function installParamFields(root: HTMLElement, warn: (message: string) =>
       if (node instanceof Element) enhanceWithin(node);
     }
     // Panels toggle `disabled` without re-rendering (lock, quality tiers).
-    for (const record of records) if (record.type === "attributes" && record.target instanceof HTMLInputElement) {
+    for (const record of records) if (record.type === "attributes" && record.target instanceof HTMLInputElement && record.target.type === "number") {
       const slider = sliderOf(record.target);
-      if (slider) slider.disabled = record.target.disabled;
+      // Watching the range's own disabled write would enqueue this observer forever.
+      if (slider && slider.disabled !== record.target.disabled) slider.disabled = record.target.disabled;
     }
   });
   observer.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ["disabled"] });

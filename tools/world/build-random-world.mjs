@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // npm run world:random -- --out <*.level.json under public/> [--size small|medium|large]
-//   [--landform plain|hills|mountains|valley] [--mountains low|medium|high]
+//   [--landform plain|hills|mountains|valley|island] [--mountains low|medium|high]
 //   [--settlements village,hamlet,...] [--roads between|exits] [--rivers 0-3] [--lakes 0-3]
 //   [--cover forest|meadow|farmland|steppe|desert|alpine] [--forest|--rocks|--fields low|medium|high] [--seed N] [--force]
 // Builds a whole greybox world from a few choices (docs/world-builder/RANDOM_WORLD_PLAN.md).
@@ -15,11 +15,11 @@ import { fileURLToPath } from "node:url";
 // the window's request JSON from stdin (validated by tools/world/randomWorldRequest.ts)
 // and prints one `@@<json>` event line per build step, then a `done` or `error` event.
 const usage = "Usage: npm run world:random -- --out <*.level.json under public/> [--size small|medium|large] "
-  + "[--landform plain|hills|mountains|valley] [--mountains low|medium|high] [--settlements village,hamlet] [--roads between|exits] [--rivers 0-3] [--lakes 0-3] "
+  + "[--landform plain|hills|mountains|valley|island] [--mountains low|medium|high] [--settlements village,hamlet] [--roads between|exits] [--rivers 0-3] [--lakes 0-3] "
   + "[--cover forest|meadow|farmland|steppe|desert|alpine] [--forest|--rocks|--fields low|medium|high] [--seed N] [--force]";
 const CHOICES = {
   size: ["small", "medium", "large"],
-  landform: ["plain", "hills", "mountains", "valley"],
+  landform: ["plain", "hills", "mountains", "valley", "island"],
   mountains: ["low", "medium", "high"],
   roads: ["between", "exits"],
   cover: ["forest", "meadow", "farmland", "steppe", "desert", "alpine"],

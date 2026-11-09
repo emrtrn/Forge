@@ -75,6 +75,7 @@ export const parcelsStage: WorldStage = {
         own = recipe.generated.parcels.filter((parcel) => parcel.settlement === settlement.id);
       } else {
         const reach = site.coreRadius + spec.depth[1] + 20;
+        const blocked = blocker(nearby(streets.lines, site.center, reach), water, protectedAreas(recipe, settlement));
         const result = subdivideStreets({
           settlement: settlement.id,
           center: site.center,
@@ -86,7 +87,8 @@ export const parcelsStage: WorldStage = {
           maxSlopeDeg,
           seed: settlement.seed ?? hashSeed(recipe.seed, settlement.id),
           sampleHeight: input.sampleHeight,
-          blockedAt: blocker(nearby(streets.lines, site.center, reach), water, protectedAreas(recipe, settlement)),
+          blockedAt: (point) => input.ocean && input.ocean.distance(...point) <= WATER_CLEARANCE ? "water"
+            : blocked(point),
         });
         own = result.parcels.map((parcel): GeneratedParcel => ({
           id: parcel.id,

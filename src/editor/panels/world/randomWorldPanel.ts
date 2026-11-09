@@ -142,6 +142,7 @@ function readStored(): StoredState {
   for (const key of ["forest", "rocks", "fields"] as const) {
     choices.densities[key] = pick(given.densities?.[key], COVER_DENSITY_LEVELS, choices.densities[key]);
   }
+  if (choices.landform === "island") { choices.size = "small"; choices.roads = "between"; choices.rivers = 0; }
   return { choices };
 }
 
@@ -151,7 +152,7 @@ function escapeHtml(value: string): string {
 
 const LABELS = {
   size: { small: "Small", medium: "Medium", large: "Large" },
-  landform: { plain: "Plain", hills: "Hills", mountains: "Mountains", valley: "Valley" },
+  landform: { plain: "Plain", hills: "Hills", mountains: "Mountains", valley: "Valley", island: "Island" },
   mountainHeight: { low: "Low", medium: "Medium", high: "High" },
   roads: { between: "Between", exits: "Exits" },
   density: { low: "Low", medium: "Medium", high: "High" },
@@ -161,7 +162,7 @@ const LABELS = {
 
 const TIPS = {
   size: "Dünyanın kenar uzunluğu: Small 1 km, Medium 2 km, Large 4 km (Large'da World Partition açılır).",
-  landform: "Arazinin genel şekli. Plain: düze yakın; Hills: tepeler; Mountains: sırtlı dağlar; Valley: haritayı kuzeyden güneye geçen vadi.",
+  landform: "Arazinin genel şekli. Plain: düze yakın; Hills: tepeler; Mountains: sırtlı dağlar; Valley: haritayı kuzeyden güneye geçen vadi; Island: Ocean ile çevrili küçük ada.",
   mountainHeight: "Dağların ve tepelerin yüksekliği; küçük dünyada kendiliğinden alçalır.",
   settlements: "Yerleşimler ve türleri. Hamlet: mezra (~40 kişi), Village: köy (~180), Town: kasaba (~600). Yer kalmazsa yerleşim çıkarılır.",
   roads: "Between: yollar yalnız yerleşimleri bağlar. Exits: ayrıca iki yol harita kenarına çıkar.",
@@ -258,6 +259,7 @@ export class RandomWorldPanel {
         <div class="random-world-options">
           ${row("Size", TIPS.size, segmented("size", Object.keys(WORLD_SIZES) as RandomWorldChoices["size"][], LABELS.size))}
           ${row("Landform", TIPS.landform, segmented("landform", LANDFORMS, LABELS.landform))}
+          <div class="random-world-hint" data-island-info hidden>Ada: Small (1 km), Ocean ve kıyı otomatik oluşturulur. Yollar ada içinde kalır. Nehir ağzı desteği sonraki aşamada; göl için yeterli iç alan aranır.</div>
           ${row("Mountains", TIPS.mountainHeight, segmented("mountainHeight", MOUNTAIN_HEIGHTS, LABELS.mountainHeight))}
           ${row("Settlements", TIPS.settlements, `<div class="random-world-settlements">
               <div class="random-world-chips" data-settlement-list></div>
@@ -367,6 +369,11 @@ export class RandomWorldPanel {
 
   /** A choice changed: store it, redraw the controls (unless an input is being typed in) and the preview. */
   private changed(redraw = true): void {
+    if (this.state.choices.landform === "island") {
+      this.state.choices.size = "small";
+      this.state.choices.roads = "between";
+      this.state.choices.rivers = 0;
+    }
     this.store();
     if (redraw) this.syncControls();
     else this.syncSettlementButtons();
@@ -392,10 +399,12 @@ export class RandomWorldPanel {
         const active = button.dataset.value === current;
         button.classList.toggle("is-active", active);
         button.setAttribute("aria-pressed", String(active));
+        button.disabled = choices.landform === "island" && ((name === "size" && button.dataset.value !== "small") || (name === "roads" && button.dataset.value === "exits"));
       }
     }
     for (const name of ["rivers", "lakes"] as const) {
       const input = this.element<HTMLInputElement>(`[data-count="${name}"]`);
+      input.disabled = name === "rivers" && choices.landform === "island";
       if (input.value !== String(choices[name])) {
         input.value = String(choices[name]);
         // The slider beside it (paramFields) follows its number box on change.
@@ -407,6 +416,7 @@ export class RandomWorldPanel {
     this.element<HTMLElement>("[data-settlement-list]").innerHTML = choices.settlements
       .map((type, index) => `<span class="random-world-chip" data-testid="random-world-settlement">${LABELS.settlement[type]}<button type="button" data-remove-settlement="${index}" aria-label="Remove ${LABELS.settlement[type]}" title="Yerleşimi çıkar">×</button></span>`)
       .join("");
+    this.element<HTMLElement>("[data-island-info]").hidden = choices.landform !== "island";
     this.syncSettlementButtons();
     this.syncPath();
   }

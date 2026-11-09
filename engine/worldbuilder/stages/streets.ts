@@ -110,6 +110,7 @@ export const streetsStage: WorldStage = {
         seed: (seedOf(recipe, settlement) ^ SEED_SALT) >>> 0,
         sampleHeight: input.sampleHeight,
         blockedAt: (point) => water.some((source) => sourceDistance(point, source) <= WATER_CLEARANCE + spec.width / 2)
+          || (input.ocean !== undefined && input.ocean.distance(...point) <= WATER_CLEARANCE + spec.width / 2)
           || guarded.some((test) => test(point)),
       });
 

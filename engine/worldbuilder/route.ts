@@ -33,7 +33,7 @@
  */
 import { bandMask, distanceField, gridSpecForBounds, heightField, maskOr, type DistanceSource, type Field, type GridSpec } from "./field";
 import { BRIDGE_BANK_REACH } from "./bridges";
-import { protectedMask, waterSources, type MaskInput } from "./masks";
+import { oceanMask, protectedMask, waterSources, type MaskInput } from "./masks";
 import type { WorldPoint } from "./normalize";
 
 /** Longest leg between two route points, metres. */
@@ -192,10 +192,10 @@ function obstacleGrid(context: RouteContext, control: readonly WorldPoint[], cel
   const lakes = context.recipe.plan.water.flatMap((water): DistanceSource[] => (water.polygon ? [{ kind: "polygon", polygon: water.polygon }] : []));
   return {
     spec,
-    water: bandMask(distanceField(spec, waterSources(context, { riverMargin: BRIDGE_BANK_REACH }).sources, halfWidth + spec.cellSize), { max: halfWidth }),
-    blocked: lakes.length
+    water: maskOr(bandMask(distanceField(spec, waterSources(context, { riverMargin: BRIDGE_BANK_REACH }).sources, halfWidth + spec.cellSize), { max: halfWidth }), oceanMask(spec, context, halfWidth)),
+    blocked: maskOr(oceanMask(spec, context, LAKE_ROAD_CLEARANCE + halfWidth), lakes.length
       ? maskOr(protectedMask(spec, context).field, bandMask(distanceField(spec, lakes, LAKE_ROAD_CLEARANCE + spec.cellSize), { max: LAKE_ROAD_CLEARANCE }))
-      : protectedMask(spec, context).field,
+      : protectedMask(spec, context).field),
   };
 }
 

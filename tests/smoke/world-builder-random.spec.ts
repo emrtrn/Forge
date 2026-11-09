@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { REPO_ROOT, smokePublicPath } from "./smokeProject.mjs";
 import { expect, test, type APIRequestContext, type Page } from "./test";
 import { expectNoSidewaysOverflow, openWorldBuilder } from "./worldBuilder";
+import { observeBrowserErrors } from "./browserErrors";
 
 /**
  * World Builder window (RANDOM_WORLD_PLAN step 5): Add Actor → Terrain →
@@ -173,4 +174,67 @@ test("World Builder window: random world choices, live preview, Create builds in
   } finally {
     await rm(smokePublicPath(FOLDER), { recursive: true, force: true });
   }
+});
+
+test("World Builder island: bounded choices, sea preview, Create, Save/Reload and real Play", async ({ page, context, request }, info) => {
+  test.setTimeout(600_000);
+  const path = `${FOLDER}/GeneratedIsland.level.json`;
+  const errors: Array<() => string[]> = [observeBrowserErrors(page)];
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await openNewLevel(page, request, path);
+  await openWorldBuilder(page);
+  const panel = page.getByTestId("random-world-panel");
+  let id = await nextPreview(page, 0);
+  await panel.locator('[data-choice="landform"] button[data-value="island"]').click();
+  await expect(panel.locator('[data-choice="size"] button[data-value="small"]')).toHaveAttribute("aria-pressed", "true");
+  await expect(panel.locator('[data-choice="size"] button[data-value="medium"]')).toBeDisabled();
+  await expect(panel.locator('[data-choice="size"] button[data-value="large"]')).toBeDisabled();
+  await expect(panel.locator('[data-choice="roads"] button[data-value="exits"]')).toBeDisabled();
+  await expect(panel.locator('[data-count="rivers"]')).toBeDisabled();
+  await expect(panel.locator('[data-count="rivers"]')).toHaveValue("0");
+  await expect(panel.locator('[data-island-info]')).toBeVisible();
+  id = await nextPreview(page, id);
+  const island = await canvasPrint(page);
+  await panel.locator('[data-choice="landform"] button[data-value="hills"]').click();
+  await expect(panel.locator('[data-choice="size"] button[data-value="medium"]')).toBeEnabled();
+  await expect(panel.locator('[data-count="rivers"]')).toBeEnabled();
+  id = await nextPreview(page, id);
+  expect((await canvasPrint(page)).hash).not.toBe(island.hash);
+  await panel.locator('[data-choice="landform"] button[data-value="island"]').click();
+  // A lone village must have internal streets; it must not depend on an off-map exit.
+  const chips = page.getByTestId("random-world-settlement");
+  while (await chips.count() > 1) await chips.last().getByRole("button").click();
+  await panel.locator('[data-seed]').fill("11"); await panel.locator('[data-seed]').press("Tab");
+  id = await nextPreview(page, id);
+  await expectNoSidewaysOverflow(page);
+  await page.screenshot({ path: info.outputPath("island-preview.png") });
+  await page.setViewportSize({ width: 900, height: 900 });
+  await expectNoSidewaysOverflow(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await createWorld(page, path);
+  let saved = JSON.parse(await readFile(smokePublicPath(path), "utf8"));
+  expect(saved.oceanWaters).toHaveLength(1);
+  expect(saved.oceanWaters[0]).toMatchObject({ kind: "ocean", terrainRef: saved.landscapes[0].id, surfaceLevel: 0, offshoreDepth: 40 });
+  const sea = saved.oceanWaters[0];
+  await page.locator('[data-object-id="ocean:0"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  await page.getByTestId("editor-save").click();
+  await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
+  saved = JSON.parse(await readFile(smokePublicPath(path), "utf8"));
+  expect(saved.oceanWaters).toEqual([sea]);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator('[data-object-id="ocean:0"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
+  await page.screenshot({ path: info.outputPath("island-editor.png") });
+  const [runtime] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
+  errors.push(observeBrowserErrors(runtime));
+  const messages: string[] = []; runtime.on("console", message => messages.push(message.text()));
+  await runtime.waitForLoadState("domcontentloaded");
+  await expect(runtime.locator("#game-canvas")).toBeVisible({ timeout: 60_000 });
+  await expect.poll(() => messages.some(message => message.includes(saved.name)), { timeout: 90_000 }).toBe(true);
+  await expect(runtime.locator(".forge-loading")).toBeHidden({ timeout: 60_000 });
+  await runtime.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await runtime.screenshot({ path: info.outputPath("island-runtime.png") });
+  await runtime.close();
+  expect(errors.flatMap(read => read())).toEqual([]);
 });

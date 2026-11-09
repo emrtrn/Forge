@@ -234,6 +234,7 @@ export function randomWater(raw: Raw, options: RandomWaterOptions, notes: string
   };
   const lakeFits = (centre: WorldPoint, radius: number): boolean =>
     settlementGap(centre, "lake") >= radius
+    && (!terrain.ocean || terrain.ocean.distance(...centre) > radius * 1.3 + LAKE_TRANSITION + 40)
     && Math.min(centre[0] - bounds.min[0], bounds.max[0] - centre[0], centre[1] - bounds.min[1], bounds.max[1] - centre[1]) >= radius + 0.08 * extent
     && lakes.every((lake) => Math.hypot(lake.centre[0] - centre[0], lake.centre[1] - centre[1]) >= lake.radius + radius + 80)
     && brief.roads.nodes.every((node) => {

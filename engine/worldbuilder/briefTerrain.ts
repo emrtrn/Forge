@@ -40,6 +40,7 @@ import type { DistanceSource } from "./field";
 import { createMacroRelief, type ReliefProtection } from "./macroRelief";
 import { fbm, ridged } from "./noise";
 import { lakeBedDistance, lakeBedTarget } from "../scene/lakeBed";
+import { islandHeight, islandOcean, type OceanContext } from "./island";
 import {
   briefElevationToWorld,
   briefToWorld,
@@ -147,6 +148,7 @@ export interface LakeHit {
 }
 
 export interface BriefTerrain {
+  ocean?: OceanContext;
   /** Valley ground, before the water beds. */
   ground(x: number, z: number): number;
   /** Final height: ground with every water bed carved in. */
@@ -297,7 +299,8 @@ function reliefOffset(brief: WorldBrief, shapes: readonly ValleyShape[]): ((x: n
   const mountains = relief.mountains;
   // The bounds reach past the terrain so the mountains stand at full height on its edges.
   const macro = createMacroRelief({
-    seed: brief.seed,
+    // Brief seeds are uint32; macro relief's noise contract uses the same bits as int32.
+    seed: brief.seed | 0,
     amplitude: mountains?.height ?? 0,
     lift: mountains?.lift ?? 0,
     wavelength: mountains?.wavelength ?? 500,
@@ -332,7 +335,10 @@ export function createBriefTerrain(brief: WorldBrief): BriefTerrain {
     for (const shape of shapes) lowest = Math.min(lowest, valleyShapeGround(shape, seed, x, z));
     return lowest;
   };
-  const ground = relief ? (x: number, z: number): number => valleyGround(x, z) + relief(x, z) : valleyGround;
+  const ocean = islandOcean(brief);
+  const ground = ocean
+    ? (x: number, z: number): number => islandHeight(brief, ocean, x, z, relief?.(x, z) ?? 0)
+    : relief ? (x: number, z: number): number => valleyGround(x, z) + relief(x, z) : valleyGround;
   const valleyAt = (x: number, z: number): ValleyPosition | null => {
     let best: (ValleyPosition & { plain: number }) | null = null;
     for (const shape of shapes) {
@@ -435,7 +441,7 @@ export function createBriefTerrain(brief: WorldBrief): BriefTerrain {
   const water = (x: number, z: number): WaterHit | null =>
     nearby(x, z).reduce<WaterHit | null>((closest, hit) => (!closest || hit.distance < closest.distance ? hit : closest), null);
 
-  return { ground, height, valleyAt, water, courses, lakes, lake, deferred };
+  return { ground, height, valleyAt, water, courses, lakes, lake, deferred, ...(ocean ? { ocean } : {}) };
 }
 
 /** A lake's level from the lowest ground (river beds carved) on the ring around its shore. */

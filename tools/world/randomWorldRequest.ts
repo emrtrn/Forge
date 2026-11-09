@@ -77,6 +77,8 @@ export function validateRandomWorldRequest(body: unknown): RandomWorldRequest {
   if (input.force !== undefined && typeof input.force !== "boolean") throw new Error("force must be true or false");
   const world = record(input.world, "world");
   onlyKeys(world, WORLD_KEYS, "world");
+  if (world.landform === "island" && world.size !== "small") throw new Error("Island currently supports Small worlds only (Ocean terrain budget)");
+  if (world.landform === "island" && (world.rivers ?? 0) !== 0) throw new Error("Island rivers require the river-mouth integration; choose 0 rivers");
   const seed = world.seed;
   if (typeof seed !== "number" || !Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new Error("world.seed must be a whole number 0–4294967295");
   if (!Array.isArray(world.settlements) || world.settlements.length > MAX_RANDOM_SETTLEMENTS) {

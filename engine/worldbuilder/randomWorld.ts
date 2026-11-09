@@ -15,6 +15,7 @@
  * builder's: this module only lays out where things go.
  */
 import { DEFAULT_RELIEF_CLEAR, type BriefModel, type BriefRelief, type CoverDensityLevel } from "./worldBrief";
+import { islandOcean } from "./island";
 import type { RoadClass } from "./vocabulary";
 import { randomWater } from "./randomWater";
 
@@ -24,7 +25,7 @@ export type WorldSize = keyof typeof WORLD_SIZES;
 export const WORLD_TILES = 8;
 export const WORLD_SPACING = 2;
 
-export const LANDFORMS = ["plain", "hills", "mountains", "valley"] as const;
+export const LANDFORMS = ["plain", "hills", "mountains", "valley", "island"] as const;
 export type Landform = (typeof LANDFORMS)[number];
 
 export const MOUNTAIN_HEIGHTS = ["low", "medium", "high"] as const;
@@ -125,10 +126,16 @@ export function worldExtent(size: WorldSize): number {
 }
 
 export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
+  if (options.landform === "island" && options.size !== "small") throw new Error("Island currently supports Small worlds only (Ocean terrain budget)");
+  if (options.landform === "island" && (options.rivers ?? 0) > 0) throw new Error("Island rivers require the river-mouth integration; choose 0 rivers");
   const notes: string[] = [];
   const next = random(options.seed);
   const extent = worldExtent(options.size);
   const half = extent / 2;
+  const island = options.landform === "island" ? { center: [0, 0] as Point, radius: round(extent * .37), shoreWidth: 60, landHeight: 12 } : undefined;
+  const ocean = island ? { id: "ocean", surfaceElevation: 0, offshoreDepth: 40 } : undefined;
+  const coast = island && ocean ? islandOcean({ terrain: { island }, ocean, frame: { east: 0, north: 0, elevation: 0 }, seed: options.seed }) : undefined;
+  if (island && options.roads === "exits") notes.push("island: roads stay on the island; no off-map exits");
   // Smaller worlds get lower, tighter mountains so their slopes stay walkable.
   const scale = extent / 4096;
   const heightScale = 0.45 + 0.55 * scale;
@@ -174,6 +181,7 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
         ? (floorW + floorE) / 2 + (settlementSide === 0 ? across * 0.25 : settlementSide * (0.3 + 0.12 * Math.abs(across))) * (floorE - floorW)
         : -half + margin + next() * (extent - 2 * margin);
       const candidate: Point = [round(east), round(north)];
+      if (coast && coast.distance(candidate[0], -candidate[1]) < Math.max(90, radius * .6 + 30)) continue;
       if (placed.every((other) => distance(other.at, candidate) >= (other.radius + radius) * 0.9 + 60)) at = candidate;
     }
     if (!at) {
@@ -186,6 +194,15 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
   // Roads: the shortest network joining every settlement (Prim), then the exits.
   const nodes: Array<{ id: string; at: Point; kind: "end" | "junction" }> = placed.map((entry) => ({ id: entry.id, at: entry.at, kind: "junction" }));
   const edges: Array<{ id: string; from: string; to: string; roadClass: RoadClass }> = [];
+  if (island && placed.length === 1) {
+    // A lone island village still needs a street to grow from, without an off-map exit.
+    const settlement = placed[0]!;
+    const length = Math.hypot(...settlement.at);
+    const heading: Point = length > 1 ? [-settlement.at[0] / length, -settlement.at[1] / length] : [1, 0];
+    const at: Point = [round(settlement.at[0] + heading[0] * 120), round(settlement.at[1] + heading[1] * 120)];
+    nodes.push({ id: "island-access", at, kind: "end" });
+    edges.push({ id: `${settlement.id}-island-access`, from: settlement.id, to: "island-access", roadClass: "local" });
+  }
   const classBetween = (a: SettlementType, b: SettlementType): RoadClass => (a === "town" || b === "town" ? "collector" : a === "hamlet" || b === "hamlet" ? "track" : "local");
   if (placed.length > 1) {
     const joined = new Set([0]);
@@ -203,8 +220,8 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
       edges.push({ id: `${placed[i]!.id}-${placed[j]!.id}`, from: placed[i]!.id, to: placed[j]!.id, roadClass: classBetween(placed[i]!.type, placed[j]!.type) });
     }
   }
-  const wantsExits = options.roads === "exits" || (placed.length === 1);
-  if (placed.length === 1 && options.roads === "between") notes.push("one settlement: a road leads it off the map so its streets have a way in");
+  const wantsExits = !island && (options.roads === "exits" || (placed.length === 1));
+  if (!island && placed.length === 1 && options.roads === "between") notes.push("one settlement: a road leads it off the map so its streets have a way in");
   if (wantsExits && placed.length > 0) {
     const inset = 6;
     // A valley leaves the map in the middle of its floor.
@@ -251,6 +268,10 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
   };
   if (options.landform === "plain") relief.hills = { height: 3, wavelength: 260 };
   if (options.landform === "hills") relief.hills = { height: hillHeight, wavelength: 320 };
+  if (island) {
+    relief.hills = { height: hillHeight * .5, wavelength: 260 };
+    relief.mountains = { ...mountains, height: round(mountains.height * .55), lift: round(mountains.lift * .55) };
+  }
   if (options.landform === "mountains") {
     relief.hills = { height: 8, wavelength: 300 };
     relief.mountains = mountains;
@@ -279,6 +300,7 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
       spacing: WORLD_SPACING,
       heightRange: [-60, Math.ceil(peak + 60)],
       relief,
+      ...(island ? { island } : {}),
     },
     regionProfile: options.regionProfile ?? DEFAULT_REGION_PROFILE,
     ...(options.cover ? {
@@ -296,6 +318,7 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
     }] : [],
     regions: [],
     water: [],
+    ...(ocean ? { ocean } : {}),
     roads: { nodes, edges },
     landmarks: [],
     settlements: placed.map((entry) => ({ id: entry.id, type: entry.type, center: entry.at, radius: entry.radius, population: entry.population })),

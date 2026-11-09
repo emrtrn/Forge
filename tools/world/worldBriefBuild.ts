@@ -86,6 +86,7 @@ import {
 } from "../../engine/worldbuilder/groundCover";
 import { lakeBedDistance } from "../../engine/scene/lakeBed";
 import { createLakeAppearance, LAKE_LIMITS } from "../../engine/scene/waterBody";
+import { OCEAN_LIMITS, validateOceanWater } from "../../engine/scene/oceanWater";
 import {
   paintWeights,
   plantRules,
@@ -341,6 +342,8 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
   const tileSpan = terrain.tileQuads * terrain.spacing;
   const tilesX = Math.ceil((bounds.max[0] - bounds.min[0]) / tileSpan - 1e-9);
   const tilesZ = Math.ceil((bounds.max[1] - bounds.min[1]) / tileSpan - 1e-9);
+  if (brief.ocean && (tilesX * tilesZ * terrain.tileQuads ** 2 > OCEAN_LIMITS.cells
+    || Math.max(tilesX, tilesZ) * terrain.tileQuads > OCEAN_LIMITS.axisCells)) throw new Error("Ocean terrain exceeds the preparation grid limit");
   const created = createFlatWorldTerrain({
     name: terrain.name, tilesX, tilesZ, tileQuads: terrain.tileQuads, spacing: terrain.spacing, baseHeight: 0,
     heightMin: briefElevationToWorld(brief, terrain.heightRange[0]), heightMax: briefElevationToWorld(brief, terrain.heightRange[1]),
@@ -427,7 +430,7 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
         splines: def.splines ?? [],
         locked: false,
       };
-      const plan = planStage(stage, { recipe, layout: layoutForStages, profile, sampleHeight, terrains: [stageTerrain] });
+      const plan = planStage(stage, { recipe, layout: layoutForStages, profile, sampleHeight, terrains: [stageTerrain], ...(ground.ocean ? { ocean: ground.ocean } : {}) });
       if (plan.errors.length > 0) throw new Error(`stage ${stage.id}: ${plan.errors.join("; ")}`);
       // The runner bakes the pads itself, before the stages that follow the ground.
       warnings.push(...plan.warnings.filter((warning) => !warning.includes("run this stage after Apply Pads")).map((warning) => `${stage.id}: ${warning}`));
@@ -548,6 +551,12 @@ export function buildWorldFromBrief(input: WorldBriefBuildInput): WorldBriefBuil
       surfaceLevel: Number(course.surface[0]!.toFixed(3)), reflectionQuality: "medium",
     })),
     ...(waterBodies.length ? { waterBodies } : {}),
+    ...(brief.ocean ? { oceanWaters: [validateOceanWater({
+      schema: 1, kind: "ocean", coordinateSpace: "world", id: brief.ocean.id, name: "Ocean", terrainRef: terrain.id,
+      bounds: { min: [def.origin[0], def.origin[2]], max: [def.origin[0] + tilesX * tileSpan, def.origin[2] + tilesZ * tileSpan] },
+      openEdges: ["west", "east", "north", "south"], surfaceLevel: briefElevationToWorld(brief, brief.ocean.surfaceElevation),
+      offshoreDepth: brief.ocean.offshoreDepth, waves: { seed: brief.seed },
+    })] } : {}),
   } as unknown as RoomLayout;
 
   // Save-canonical files.

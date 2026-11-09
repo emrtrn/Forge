@@ -74,7 +74,8 @@ function wetGround(terrain: BriefTerrain, x: number, z: number): number {
   const lake = terrain.lake(x, z);
   const [reach, fade] = PILOT_TUNING.lakeShore;
   const shore = lake ? 1 - smoothstep((-lake.inside - reach) / fade) : 0;
-  return Math.max(river, shore);
+  const coast = terrain.ocean ? 1 - smoothstep((terrain.ocean.distance(x, z) - 18) / 14) : 0;
+  return Math.max(river, shore, coast);
 }
 
 /** Landmarks with level ground, world XZ. */
@@ -216,7 +217,8 @@ export function scatterRocks(
   const inside = ([x, z]: WorldPoint, margin: number): boolean =>
     x >= bounds.min[0] + margin && x <= bounds.max[0] - margin && z >= bounds.min[1] + margin && z <= bounds.max[1] - margin;
   const offRoad = (at: WorldPoint): boolean =>
-    clearings.every(([cx, cz]) => Math.hypot(at[0] - cx, at[1] - cz) >= tuning.clearingRadius + 6)
+    (!terrain.ocean || terrain.ocean.distance(...at) > 10)
+    && clearings.every(([cx, cz]) => Math.hypot(at[0] - cx, at[1] - cz) >= tuning.clearingRadius + 6)
     && !tuning.rockFreeBoxes.some(({ min, max }) => at[0] > min[0] && at[0] < max[0] && at[1] > min[1] && at[1] < max[1]);
   for (let index = 0, tries = 0; index < counts.high && tries < 5000; tries += 1) {
     const at: WorldPoint = [span(0, 5), span(1, 5)];
@@ -267,7 +269,7 @@ export function scatterOutcrops(
     if (slope < minSlopeDeg) continue;
     if (settlements.some(([x, z, reach]) => Math.hypot(at[0] - x, at[1] - z) < reach)) continue;
     const water = terrain.water(at[0], at[1]);
-    if ((water && water.distance < water.course.width / 2 + 12) || terrain.lake(at[0], at[1])) continue;
+    if ((water && water.distance < water.course.width / 2 + 12) || terrain.lake(at[0], at[1]) || (terrain.ocean && terrain.ocean.distance(...at) < 32)) continue;
     const variant = slope >= minSlopeDeg + 10 ? "high" : "slope";
     const pick = random();
     const [low, high] = PILOT_TUNING.rockScale[variant];

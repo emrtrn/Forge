@@ -108,7 +108,17 @@ Level ve üretilmiş dünya verilerinin silinmesi:
   Test: `randomWorldPreview.test.ts`, `randomWorldRequest.test.ts`, `terrainSplitBake.test.ts`,
   smoke `world-builder-random.spec.ts`.
 - [ ] 6. Rol → model
-- [ ] 7. Ada ve kıyı
+- [ ] 7. Ada ve kıyı — ilk Ada dilimi: `island`, yalnız Small (1.024 m,
+  512×512 native hücre). Ocean, kıyı/taban, güvenli yerleşim/yol maskeleri ve
+  aynı kıyıyı gösteren önizleme ortak kurucuya bağlıdır. Tek köyün iç erişim
+  yolu vardır; Ada'da harita dışına yol çıkmaz. İç göller için kıyıdan uzak
+  alan aranır, sığmayan yerleşim/göller notlarda bildirilir.
+  Pencere Island seçilince Small / Between / 0 Rivers seçer ve uyumsuz
+  kontrolleri kapatır; karasal araziye dönünce tekrar açılır. CLI:
+  `npm.cmd run world:random -- --out assets/Worlds/MyIsland.level.json --size small --landform island --rivers 0 --roads between --seed 11`.
+  Ocean kayıtları `oceanWaters` üzerinden mevcut editör/runtime yolunu kullanır.
+  Nehir ağzı entegrasyonu gelene kadar Ada'da nehir isteği reddedilir.
+  Kıyı landform'u ve orta/büyük Ocean hazırlığı bu dilime dahil değildir.
 
 ## Takip işi: yerleşim yollarında araç geçişi
 

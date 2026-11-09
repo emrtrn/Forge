@@ -27,7 +27,7 @@
  * result says so and why — a generator stops there instead of placing a
  * village somewhere bad. Pure and deterministic. Dependency-free.
  */
-import { cellCenter, distanceField, gridSpecForBounds, heightField, slopeField, type Field, type GridSpec } from "./field";
+import { cellCenter, createField, distanceField, gridSpecForBounds, heightField, slopeField, type Field, type GridSpec } from "./field";
 import { protectedMask, roadSources, waterSources } from "./masks";
 import type { WorldPoint } from "./normalize";
 import type { DerivedProgram } from "./program";
@@ -301,6 +301,14 @@ export interface WaterLevel {
 /** Each plan water's distance field, local level and flood reach. */
 export function waterLevels(spec: GridSpec, context: RouteContext): WaterLevel[] {
   const result: WaterLevel[] = [];
+  if (context.ocean) {
+    const distance = createField(spec);
+    for (let j = 0; j < spec.depth; j++) for (let i = 0; i < spec.width; i++) {
+      const [x, z] = cellCenter(spec, i, j);
+      distance.values[j * spec.width + i] = context.ocean.distance(x, z) - spec.cellSize * Math.SQRT1_2;
+    }
+    result.push({ distance, level: new Float32Array(spec.width * spec.depth).fill(context.ocean.surfaceLevel), reach: FLOOD_REACH, margin: DEFAULT_FLOOD_MARGIN });
+  }
   const sources = waterSources(context).sources;
   context.recipe.plan.water.forEach((water, index) => {
     const source = sources[index];

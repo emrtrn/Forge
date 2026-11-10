@@ -1,3 +1,5 @@
+> **Bu belge Forge-WebGPU deposuna taşındı:** `C:\Users\emret\Desktop\Forge-WebGPU\docs\planned\FORGE_WEBGPU_ARCHITECTURE.md` (GitHub `emrtrn/Forge-WebGPU`); bu kopya güncellenmez.
+
 # Forge WebGPU — Mimari Analiz ve Başlangıç Kararları
 
 **Sürüm:** v0.1 · 2026-11-10

@@ -1,3 +1,5 @@
+> **Bu belge Forge-WebGPU deposuna taşındı:** `C:\Users\emret\Desktop\Forge-WebGPU\docs\planned\FORGE_WEBGPU_REBUILD_PLAN.md` (GitHub `emrtrn/Forge-WebGPU`); bu kopya güncellenmez.
+
 # Forge WebGPU — Yeniden İnşa Planı
 
 **Sürüm:** v0.3 · 2026-11-10 (v0.2'den fark: mimari raporuyla hizalandı —

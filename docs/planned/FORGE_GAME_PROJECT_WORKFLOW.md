@@ -235,6 +235,12 @@ yeniden değerlendirilmelidir.
 > [P2 raporundadır](../reports/RIDGEBOUND_P2_ACCEPTANCE_REPORT.md).
 > İlk tüketici Ridgebound (önceki adı Forge Offroad). Mevcut oyunlar için
 > otomatik migrasyon kararı yoktur.
+>
+> **2026-11-10 notu:** Bu bölüm Forge WebGL'deki mevcut düzen için geçerli.
+> Kullanımda görülen yapısal boşluklar (genel API yok, oyun çatısının
+> `src/game`'de olması, uyumluluk kapısı yok, sabit `tsconfig` yolu, oyuna özel
+> tipli veri yok) [FORGE_WEBGPU_ARCHITECTURE.md §3.2](FORGE_WEBGPU_ARCHITECTURE.md)
+> içinde; Forge WebGPU için önerilen Model 2 ikinci sürümü aynı belgenin §4.8'inde.
 
 ## 2.1 Problem ve karar
 

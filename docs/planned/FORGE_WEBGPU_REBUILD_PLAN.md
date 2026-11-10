@@ -1,7 +1,11 @@
 # Forge WebGPU — Yeniden İnşa Planı
 
-**Sürüm:** v0.2 · 2026-11-10
+**Sürüm:** v0.3 · 2026-11-10 (v0.2'den fark: mimari raporuyla hizalandı —
+yeni tek tip veri formatı + içe aktarıcı, Faz 2 → 2a / 2b)
 **Durum:** Taslak. §8'deki kararlar onay bekliyor; hiçbir faz başlamadı.
+**Mimari:** [FORGE_WEBGPU_ARCHITECTURE.md](FORGE_WEBGPU_ARCHITECTURE.md) —
+veri modeli, katmanlar, özellik modülleri, oyun projesi sözleşmesi. Bu plan
+fazların sırasını, o rapor yapının kendisini tanımlar; çelişkide rapor geçerlidir.
 **Yerini aldığı belge:** `FORGE_WEBGPU_EDITION_MASTER_PLAN.md` (v0.1). v0.1 aynı
 depoda ikinci bir editör öneriyordu; 2026-11-10 kararıyla hedef değişti. v0.1'in
 geçerli ilkeleri §2 ve §9'a taşındı.
@@ -32,8 +36,9 @@ ayrı işlem:
 
 | Katman | Boyut | three bağımlılığı | İşlem |
 |---|---|---|---|
-| `engine/*` (render-three hariç: ai, physics, terrain, world, worldbuilder, scene, persistence, environment, perf…) | ~70.000 satır | yok | **Taşı** |
-| `tools/` (save validator'ları, World Builder betikleri, doğrulayıcılar) + `builder/` | ~44.700 satır | 3 dosya | **Taşı** |
+| `engine/*` alt sistemleri (ai, physics, terrain, navigation, movement, audio, dialogue, behavior, worldbuilder algoritmaları, environment, perf…) | ~53.000 satır | yok | **Taşı** |
+| `engine/scene`, `engine/persistence`, `engine/world` (level veri modeli, kayıt oyunu, hücreler) | ~17.000 satır | yok | **Yeniden tasarla** (mimari §4.4–4.6); algoritmalar korunur |
+| `tools/` (World Builder betikleri, doğrulayıcılar) + `builder/` | ~44.700 satır | 3 dosya | **Taşı**; `saveValidator.ts` (4.640 satır) şema kaydıyla yer değiştirir |
 | `tests/engine` | 176 dosya, ~42.000 satır | — | Modülüyle birlikte **taşı** |
 | `vite.config.ts` dev endpoint'leri | 2.632 satır | — | **Taşı**, modüllere bölerek |
 | `engine/render-three` | 113 dosya, ~23.300 satır | 101 dosya; 42'si WebGL'e özgü | 42 dosya **yeniden yaz** (TSL); kalanı **uyarla** |
@@ -41,20 +46,21 @@ ayrı işlem:
 | ↳ `src/scene/capabilities` (runtime modülleri) | 30 dosya, ~7.500 satır | 11 dosya | **Uyarla** |
 | `src/editor` (DOM panelleri) | 88 dosya, ~38.800 satır | 14 dosya; 6'sı WebGL'e özgü | **Uyarla** — `SceneApp` bağımlılığı (26 dosya) yeni servislere |
 
-Kodun yaklaşık yarısı olduğu gibi taşınır. Asıl yeni iş: render katmanı,
-uygulama kabuğu (editör + runtime orkestrasyonu) ve editör viewport'u.
+Kodun yaklaşık yarısı olduğu gibi taşınır. Asıl yeni iş: mimari iskelet (veri
+modeli, şema kaydı, kayıt servisi, özellik modülleri), render katmanı, uygulama
+kabuğu (editör + runtime orkestrasyonu) ve editör viewport'u.
 
 ### 1.1 Değerli sistemler bu ayrımda nereye düşüyor
 
 | Sistem | Three'siz çekirdek (taşınır) | Yeniden yazılacak / uyarlanacak render parçası |
 |---|---|---|
-| World Builder | `engine/worldbuilder` (47 dosya, ~12.600 satır), `tools/world` (~2.900 satır, CLI dahil) | Render parçası yok; editör penceresi (`panels/world`, ~1.600 satır DOM) uyarlanır |
+| World Builder | `engine/worldbuilder` (47 dosya, ~12.600 satır), `tools/world` (~2.900 satır, CLI dahil) | Render parçası yok; level yazan çıktı katmanı yeni formata, editör penceresi (`panels/world`, ~1.600 satır DOM) yeni editöre uyarlanır |
 | Terrain deformasyonu | `deformationField`, `deformationStateCodec`, `terrainHeightQuery`, `terrainDeformationModule` | `terrain/terrainDeformation.ts` (556 satır, GLSL) → TSL/compute |
 | Araç hasarı | `physics/deformable`, `physics/fracture` (~2.000 satır, Voronoi bake dahil) | `dentWear.ts` (101 satır, GLSL) → TSL; `deformableMeshSync`, `fractureGeometry`, `deformablePartNodes` uyarlanır |
 | Araç fiziği | `engine/physics` (Rapier, ~8.500 satır) | Tekerlek görseli uyarlanır |
 
-Bu üç sistemin değeri neredeyse tamamen three'siz çekirdekte. Cut-over'da (Faz 2)
-ilk gün taşınırlar; görsel parçaları ilgili fazda bağlanır.
+Bu üç sistemin değeri neredeyse tamamen three'siz çekirdekte. Faz 2b'de
+taşınırlar; görsel parçaları ilgili fazda bağlanır.
 
 ---
 
@@ -87,13 +93,13 @@ ilk gün taşınırlar; görsel parçaları ilgili fazda bağlanır.
 6. **Gerçek WebGPU doğrulaması** (v0.1 ADR-005). `renderer.backend.isWebGPUBackend`
    kontrol edilir; WebGL2 backend'ine sessiz düşüş "WebGPU çalışıyor" sayılmaz
    ve ekranda gösterilir.
-7. **Veri formatları başlangıçta aynı.** Level, terrain + tile, manifest ve bütün
-   sidecar'lar (`*.vehicle.json`, `*.fracture.json`, `*.deformable.json`,
-   `*.effect.json`, `*.skeleton.json`, world/foliage hücreleri) aynı şemayla
-   başlar. Böylece mevcut level'lar ve Ridgebound içeriği ilk günden açılır;
-   geçiş döneminde Forge WebGL editörü yazma aracı olarak kullanılabilir.
-   Şema değişikliği sürüm numarasıyla yapılır. Save validator allowlist'i ve
-   `droppedFields` güvenlik ağı aynen taşınır.
+7. **Yeni tek tip veri formatı + tek yönlü içe aktarıcı.** Level, tek tip aktör
+   ve şemalı bileşen modeliyle yazılır (mimari §4.4–4.5); her şey kalıcı GUID
+   taşır. Forge WebGL level'ları ve sidecar'ları (`*.vehicle.json`,
+   `*.fracture.json`, `*.deformable.json`, `*.effect.json`, `*.skeleton.json`,
+   terrain, world / foliage hücreleri) `tools/import-forge-webgl` ile bir kez
+   çevrilir; çevrilemeyen alan sessiz düşmez, raporlanır. Terrain tile'ları
+   gibi ikili veri olduğu gibi kalır. İki formatı birlikte yaşatmak hedeflenmez.
 8. **Eşzamanlı kayıt koruması ilk günden.** Forge WebGL'de layout kaydında sürüm
    kontrolü yok (mevcut 409'lar yalnız içerik oluştururken var olan dosyayı
    korur). Yeni dev server her yazmada temel sürümü kontrol eder.
@@ -103,8 +109,11 @@ ilk gün taşınırlar; görsel parçaları ilgili fazda bağlanır.
     commit, three sürümü, backend kanıtı, tarayıcı, GPU + sürücü, sahne + kamera
     pozu, çözünürlük + DPR, profil, medyan / p95 kare süresi, GPU süresi, draw
     call. Ölçülmeyen şey "ölçülmedi" yazılır; CPU süresi GPU süresi diye sunulmaz.
-11. **Önce taşı, sonra iyileştir.** Taşınan modülün tasarımı taşıma sırasında
-    değiştirilmez; eşdeğerliği testler kanıtlar. İyileştirme ayrı bir adımdır.
+11. **Algoritmalar olduğu gibi, iskelet yeniden.** Fizik, terrain verisi, AI,
+    nav, hareket, ses, diyalog ve World Builder algoritmaları taşınırken
+    tasarımları değiştirilmez; eşdeğerliği testler kanıtlar. Veri modeli,
+    serileştirme, kayıt, uygulama kabuğu ve editör ise mimari rapora göre
+    yeniden tasarlanır. Taşınan modülde iyileştirme ayrı bir adımdır.
 
 ---
 
@@ -114,7 +123,7 @@ ilk gün taşınırlar; görsel parçaları ilgili fazda bağlanır.
   (minigolf, miniracer, platformer, freshcounter) upstream'den hata düzeltmesi
   çekmeye devam eder; WebGPU'ya geçişleri oyun başına ayrı karardır. Ridgebound
   (Model 2) göç edene kadar Forge WebGL'de kalır.
-- Cut-over'da (Faz 2) `forge-webgl-final` etiketi atılır; `CLAUDE.md` ve
+- Cut-over'da (Faz 2a) `forge-webgl-final` etiketi atılır; `CLAUDE.md` ve
   README'ye bakım modu notu eklenir. Sonrasında yalnız hata düzeltmesi.
 - **Hemen geçerli olması önerilen kural (K6):** `engine/render-three`'ye yeni
   özellik yatırımı durur, yalnız hata düzeltmesi yapılır; bu katman yeniden
@@ -144,8 +153,9 @@ Büyüklükler görelidir (S < M < L < XL); süre tahmini değildir.
 |---|---|---|---|---|
 | 0 | Kararlar + referans görüntüler | S | — | §8 kararları kayıtlı; WebGL baseline alındı |
 | 1 | Doğrulama spike'ı (Forge `spikes/webgpu/`) | M | 0 | **GO / NO-GO** kullanıcı kararı |
-| 2 | Cut-over: yeni depo + three'siz çekirdeğin taşınması | M | 1 (GO) | Taşınan testler ve CI yeşil |
-| 3 | Render çekirdeği + level görüntüleyici | L | 2 | Referans sahnelerde ilk görsel kabul |
+| 2a | Cut-over + mimari iskelet: veri modeli, şema kaydı, kayıt servisi, özellik modülleri, SDK, sınır zorlaması | L | 1 (GO) | İlk özellik (Height Fog) iskeletten uçtan uca geçiyor; CI yeşil |
+| 2b | Three'siz alt sistemlerin taşınması + Forge WebGL içe aktarıcısı | M | 2a | Taşınan testler yeşil; referans level'lar çevrildi |
+| 3 | Render çekirdeği + level görüntüleyici | L | 2b | Referans sahnelerde ilk görsel kabul |
 | 4 | Editör çekirdeği | L | 3 | Editör smoke'u (yerleştir / taşı / undo / kaydet / yeniden aç) |
 | 5 | Açık dünya: terrain, streaming, foliage, World Builder penceresi | XL | 3, 4 | Açık dünya sahnelerinde görsel + performans kabulü |
 | 6 | Oyun runtime'ı + araçlar | L | 3 (5 ile paralel yürüyebilir) | Runtime smoke'u; araç terrain üstünde sürülüyor |
@@ -155,14 +165,17 @@ Büyüklükler görelidir (S < M < L < XL); süre tahmini değildir.
 | 10 | Ridgebound göçü + sürüm | M | 8 | Ridgebound Forge WebGPU'da tam akışla çalışıyor |
 
 Sıranın mantığı: en büyük bilinmeyen (WebGPU açık dünyada istenen kaliteyi kabul
-edilebilir maliyetle veriyor mu?) en başta, ucuz bir spike'la cevaplanır. Görsel
+edilebilir maliyetle veriyor mu?) en başta, ucuz bir spike'la cevaplanır. Mimari
+iskelet (2a) her şeyden önce gelir, çünkü Forge WebGL'de sonradan düzeltilen
+kararların çoğu (veri modeli, kimlik, kayıt, kayıt noktaları) en başta verilmesi
+gereken kararlardı. Görsel
 kalite (Faz 3) editörden önce gelir, çünkü projenin amacı o. Editör (Faz 4) açık
 dünya araçlarından önce gelir, çünkü sculpt / paint / foliage / World Builder ve
 görünüm ayarı onun üstünde çalışır.
 
 ### Faz 0 — Kararlar ve referans görüntüler
 
-- [ ] §8'deki K1–K9 kararları.
+- [ ] §8'deki K1–K9 ve mimari raporundaki A1–A9 kararları.
 - [ ] Referans sahneler seçilir: çok tile'lı bir terrain level'ı, Island, bir
       World Builder rastgele dünyası, Ridgebound'un **kopya** bir sahnesi.
 - [ ] Her sahnede sabit kamera pozlarından Forge WebGL ekran görüntüleri ve
@@ -200,26 +213,53 @@ görünüyor; terrain görseli collider ile eşleşiyor.
 **NO-GO:** Forge WebGL'de devam edilir. O durumda WebGL tarafındaki kalite
 seçenekleri (`SSRPass`, `TAARenderPass`, `LightProbeGridWebGL`) değerlendirilir.
 
-### Faz 2 — Cut-over: yeni depo ve çekirdek
+### Faz 2a — Cut-over ve mimari iskelet
+
+Bu fazın her maddesi [mimari raporun](FORGE_WEBGPU_ARCHITECTURE.md) bir
+bölümünü uygular.
 
 - [ ] Depo oluşturulur (K1): Vite + TypeScript strict, `three@0.187.0` sabit
-      sürüm (K5), Rapier.
+      sürüm (K5), Rapier, Vitest.
 - [ ] Forge WebGL'e `forge-webgl-final` etiketi ve bakım modu notu (§3).
-- [ ] **Toplu taşıma:** `engine/*` (render-three hariç), `tools/`, `builder/`
-      ve ilgili `tests/engine`: kopyala → derle → testler yeşil. Render'a veya
-      `src/scene`'e bağlı testler, modülleri geldiğinde açılır.
-- [ ] Dev server: `vite.config.ts`'deki endpoint'ler `tools/devServer/` altında
-      modüllere bölünür. Save validator'ları, `droppedFields`,
-      `FORGE_PROJECT_ROOT` ve local-only middleware aynen taşınır; kayıt sürüm
-      kontrolü (§2.8) eklenir.
-- [ ] Kapılar: `tsc --noEmit`, `test:engine`, `verify:imports` (yeni sınırlarla),
-      `verify:dist --strict`, `verify:world-data`; CI.
-- [ ] `public/` starter content ve referans level'lar kopyalanır;
-      `npm run world:random` CLI çalışır (World Builder dünyaları ilk günden
-      üretilebilir).
-- [ ] `CLAUDE.md`, `AGENTS.md`, `docs/architecture/ARCHITECTURE.md` yeni depoya
-      uyarlanır; bu plan yeni depoya taşınır.
+- [ ] Katmanlar ayrı TypeScript projeleri olarak kurulur; `tsc -b` izinsiz
+      import'ta kırılır; dependency-cruiser ince kuralları denetler (mimari
+      §4.2).
+- [ ] Çekirdek: aktör + bileşen modeli, GUID'ler, şema DSL'i ve kaydı, sürüm
+      geçiş zinciri, özellik kayıt noktaları (`defineFeature`), dosya boyutu
+      bütçesi (mimari §4.3–4.5).
+- [ ] Kayıt servisi: işlem / undo, sıralı atomik çok dosyalı kayıt, revizyon
+      çakışma kontrolü (409), şemaya göre çalışan genel kayıt uçları, ikili
+      kanal; proje kökü izolasyonu ve local-only middleware Forge'dan taşınır
+      (mimari §4.6).
+- [ ] Uygulama kabuğu: World, sahne kurucu (LevelAssembler), alt sistem ana
+      makinesi + yaşam döngüsü, oyun modülü ana makinesi, renderer'dan bağımsız
+      boot hata ekranı (mimari §4.7).
+- [ ] Oyun projesi sözleşmesi: `@forge/sdk` / `@forge/editor-sdk` iskeleti,
+      başlatıcı (TypeScript ayarlarını üretir), `samples/starter`,
+      `create-project`, `check:projects`, `/__forge/identity` (mimari §4.8).
+- [ ] Depo düzeni: `content/engine/`, `samples/`, `tests/fixtures/projects/`.
+- [ ] **İskeletin kabul testi:** Height Fog özelliği tek klasörde uçtan uca:
+      şema → kayıt / yükleme turu → undo → otomatik Details → runtime alt
+      sistemi (render bağlaması Faz 3'te). Kabuk dosyalarında değişiklik yok.
+- [ ] Kapılar ve CI: `tsc -b`, Vitest, build, dist doğrulaması, boyut bütçesi.
+- [ ] `CLAUDE.md`, `AGENTS.md`, `docs/architecture/ARCHITECTURE.md` (mimari
+      rapordan) yazılır; bu plan ve rapor yeni depoya taşınır.
 - [ ] `docs/PORT_LOG.md` başlatılır (§7).
+
+### Faz 2b — Alt sistemlerin taşınması ve içe aktarıcı
+
+- [ ] **Taşıma:** `engine/*` three'siz alt sistemleri (ai, physics, terrain
+      verisi, navigation, movement, audio, dialogue, behavior, worldbuilder
+      algoritmaları, environment, perf) ve ilgili testleri: kopyala → sınırda
+      yeni aktör / şema modeline bağla → testler yeşil. Algoritmalar
+      değiştirilmez (§2.11).
+- [ ] Kayıt oyunu (`engine/persistence`) ve World Partition (`engine/world`)
+      yeni modele göre yeniden kurulur; GUID anahtarlı.
+- [ ] `tools/world` taşınır; World Builder çıktısı yeni level formatını yazar;
+      `npm run world:random` çalışır (test dünyaları ilk günden üretilebilir).
+- [ ] **İçe aktarıcı** `tools/import-forge-webgl`: level, hücreler, foliage,
+      sidecar'lar → yeni format; terrain tile'ları olduğu gibi. Çevrilemeyen
+      alan raporlanır. Referans level'lar ve starter content bununla gelir.
 
 ### Faz 3 — Render çekirdeği ve level görüntüleyici
 
@@ -253,8 +293,8 @@ seçenekleri (`SSRPass`, `TAARenderPass`, `LightProbeGridWebGL`) değerlendirili
 ### Faz 5 — Açık dünya
 
 - [ ] Terrain: spike'taki TSL CDLOD üretim kalitesine çıkar: morph, tile seam,
-      8 boya katmanı, su birikintisi, kıyı ıslaklığı, kostik; tile akışı (editör
-      + runtime), global harita.
+      8 boya katmanı, su birikintisi, kıyı ıslaklığı, kostik; tile akışı
+      (editör ve runtime), global harita.
 - [ ] World Partition hücre akışı, HLOD, view distance, küçük nesne culling.
 - [ ] Foliage: instancing + compute culling + indirect draw; impostor /
       billboard, rüzgâr, fade; foliage hücreleri.
@@ -265,7 +305,9 @@ seçenekleri (`SSRPass`, `TAARenderPass`, `LightProbeGridWebGL`) değerlendirili
 
 ### Faz 6 — Oyun runtime'ı ve araçlar
 
-- [ ] LevelRuntime + capability modülleri, gameplay framework, actor
+- [ ] Runtime alt sistemleri (bugünkü capability modülleri), oyun çatısı
+      (`gameplay` katmanı: bugünkü `src/game`'in yeniden kullanılabilir kısmı —
+      TPS / araç / RTS modları, kamera yöneticisi, ragdoll), actor
       script'leri, input, karakter + kamera, Rapier fizik, ses, UI, save-game,
       AI + Recast/Detour nav, diyalog.
 - [ ] VFX: partikül efektleri TSL'de. WebGPU'da nokta boyutu yok; büyük
@@ -309,8 +351,10 @@ kararı.
 
 ### Faz 10 — Ridgebound göçü ve sürüm
 
-- [ ] Ridgebound'un proje kökü Forge WebGPU'ya bağlanır (önce kopya, sonra
-      gerçek veri).
+- [ ] Ridgebound içeriği içe aktarıcıyla çevrilir (önce kopya, sonra gerçek
+      veri); oyun kodu (bugün 926 satır, Forge'un 19 iç modülünü import ediyor)
+      `@forge/sdk`'ya taşınır; görev / kargo durumu oyunun kendi şemalı
+      bileşenlerine geçer.
 - [ ] Oyun kuralları ve UI; tam Edit → Play → Save akışı.
 - [ ] Üretim build'i (editörsüz, `verify:dist --strict`).
 - [ ] Kapı: kullanıcı kabulü; Ridgebound'un Forge WebGL bağı kesilir.
@@ -334,7 +378,7 @@ kararı.
 | Deneysel addon API'leri sürümle değişir | three sabit sürüm; addon'lar kendi sarmalayıcılarımızın arkasında; yükseltme ayrı, planlı adım |
 | Akışla gelen yeni materyallerde shader derleme takılması | `compileAsync` ile ön ısıtma; materyal varyant sayısını sınırlama |
 | Geçiş döneminde iki motorun bakımı | Cut-over sonrası Forge WebGL'de yeni özellik yok; taşınmış modüllere sonradan gelen hata düzeltmeleri port günlüğünde izlenir |
-| Kapsam şişmesi ("her şeyi yeniden tasarlayalım") | §2.11: önce taşı, sonra iyileştir |
+| Kapsam şişmesi ("her şeyi yeniden tasarlayalım") | §2.11: yalnız iskelet yeniden tasarlanır; algoritmalar olduğu gibi taşınır |
 | CI'da GPU yok | CI: tsc, build, engine testleri, dist doğrulaması. Render testleri yerelde, başlıklı (headed) tarayıcıda; headless'ta canvas görüntüsü siyah gelebiliyor |
 | Görsel kabul darboğazı | Kabuller faz sonlarında toplu istenir |
 | WebGPU'suz cihazlar | K4 |
@@ -353,7 +397,7 @@ modüle hata düzeltmesi yapılırsa buraya "port bekliyor" diye işlenir.
 |---|---|---|---|
 | K1 | Yeni deponun adı ve yeri | `Forge-WebGPU` — yerel `C:\Users\emret\Desktop\Forge-WebGPU`, GitHub `emrtrn/Forge-WebGPU` | Açık |
 | K2 | Forge WebGL'in durumu | Bakım modu; GitHub arşivi değil; `Forge` deposu ve adı kalır | Açık |
-| K3 | Veri formatları | Başlangıçta aynı şema; değişiklik sürüm numarasıyla | Açık |
+| K3 | Veri formatları | Yeni tek tip format + tek yönlü içe aktarıcı (mimari A1; v0.2'deki "aynı şema" önerisi geri çekildi) | Açık |
 | K4 | WebGPU olmayan cihaz | Editör: WebGPU zorunlu. Oyun: başlangıçta zorunlu + açık mesaj; WebGL2 backend fallback'i Faz 6'da ölçümle karara bağlanır | Açık |
 | K5 | three sürümü | 0.187.0 sabit (npm'deki en son); yükseltme ayrı adım | Açık |
 | K6 | Render-three yatırım durdurma | Hemen yürürlüğe girsin (§3) | Açık |
@@ -366,8 +410,8 @@ modüle hata düzeltmesi yapılırsa buraya "port bekliyor" diye işlenir.
 - Gerçek WebGPU doğrulaması; sessiz fallback yok (§2.6).
 - Ölçüm kayıt formatı ve "ölçülmedi" dürüstlüğü (§2.10).
 - Görünür özellik kapsama matrisi (§7).
-- Kayıt güvenliği: validator allowlist, `droppedFields`, proje kökü sınırı
-  (§2.7, §2.8).
+- Kayıt güvenliği: allowlist ve `droppedFields` fikri artık şema kaydının
+  doğal parçası (mimari §4.5); proje kökü sınırı aynen (§2.7, §2.8).
 - Ridgebound verisine Faz 10'a kadar yalnız kopya üzerinden dokunulması.
 
 v0.1 dosyası (`FORGE_WEBGPU_EDITION_MASTER_PLAN.md`) bu belgeyle geçersizdir;
@@ -375,6 +419,6 @@ silinebilir.
 
 ## 10. İlk adımlar
 
-1. §8 kararları.
+1. §8 kararları (K1–K9) ve mimari raporundaki A1–A9.
 2. Faz 0: referans sahneler, WebGL ekran görüntüleri ve ölçümleri.
 3. Faz 1: spike S1 → S4, ardından GO / NO-GO.

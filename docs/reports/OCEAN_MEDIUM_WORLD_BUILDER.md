@@ -141,3 +141,22 @@ görüntülerini içerir. İç kara %69,994–70,032; kıyıya dik ortalama kuru
 Coast Save/Reload, Width Scale 0,5/1,5, undo/redo ve gerçek Play yeniden geçti.
 Bu ek A2 sığ taban profili, A3 ada çeşitliliği veya tam Ocean performans
 kabulünü kapatmaz; yukarıdaki Medium atlas kanıtları kendi kapsamıyla korunur.
+
+## A2 devamı — 10 Kasım 2026
+
+Yeni Small/Medium Island/Coast üretiminde sığ su altı profili eklendi.
+[A2 raporu](WORLD_BUILDER_SHORE_A2.md): 35 m açıkta yaklaşık 2 m derinlik,
+150 m'de derin tabana yaklaşma; kuru arazi ve kıyı çizgisi korunur. Small
+Island'da native domain dışına çıkan kesitler ayrıca raporlanır. Dört izole
+Create/Save/Reload/Play akışı, Coast 0,5/1,5 ağızları ve üretim GLSL GPU probe'u
+geçti. A3 ada çeşitliliği, Large ve tam Ocean performans/görsel kabulü açık kalır.
+
+## A3 devamı — 10 Kasım 2026
+
+Yeni Island üretiminde alanı koruyan seed ana biçimleri ve kıyı örnekleri
+eklendi. [A3 raporu](WORLD_BUILDER_ISLAND_A3.md), aynı-seed önce/sonra kara
+alanını, Small/Medium farklı seed görüntülerini, native ve yerleşim/yol/göl
+güvenliği kontrollerini içerir. A2 ve eski kullanıcı kayıtları korunur.
+2610 tam engine kontrolü ve browser akışları geçti. Birleşik kapının ilgisiz
+project-roots testinde kapanış takılması ve kalan kapıların ayrı tamamlanması
+raporda açıkça ayrılır; tam Ocean GPU ve A4 birleşik kabulü açık kalır.

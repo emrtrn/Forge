@@ -14,6 +14,7 @@
  * issue means the brief is not built. Dependency-free; no three.js.
  */
 import { metricElevationToWorld, metricToWorld, type MetricFrame } from "./metricFrame";
+import { ISLAND_RADIAL_SAMPLES } from "./islandShape";
 import {
   arrayOf,
   type Ctx,
@@ -103,7 +104,7 @@ export interface BriefTerrain {
   /** Hills and mountains over the valleys (`engine/worldbuilder/briefTerrain.ts`); absent: none. */
   relief?: BriefRelief;
   /** Star-shaped island; the coast is shared by all generators. */
-  island?: { center: BriefPoint; radius: number; shoreWidth: number; landHeight: number };
+  island?: { center: BriefPoint; radius: number; shoreWidth: number; landHeight: number; radii?: number[] };
   coast?: { center: BriefPoint; seaSide: "west" | "east" | "north" | "south"; shoreWidth: number; landHeight: number; beachWidth?: number };
 }
 
@@ -112,6 +113,8 @@ export interface BriefOcean {
   /** Elevation in the brief's datum, converted once when building. */
   surfaceElevation: number;
   offshoreDepth: number;
+  /** Optional baked seabed profile; absent retains the legacy shoreWidth exponential. */
+  shoreProfile?: { shallowDistance: number; shallowDepth: number; deepDistance: number };
 }
 
 /** Distance band, metres: no mountain within `inner`, full height `falloff` further out. */
@@ -428,14 +431,22 @@ function normalizeTerrain(ctx: Ctx, value: unknown): BriefTerrain | null {
   if (value.island !== undefined) {
     if (!isRecord(value.island)) return reject(ctx, "terrain.island", "must be an object");
     const raw = value.island;
-    for (const key of Object.keys(raw)) if (!["center", "radius", "shoreWidth", "landHeight"].includes(key)) issue(ctx, `terrain.island.${key}`, "is not an island field");
+    for (const key of Object.keys(raw)) if (!["center", "radius", "shoreWidth", "landHeight", "radii"].includes(key)) issue(ctx, `terrain.island.${key}`, "is not an island field");
     const center = requirePoint(ctx, "terrain.island.center", raw.center);
     const radius = positive(ctx, "terrain.island.radius", raw.radius, 10000);
     const shoreWidth = positive(ctx, "terrain.island.shoreWidth", raw.shoreWidth, 1000);
     const landHeight = positive(ctx, "terrain.island.landHeight", raw.landHeight, 1000);
     if (!center || radius === null || shoreWidth === null || landHeight === null) return null;
     if (shoreWidth >= radius) issue(ctx, "terrain.island.shoreWidth", "must be smaller than radius");
-    island = { center, radius, shoreWidth, landHeight };
+    let radii: number[] | undefined;
+    if (raw.radii !== undefined) {
+      if (!Array.isArray(raw.radii) || raw.radii.length !== ISLAND_RADIAL_SAMPLES) issue(ctx, "terrain.island.radii", `must contain ${ISLAND_RADIAL_SAMPLES} radial samples`);
+      else {
+        const values = raw.radii.map((r, i) => requireNumber(ctx, `terrain.island.radii[${i}]`, r, shoreWidth + spacing! * 4, 10000));
+        if (values.every(r => r !== null)) radii = values as number[];
+      }
+    }
+    island = { center, radius, shoreWidth, landHeight, ...(radii ? { radii } : {}) };
   }
   let coast: BriefTerrain["coast"];
   if (value.coast !== undefined) {
@@ -589,18 +600,39 @@ export function normalizeWorldBrief(value: unknown): WorldBriefNormalization {
   if (value.ocean !== undefined) {
     if (!isRecord(value.ocean)) issue(ctx, "ocean", "must be an object");
     else {
-      for (const key of Object.keys(value.ocean)) if (!["id", "surfaceElevation", "offshoreDepth"].includes(key)) issue(ctx, `ocean.${key}`, "is not an ocean field");
+      for (const key of Object.keys(value.ocean)) if (!["id", "surfaceElevation", "offshoreDepth", "shoreProfile"].includes(key)) issue(ctx, `ocean.${key}`, "is not an ocean field");
       const oceanId = requireId(ctx, "ocean", value.ocean.id);
       const surfaceElevation = requireNumber(ctx, "ocean.surfaceElevation", value.ocean.surfaceElevation, -100000, 100000);
       const offshoreDepth = requireNumber(ctx, "ocean.offshoreDepth", value.ocean.offshoreDepth, 1, 10000);
-      if (oceanId !== null && surfaceElevation !== null && offshoreDepth !== null) ocean = { id: oceanId, surfaceElevation, offshoreDepth };
+      let shoreProfile: BriefOcean["shoreProfile"];
+      if (value.ocean.shoreProfile !== undefined) {
+        const raw = value.ocean.shoreProfile;
+        if (!isRecord(raw)) issue(ctx, "ocean.shoreProfile", "must be an object");
+        else {
+          for (const key of Object.keys(raw)) if (!["shallowDistance", "shallowDepth", "deepDistance"].includes(key)) issue(ctx, `ocean.shoreProfile.${key}`, "is not a shore profile field");
+          const shallowDistance = requireNumber(ctx, "ocean.shoreProfile.shallowDistance", raw.shallowDistance, .01, 10000);
+          const shallowDepth = requireNumber(ctx, "ocean.shoreProfile.shallowDepth", raw.shallowDepth, .01, 10000);
+          const deepDistance = requireNumber(ctx, "ocean.shoreProfile.deepDistance", raw.deepDistance, .01, 10000);
+          if (shallowDistance !== null && shallowDepth !== null && deepDistance !== null) {
+            if (deepDistance <= shallowDistance) issue(ctx, "ocean.shoreProfile.deepDistance", "must exceed shallowDistance");
+            if (offshoreDepth !== null && shallowDepth >= offshoreDepth) issue(ctx, "ocean.shoreProfile.shallowDepth", "must be below offshoreDepth");
+            shoreProfile = { shallowDistance, shallowDepth, deepDistance };
+          }
+        }
+      }
+      if (oceanId !== null && surfaceElevation !== null && offshoreDepth !== null) ocean = { id: oceanId, surfaceElevation, offshoreDepth, ...(shoreProfile ? { shoreProfile } : {}) };
     }
   }
   if (Boolean(terrain?.island || terrain?.coast) !== Boolean(ocean)) issue(ctx, "ocean", "requires ocean together with terrain.island or terrain.coast");
   if (terrain?.island && area) {
-    const { center, radius } = terrain.island;
-    const reach = radius * 1.11 + terrain.spacing * 2;
-    if (center[0] - reach <= area.west || center[0] + reach >= area.east || center[1] - reach <= area.south || center[1] + reach >= area.north)
+    const { center, radius, radii } = terrain.island;
+    const margin = terrain.spacing * 2;
+    const outside = radii ? radii.some((r, i) => {
+      const a = i * 2 * Math.PI / radii.length, x = center[0] + r * Math.cos(a), north = center[1] + r * Math.sin(a);
+      return x - margin <= area.west || x + margin >= area.east || north - margin <= area.south || north + margin >= area.north;
+    }) : center[0] - radius * 1.11 - margin <= area.west || center[0] + radius * 1.11 + margin >= area.east
+      || center[1] - radius * 1.11 - margin <= area.south || center[1] + radius * 1.11 + margin >= area.north;
+    if (outside)
       issue(ctx, "terrain.island", "must leave an offshore band on every terrain edge");
   }
   const regionProfile = optional(value.regionProfile, () =>

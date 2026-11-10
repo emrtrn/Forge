@@ -33,7 +33,9 @@ import { coverPaint, normalizeGroundCover } from "../../engine/worldbuilder/grou
 import { readRoomLayout } from "../../engine/scene/layoutValidation";
 import { validateSavePayload } from "../../tools/saveValidator";
 import { terrainTileLayerWeight } from "../../engine/terrain/terrainTypes";
-import { islandOcean, oceanBeachWeight, oceanLandDistance, SEA_SIDES } from "../../engine/worldbuilder/island";
+import { islandHeight, islandOcean, islandShorePoint, oceanBedDepth, oceanBeachWeight, oceanLandDistance, SEA_SIDES } from "../../engine/worldbuilder/island";
+import { radialIslandArea } from "../../engine/worldbuilder/islandShape";
+import { insidePolygon, sourceDistance } from "../../engine/worldbuilder/field";
 import { paintWeights } from "../../tools/world/worldBriefTemporarySteps";
 import { oceanMask } from "../../engine/worldbuilder/masks";
 import { splineToPolyline } from "../../engine/scene/landscape";
@@ -75,6 +77,86 @@ function waterGaps(world: WorldBrief): Array<{ id: string; gap: number }> {
 }
 
 export async function registerRandomWorldTests(check: Check, checkSlowAsync: CheckAsync): Promise<void> {
+  check("random world island A3: balanced area, saved seed forms, exact shore distances and safe frame band", () => {
+    const signatures = new Set<string>();
+    for (const size of ["small", "medium"] as const) for (const seed of [4, 11, 12, 29, 48213, 0xffffffff]) {
+      const world = brief({ size, seed, landform: "island", settlements: [], roads: "between" }), shape = world.terrain.island!;
+      const radius = shape.radius, half = worldExtent(size) / 2, ocean = islandOcean(world)!;
+      assert.equal(shape.radii!.length, 128);
+      assert.deepEqual(world, brief({ size, seed, landform: "island", settlements: [], roads: "between" }));
+      assert.deepEqual(normalizeWorldBrief(JSON.parse(JSON.stringify(world))).brief, world);
+      assert.ok(Math.abs(radialIslandArea(shape.radii!) / (Math.PI * radius ** 2 * 1.00325) - 1) < .00001, "same total area as legacy island");
+      const points = shape.radii!.map((_, i) => islandShorePoint(world, -i * 2 * Math.PI / 128));
+      signatures.add(shape.radii!.map(r => (r / radius).toFixed(3)).join(","));
+      for (const [x, z] of points) {
+        assert.ok(half - Math.max(Math.abs(x), Math.abs(z)) >= Math.max(32, worldExtent(size) * .03) - .01);
+        assert.ok(Math.abs(ocean.distance(x, z)) < 1e-8);
+      }
+      const closed = [...points, points[0]!];
+      // Generic all-edge geometry is independent of the accelerated query's cache.
+      for (let j = 0; j < 33; j++) for (let i = 0; i < 33; i++) {
+        const x = -half + (i + .17) * worldExtent(size) / 33, z = -half + (j + .31) * worldExtent(size) / 33;
+        const reference = sourceDistance([x, z], { kind: "polyline", points: closed });
+        const actual = ocean.distance(x, z);
+        assert.ok(Math.abs(Math.abs(actual) - reference) < 1e-7, "cell pruning preserves exact distances");
+        assert.equal(actual >= 0, insidePolygon(x, z, points));
+      }
+      const legacy = structuredClone(world); delete legacy.terrain.island!.radii;
+      assert.deepEqual(normalizeWorldBrief(legacy).brief, legacy, "old briefs are not given new radii");
+      const retained = structuredClone(world); retained.seed = (seed + 1) >>> 0;
+      assert.deepEqual(islandShorePoint(retained, .7), islandShorePoint(world, .7), "saved radii freeze the coastline independently of later seed edits");
+      const old = createBriefTerrain(legacy);
+      for (const [x, z] of [[-half, -half], [half, -half], [half, half], [-half, half]]) assert.ok(old.height(x!, z!) < -25, "legacy corner depths are unchanged");
+      assert.ok(ocean.distance(0, 0) > 120, "a broad connected inland kernel remains");
+      assert.ok(Number.isNaN(ocean.distance(NaN, 0)));
+    }
+    assert.ok(signatures.size >= 6, "six seeds produce distinct main forms");
+    for (const radii of [[], [1], Array(128).fill(0), Array(128).fill(Infinity), Array(128).fill(10000)]) {
+      const raw = randomWorldBrief({ ...OPTIONS, landform: "island" }).brief;
+      (raw.terrain as { island: { radii: unknown } }).island.radii = radii;
+      assert.equal(normalizeWorldBrief(raw).brief, null, "invalid or out-of-map outlines are rejected");
+    }
+  });
+  check("random world A2: smooth shallow shelf, unchanged dry terrain/shoreline and explicit legacy compatibility", () => {
+    const spec = brief({ landform: "island" }).ocean!;
+    assert.equal(oceanBedDepth(spec, 60, 0), 0);
+    assert.equal(oceanBedDepth(spec, 60, 35), 2);
+    assert.equal(oceanBedDepth(spec, 60, 150), 40);
+    assert.equal(oceanBedDepth(spec, 60, 300), 40);
+    let previous = 0;
+    for (let s = .25; s <= 250; s += .25) {
+      const depth = oceanBedDepth(spec, 60, s);
+      assert.ok(Number.isFinite(depth) && depth >= previous && depth <= 40);
+      previous = depth;
+    }
+    for (const join of [0, 35, 150]) {
+      const h = .001;
+      const left = (oceanBedDepth(spec, 60, join) - oceanBedDepth(spec, 60, join - h)) / h;
+      const right = (oceanBedDepth(spec, 60, join + h) - oceanBedDepth(spec, 60, join)) / h;
+      assert.ok(Math.abs(left - right) < .001, `${join}: continuous slope`);
+    }
+    for (const size of ["small", "medium"] as const) for (const landform of ["island", "coast"] as const)
+      for (const seaSide of landform === "coast" ? SEA_SIDES : ["west"] as const) for (const seed of [4, 11, 29]) {
+        const next = brief({ size, landform, seaSide, seed, settlements: [], roads: "between" });
+        const prior = structuredClone(next); delete prior.ocean!.shoreProfile;
+        const before = islandOcean(prior)!, after = islandOcean(next)!, half = worldExtent(size) / 2;
+        assert.deepEqual(normalizeWorldBrief(prior).brief, prior, "no default injection into an old explicit brief");
+        for (let z = -half + 8; z < half; z += 32) for (let x = -half + 8; x < half; x += 32) {
+          assert.equal(after.distance(x, z), before.distance(x, z), "Island shape / Coast A1 boundaries do not move");
+          const d = after.distance(x, z), a = islandHeight(next, after, x, z, 19), b = islandHeight(prior, before, x, z, 19);
+          if (d >= 0) assert.equal(a, b, "dry beach and relief stay identical");
+          else assert.ok(a < after.surfaceLevel && b < before.surfaceLevel, "both profiles stay submerged without holes");
+        }
+        for (const s of [1, 10, 35, 80, 150]) assert.equal(oceanBedDepth(prior.ocean!, 60, s), 40 * (1 - Math.exp(-s / 60)));
+      }
+    for (const patch of [null, {}, { shallowDistance: 0 }, { shallowDistance: .00001 }, { shallowDepth: 40 }, { deepDistance: 35 }, { deepDistance: Infinity }, { extra: 1 }]) {
+      const raw = randomWorldBrief({ ...OPTIONS, landform: "island" }).brief;
+      const ocean = raw.ocean as Record<string, unknown>;
+      ocean.shoreProfile = patch === null ? null : { ...(ocean.shoreProfile as object), ...patch };
+      if (patch && Object.keys(patch).length === 0) ocean.shoreProfile = {};
+      assert.ok(normalizeWorldBrief(raw).issues.some(issue => issue.includes("shoreProfile")), JSON.stringify(patch));
+    }
+  });
   check("random world coast A1: 70% interior and 2–3x measured painted beach across sizes, directions and seeds", () => {
     const cover = normalizeGroundCover(JSON.parse(readFileSync("public/assets/world-builder/covers/forest.cover.json", "utf8"))).cover!;
     const bed = cover.layers.findIndex(layer => layer.id === cover.roles.bed);
@@ -102,7 +184,8 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
         while (paint(shore[0]! + axis[0]! * (width + .25), shore[1]! + axis[1]! * (width + .25), 0, 0)[bed]! >= .5) width += .25;
         assert.ok(width / 25 >= 2 && width / 25 <= 3);
         const sea = [shore[0]! - axis[0]! * 10, shore[1]! - axis[1]! * 10] as const;
-        assert.ok(Math.abs(terrain.height(...sea) + 40 * (1 - Math.exp(-10 / 60))) < 1e-8, "A2 submerged profile is unchanged");
+        const oldProfile = structuredClone(world); delete oldProfile.ocean!.shoreProfile;
+        assert.ok(Math.abs(createBriefTerrain(oldProfile).height(...sea) + 40 * (1 - Math.exp(-10 / 60))) < 1e-8, "A1/legacy submerged profile is unchanged");
         const beach = [shore[0]! + axis[0]! * 60, shore[1]! + axis[1]! * 60] as const;
         assert.ok(oceanLandDistance(ocean, ...beach) < 0);
         const mask = oceanMask({ origin: [beach[0] - 1, beach[1] - 1], cellSize: 2, width: 1, depth: 1 }, { ocean } as Parameters<typeof oceanMask>[1]);
@@ -241,7 +324,7 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
         assert.ok(ground.ocean!.distance(x, z) > 70, `${seed}: internal road end`);
         assert.ok(ground.ground(x, z) > ground.ocean!.surfaceLevel + 3, `${seed}: dry road end`);
       }
-      for (const [x, z] of [[-512, -512], [512, -512], [512, 512], [-512, 512]]) assert.ok(ground.ground(x!, z!) < -25);
+      for (const [x, z] of [[-512, -512], [512, -512], [512, 512], [-512, 512]]) assert.ok(ground.ground(x!, z!) < 0, "an offshore band remains even where capes approach the frame");
       assert.ok(ground.ground(0, 0) > 0);
     }
     assert.throws(() => brief({ landform: "island", rivers: 1 }), /river-mouth/);
@@ -330,20 +413,41 @@ export async function registerRandomWorldTests(check: Check, checkSlowAsync: Che
   });
 
   check("random world island: random lakes stay inland or report that no lake fits", () => {
-    let found = 0;
-    for (const seed of [3, 11, 27, 91]) {
-      const result = randomWorldBrief({ ...OPTIONS, landform: "island", seed, lakes: 1, rivers: 0, settlements: [] });
-      const normalized = normalizeWorldBrief(result.brief);
-      assert.deepEqual(normalized.issues, []);
-      const terrain = createBriefTerrain(normalized.brief!);
-      for (const lake of terrain.lakes) {
-        found++;
-        assert.ok(lake.surface > terrain.ocean!.surfaceLevel + 3, "an inland lake is above the sea");
-        for (const [x, z] of lake.polygon) assert.ok(terrain.ocean!.distance(x, z) > 30, "no lake/sea surface overlap");
+    for (const size of ["small", "medium"] as const) {
+      let found = 0;
+      for (const seed of [3, 11, 27, 91, 0, 12]) {
+        const result = randomWorldBrief({ ...OPTIONS, size, landform: "island", seed, lakes: 1, rivers: 0, settlements: [] });
+        const normalized = normalizeWorldBrief(result.brief);
+        assert.deepEqual(normalized.issues, []);
+        const terrain = createBriefTerrain(normalized.brief!);
+        for (const lake of terrain.lakes) {
+          found++;
+          assert.ok(lake.surface > terrain.ocean!.surfaceLevel + 3, "an inland lake is above the sea");
+          for (const [x, z] of lake.polygon) assert.ok(terrain.ocean!.distance(x, z) > 30, "no lake/sea surface overlap");
+        }
+        if (!terrain.lakes.length) assert.ok(result.notes.some(note => note.includes("lakes: room for 0")));
       }
-      if (!terrain.lakes.length) assert.ok(result.notes.some(note => note.includes("lakes: room for 0")));
+      assert.ok(found > 0, `${size}: at least one generated island has room for an inland lake`);
     }
-    assert.ok(found > 0, "at least one generated island has room for an inland lake");
+  });
+
+  await checkSlowAsync("random world island A3: native inland Lake stays separate from Ocean on Small/Medium", async () => {
+    for (const size of ["small", "medium"] as const) {
+      const world = brief({ size, seed: size === "small" ? 12 : 3, landform: "island", settlements: [], roads: "between", lakes: 1, rivers: 0 });
+      const profile = normalizeRegionProfile(JSON.parse(readFileSync(`public/${world.regionProfile}`, "utf8"))).profile;
+      const manifest = JSON.parse(readFileSync("public/assets/manifest.json", "utf8")) as { assets: Array<{ id: string; path: string }> };
+      const byPath = new Map(manifest.assets.map(asset => [asset.path, asset.id]));
+      const built = buildWorldFromBrief({ brief: world, levelPath: "assets/trial/IslandLake.level.json", profile, assetIdForFile: file => byPath.get(file) ?? null });
+      const lake = (built.layout.waterBodies as LayoutLakeWaterBody[])[0]!;
+      assert.ok(lake && lake.surfaceLevel > 3);
+      const document = { def: built.def, tiles: new Map(built.tiles) };
+      const ocean = await prepareOceanTerrain(document, built.layout.oceanWaters![0]!);
+      assert.equal(sampleOceanCoverage(ocean, lake.seed[0], lake.seed[1]).status, "dry", "the interior Lake is not Ocean");
+      const geometry = await buildLakeGeometry(await prepareLakeSnapshot(document, lake));
+      assert.equal(geometry.status, "ready", geometry.message);
+      assert.deepEqual(readRoomLayout(JSON.parse(JSON.stringify(built.layout)), "island-lake").waterBodies, built.layout.waterBodies);
+      assert.deepEqual(validateSavePayload({ layout: built.layout }).layout.waterBodies, built.layout.waterBodies);
+    }
   });
   check("random world water: none by default; asking for it leaves the rest of the world as it was", () => {
     for (const landform of ["mountains", "hills", "plain"] as const) {

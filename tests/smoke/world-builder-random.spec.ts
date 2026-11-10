@@ -5,6 +5,8 @@ import { expect, test, type APIRequestContext, type Page } from "./test";
 import { expectNoSidewaysOverflow, openWorldBuilder } from "./worldBuilder";
 import { observeBrowserErrors } from "./browserErrors";
 import { PerspectiveCamera } from "three";
+import { islandOcean, islandShorePoint } from "../../engine/worldbuilder/island";
+import { briefToWorld, normalizeWorldBrief } from "../../engine/worldbuilder/worldBrief";
 
 // Explicit evidence images cover the visual states; a continuous WebGL filmstrip
 // adds heavy I/O without strengthening these authoring-flow assertions.
@@ -73,6 +75,32 @@ async function nextPreview(page: Page, after: number): Promise<number> {
     return state === "ready" ? Number(id) : 0;
   }, { timeout: 30_000 }).toBeGreaterThan(after);
   return Number(await panel.getAttribute("data-preview-id"));
+}
+
+/** Place a repeatable close camera over the actual new shore; input/save/play stay real UI flows. */
+async function stageShallowShoreCamera(page: Page, path: string): Promise<void> {
+  const raw = JSON.parse(await readFile(smokePublicPath(path.replace(/\.level\.json$/, ".worldbrief.json")), "utf8"));
+  const world = normalizeWorldBrief(raw).brief!;
+  expect(world.ocean!.shoreProfile).toEqual({ shallowDistance: 35, shallowDepth: 2, deepDistance: 150 });
+  const ocean = islandOcean(world)!, shape = (world.terrain.island ?? world.terrain.coast)!;
+  const [cx, cz] = briefToWorld(world, shape.center);
+  let x = cx, z = cz, nx: number, nz: number;
+  if (world.terrain.coast) {
+    // Coast fixtures face west. Stay away from the mouth, so this is a seabed view.
+    z += (world.area.north - world.area.south) * .22;
+    x -= ocean.distance(x, z); nx = -1; nz = 0;
+  } else {
+    const angle = Math.PI / 4, dx = Math.cos(angle), dz = Math.sin(angle);
+    [x, z] = islandShorePoint(world, angle); nx = dx; nz = dz;
+  }
+  const camera = new PerspectiveCamera();
+  camera.position.set(x + nx * 65 - nz * 28, ocean.surfaceLevel + 13, z + nz * 65 + nx * 28);
+  camera.lookAt(x + nx * 12, ocean.surfaceLevel - .5, z + nz * 12);
+  const pose = { position: camera.position.toArray(), quaternion: camera.quaternion.toArray(), up: [0, 1, 0] };
+  await page.evaluate(({ key, pose }) => localStorage.setItem(key, JSON.stringify(pose)), { key: `forge.editor.cameraPose.${encodeURIComponent(path)}`, pose });
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator('[data-object-id="ocean:0"]').click();
+  await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
 }
 
 test("World Builder window: random world choices, live preview, Create builds into the open level", async ({ page, request }) => {
@@ -210,7 +238,7 @@ for (const size of ["small", "medium"] as const) test(`World Builder island ${si
   // A lone village must have internal streets; it must not depend on an off-map exit.
   const chips = page.getByTestId("random-world-settlement");
   while (await chips.count() > 1) await chips.last().getByRole("button").click();
-  await panel.locator('[data-seed]').fill("11"); await panel.locator('[data-seed]').press("Tab");
+  await panel.locator('[data-seed]').fill(size === "medium" ? "48213" : "11"); await panel.locator('[data-seed]').press("Tab");
   id = await nextPreview(page, id);
   await expectNoSidewaysOverflow(page);
   await page.screenshot({ path: info.outputPath("island-preview.png") });
@@ -222,6 +250,9 @@ for (const size of ["small", "medium"] as const) test(`World Builder island ${si
   expect(saved.oceanWaters).toHaveLength(1);
   expect(saved.oceanWaters[0]).toMatchObject({ kind: "ocean", terrainRef: saved.landscapes[0].id, surfaceLevel: 0, offshoreDepth: 40 });
   const sea = saved.oceanWaters[0];
+  const islandBriefPath = path.replace(/\.level\.json$/, ".worldbrief.json");
+  const islandBrief = JSON.parse(await readFile(smokePublicPath(islandBriefPath), "utf8"));
+  expect(islandBrief.terrain.island.radii).toHaveLength(128);
   await page.locator('[data-object-id="ocean:0"]').click();
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
   await expect(page.locator('[data-project-name]')).toHaveText(saved.name, { timeout: 90_000 });
@@ -229,6 +260,22 @@ for (const size of ["small", "medium"] as const) test(`World Builder island ${si
   await expect(page.getByTestId("editor-status")).toContainText("Saved", { timeout: 60_000 });
   saved = JSON.parse(await readFile(smokePublicPath(path), "utf8"));
   expect(saved.oceanWaters).toEqual([sea]);
+  expect(JSON.parse(await readFile(smokePublicPath(islandBriefPath), "utf8"))).toEqual(islandBrief);
+  // New peninsulas fill more of the map than the old oval. Show their full
+  // footprint in the evidence views rather than retaining a village close-up.
+  const extent = islandBrief.area.east - islandBrief.area.west;
+  const overview = new PerspectiveCamera();
+  overview.position.set(extent * .6, extent * 1.4, extent * .8); overview.lookAt(0, 0, 0);
+  if (size === "medium") {
+    // Only the disposable evidence level: its whole-island pose is beyond the
+    // default camera far clip. Keep the production generator's settings intact.
+    saved.worldSettings = { ...saved.worldSettings, viewDistance: 6000 };
+    await writeFile(smokePublicPath(path), JSON.stringify(saved, null, 2));
+  }
+  await page.evaluate(({ key, pose }) => localStorage.setItem(key, JSON.stringify(pose)), {
+    key: `forge.editor.cameraPose.${encodeURIComponent(path)}`,
+    pose: { position: overview.position.toArray(), quaternion: overview.quaternion.toArray(), up: [0, 1, 0] },
+  });
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator('[data-object-id="ocean:0"]').click();
   await expect(page.locator('[data-ocean-result="ready"]')).toBeVisible({ timeout: 90_000 });
@@ -243,6 +290,16 @@ for (const size of ["small", "medium"] as const) test(`World Builder island ${si
   await runtime.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await runtime.screenshot({ path: info.outputPath("island-runtime.png") });
   await runtime.close();
+  await stageShallowShoreCamera(page, path);
+  await page.screenshot({ path: info.outputPath("island-shallow-editor.png") });
+  const [shallowPlay] = await Promise.all([context.waitForEvent("page"), page.getByTestId("editor-play").click()]);
+  errors.push(observeBrowserErrors(shallowPlay, true));
+  await shallowPlay.waitForLoadState("domcontentloaded");
+  await expect(shallowPlay.locator("#game-canvas")).toBeVisible({ timeout: 90_000 });
+  await expect(shallowPlay.locator(".forge-loading")).toBeHidden({ timeout: 90_000 });
+  await shallowPlay.waitForTimeout(3000);
+  await shallowPlay.screenshot({ path: info.outputPath("island-shallow-runtime.png") });
+  await shallowPlay.close();
   expect(errors.flatMap(read => read())).toEqual([]);
 });
 
@@ -310,6 +367,9 @@ for (const size of ["small", "medium"] as const) test(`World Builder coast ${siz
   expect(JSON.parse(await readFile(smokePublicPath(briefPath), "utf8"))).toEqual(generatedBrief);
   await page.screenshot({ path: info.outputPath("coast-editor.png") });
   await capturePlay("coast-runtime.png");
+  await stageShallowShoreCamera(page, path);
+  await page.screenshot({ path: info.outputPath("coast-shallow-editor.png") });
+  await capturePlay("coast-shallow-runtime.png");
   // Stage a repeatable mouth camera; the user flow still uses real Create/Save/Reload/Play controls.
   const def = JSON.parse(await readFile(smokePublicPath(saved.landscapes[0].dataRef), "utf8"));
   const river = def.splines.find((spline: { id: string }) => spline.id === ocean.inlets[0]);
@@ -367,4 +427,37 @@ test("World Builder preview: rapid seed changes never leave an old ready coast p
   expect((await canvasPrint(page)).hash).toBe(first.hash);
   await expect(page.getByTestId("random-world-create")).toBeInViewport({ ratio: 1 });
   await page.screenshot({ path: info.outputPath("coast-controls.png") });
+});
+
+test("World Builder island A3: six seed previews, Roll Dice and deterministic return on Small/Medium", async ({ page }, info) => {
+  test.setTimeout(180_000);
+  const readErrors = observeBrowserErrors(page, true);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?editor");
+  await expect(page.getByTestId("forge-editor")).toBeVisible({ timeout: 60_000 });
+  await openWorldBuilder(page);
+  const panel = page.getByTestId("random-world-panel");
+  let id = await nextPreview(page, 0);
+  await panel.locator('[data-choice="landform"] button[data-value="island"]').click();
+  for (const size of ["small", "medium"] as const) {
+    await panel.locator(`[data-choice="size"] button[data-value="${size}"]`).click();
+    const hashes = new Set<number>();
+    for (const seed of [4, 11, 12, 29, 48213, 0xffffffff]) {
+      await panel.locator('[data-seed]').fill(String(seed)); await panel.locator('[data-seed]').press("Tab");
+      id = await nextPreview(page, id);
+      const picture = await canvasPrint(page); hashes.add(picture.hash);
+      expect(picture.colours).toBeGreaterThan(20);
+      await page.getByTestId("random-world-preview").screenshot({ path: info.outputPath(`${size}-seed-${seed}.png`) });
+    }
+    expect(hashes.size).toBe(6);
+    await page.screenshot({ path: info.outputPath(`${size}-island-controls.png`) });
+    await panel.locator('[data-seed]').fill("11"); await panel.locator('[data-seed]').press("Tab"); id = await nextPreview(page, id);
+    const first = await canvasPrint(page);
+    await panel.locator('[data-roll]').click(); id = await nextPreview(page, id);
+    await expect(panel.locator('[data-seed]')).not.toHaveValue("11");
+    expect((await canvasPrint(page)).hash).not.toBe(first.hash);
+    await panel.locator('[data-seed]').fill("11"); await panel.locator('[data-seed]').press("Tab"); id = await nextPreview(page, id);
+    expect((await canvasPrint(page)).hash).toBe(first.hash);
+  }
+  expect(readErrors()).toEqual([]);
 });

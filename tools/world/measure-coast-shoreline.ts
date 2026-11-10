@@ -24,6 +24,7 @@ for (const size of ["small", "medium"] as const) for (const seaSide of SEA_SIDES
   // The no-water/no-settlement legacy recipe exactly reproduces the pre-A1 baseline.
   if (legacy) {
     brief.terrain.coast!.center = [0, 0]; delete brief.terrain.coast!.beachWidth;
+    delete brief.ocean!.shoreProfile;
   }
   const source = legacy ? createBriefTerrain(brief) : terrain;
   const shoreOcean = source.ocean!;

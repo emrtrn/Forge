@@ -1,7 +1,9 @@
 # World Builder — A1 Coast alan dağılımı ve kuru kumsal
 
 10 Kasım 2026. [Kıyı planı A1](../planned/WORLD_BUILDER_SHORELINE_PLAN.md)
-uygulaması. Yalnız yeni Small/Medium Coast üretimi; A2/A3 başlamadı.
+uygulaması. Yalnız yeni Small/Medium Coast üretimi; bu kayıt A2 öncesidir.
+Sonraki [A2 sığ kıyı teslimi](WORLD_BUILDER_SHORE_A2.md) ve
+[A3 biçim teslimi](WORLD_BUILDER_ISLAND_A3.md) ayrı raporlanır.
 
 ## Ölçüm tanımı
 

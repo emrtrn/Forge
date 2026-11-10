@@ -1,7 +1,8 @@
 # World Builder — Coast alan dağılımı, sığ kıyı ve ada biçimi
 
-9 Kasım 2026; A1 güncellemesi 10 Kasım 2026. Kullanıcıyla netleştirilen plan.
-**Durum: A1 uygulandı; teknik ve browser doğrulamaları geçti. A2/A3/A4 bekliyor.** Small/Medium Island ve Coast tesliminin devamıdır;
+9 Kasım 2026; A1/A2/A3 güncellemesi 10 Kasım 2026. Kullanıcıyla netleştirilen plan.
+**Durum: A1/A2/A3 uygulandı. A3 engine/browser geçti; birleşik kapının proje-root
+kapanış sınırı raporda. A4 bekliyor.** Small/Medium Island ve Coast tesliminin devamıdır;
 Large desteği veya Ocean'ın tam performans kabulü değildir.
 
 Dayanak: [Ocean ana planı](OCEAN_DEVELOPMENT_PLAN.md),
@@ -93,7 +94,20 @@ kumsalı büyütmek %70 iç araziyi tekrar daraltmaz.
 **A1 dışında:** sığ su taban eğrisini değiştirmek, Island biçimini/kumsalını
 değiştirmek, yeni dalga veya köpük sistemi. Bunlar sonraki dilimlerdir.
 
-### A2 — Island/Coast sığ kıyı profili (bekliyor)
+### A2 — Island/Coast sığ kıyı profili (uygulandı)
+
+[Ölçüm ve kabul raporu](../reports/WORLD_BUILDER_SHORE_A2.md).
+Yeni Island/Coast üretiminde su altı profili, kuru rampadan bağımsız olarak
+35 m / 2 m sığlık ve 150 m / 40 m derin taban noktalarıyla kurulur. İki eğri
+parçası kıyıda, sığ bandın sonunda ve derin tabanda sürekli eğimle birleşir.
+30 kaynak senaryosunda kıyı çizgisi ve örneklenen kuru yükseklik farkı sıfır;
+Coast iç kara oranı %69,994–70,032 olarak korunur. Dört native çiftte 35 m
+açıkta yaklaşık 2 m derinlik doğrulandı. Small Island'ın bazı normal kesitleri
+150 m'de native domain dışındadır; mevcut offshore devamıyla 36,54–40 m,
+180 m'de 39,67–40 m ölçülür. Bu sınır raporda ayrıca tutulur.
+Mevcut renderer kullanıldı; GPU probe ve yakın editör/Play görüntüleriyle
+sakinleşme doğrulandı. Yeni kırılan dalga/köpük sistemi eklenmedi. Eski brief'ler
+`shoreProfile` yoksa üstel eğrisini korur; kullanıcı sahnesi dönüştürülmez.
 
 - Kuru kıyı eğiminden bağımsız, sığ bant ve ardından yumuşak derinleşme kur.
   Ani basamak, su deliği veya dalga altında açılan kuru taban oluşmasın.
@@ -103,7 +117,20 @@ değiştirmek, yeni dalga veya köpük sistemi. Bunlar sonraki dilimlerdir.
   sakinleşmeyi doğrula. Yetersiz kalırsa bulguyu raporla; kıyıya vuran dalga
   sistemini bu işin içine genişletme.
 
-### A3 — Island ana biçim ve seed çeşitliliği (bekliyor)
+### A3 — Island ana biçim ve seed çeşitliliği (uygulandı)
+
+[Uygulama, aynı-seed ölçümler ve yan yana görseller](../reports/WORLD_BUILDER_ISLAND_A3.md).
+Yeni adalar, seed'den ana yön/asimetri ve büyük koy/burun/yarımadalarla üretilen
+128 örnekli açık bir kıyı biçimi saklar. Alan, eski adanın analitik alanına
+kalibre edilir. Small/Medium × altı seed kaynak matrisinde yaklaşık %43,153 kara
+korundu; dört native karşılaştırmada 8 m alan örneklemesinin farkı en fazla
+0,0855 yüzde puan. En yakın kıyı uzantıları Small'da 32–41 m, Medium'da 62–80 m
+kenar payı bırakır. 40 m kıyı payı çıkarılan çekirdek 12 örnekte tek bağlı
+parçadır. Gerçek yerleşim/yol/foliage, iç Lake/Ocean ayrımı ve S/R/Play
+doğrulandı; eski `radius` kayıtları değişmez. A2 profili ve Coast yolu korunur.
+2610 tam engine kontrolü ve browser senaryoları geçti. Birleşik `build:verify`
+ilgili olmayan `project-roots` dosyasının kontroller sonrası kapanmamasıyla
+kesildi; henüz çalışmamış kalan kapılar ayrıca başarılı tamamlandı.
 
 - Önce mevcut aynı-seed kara alanlarını ölç ve karşılaştırma baseline'ı kaydet.
 - Seed'den ana biçim, yön/asimetri, büyük koy/burun/yarımada ve daha küçük
@@ -134,5 +161,5 @@ Her dilim kendi kontrolleriyle teslim edilir; bu son aşama birleşik sonucu kap
   `public/project.3dgame.json`, manifest, `Levels/S1*` ve diğer eşzamanlı kullanıcı
   verilerine dokunulmaz; güncel Git durumuyla sahiplik yeniden kontrol edilir.
   `docs/planned/FORGE_WEBGPU_EDITION_MASTER_PLAN.md` kapsam dışıdır.
-- Commit/push yapılmaz. İlk plan kaydı yalnız dokümandı; A1 kod, ölçüm ve
+- Commit/push yapılmaz. İlk plan kaydı yalnız dokümandı; A1/A2/A3 kod, ölçüm ve
   doğrulama sonuçları bağlantılı uygulama raporunda ayrıca kaydedilir.

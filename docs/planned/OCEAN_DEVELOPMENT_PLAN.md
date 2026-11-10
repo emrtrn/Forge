@@ -368,9 +368,17 @@ ve replacement tepe kabulü dördüncü adımda açıktır; Large desteği açı
 matrisinde iç kara %69,994–70,032; ortalama kuru kumsal 60,32–60,82 m,
 aynı senaryonun eski genişliğinin 2,548–2,555 katıdır. A1: Coast'ta yaklaşık %70 iç arazi, %30 kuru kumsal
 ve deniz; görünen kuru kumsal mevcut genişliğinin 2–3 katı (başlangıç 2,5 kat).
-Oran ve kumsal birlikte uygulanır. Sonraki A2, Island/Coast sığ taban profili;
-A3, toplam kara oranını koruyan, seed'e göre daha çeşitli koy/burun/yarımadalarla
-alanın farklı bölümlerine yayılan Island biçimleridir. A4 birleşik doğrulamadır.
+Oran ve kumsal birlikte uygulanır. **A2 de uygulandı:** yeni Island/Coast
+üretiminde 35 m / 2 m sığlık, ardından 150 m / 40 m derin taban;
+[A2 ölçüm ve doğrulama raporu](../reports/WORLD_BUILDER_SHORE_A2.md).
+Small Island'ın native domain dışı kesitleri mevcut offshore devamını kullanır;
+bu sınır ve gerçek derinlikler rapordadır. Kuru arazi/kıyı korunur; eski brief'ler
+yeni profile taşınmaz. **A3 de uygulandı:** yaklaşık %43,153 kara alanını
+koruyan, açık kıyı örnekleriyle saklanan seed ana biçimleri, büyük koy/burun ve
+yarımadalar; [aynı-seed ölçüm ve kabul raporu](../reports/WORLD_BUILDER_ISLAND_A3.md).
+Small/Medium altı seed ve dört native alan karşılaştırması, Roll Dice ve gerçek
+Save/Reload/Play doğrulandı. 2610 engine kontrolü geçti; birleşik kapının
+ilgili olmayan project-root kapanış sınırı rapordadır. A4 birleşik doğrulama bekler.
 Kıyıya vurup kırılan dalgalar ayrı sonraki iştir; Large ve Ada'da nehir dahil değildir.
 
 ## 5. Önerilen modül yerleşimi

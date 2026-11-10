@@ -15,10 +15,11 @@
  * builder's: this module only lays out where things go.
  */
 import { DEFAULT_RELIEF_CLEAR, type BriefModel, type BriefRelief, type CoverDensityLevel } from "./worldBrief";
-import { islandOcean, oceanLandDistance, type SeaSide } from "./island";
+import { DEFAULT_OCEAN_SHORE_PROFILE, islandOcean, oceanLandDistance, type SeaSide } from "./island";
 import type { RoadClass } from "./vocabulary";
 import { randomWater } from "./randomWater";
 import { OCEAN_LIMITS } from "../scene/oceanBudget";
+import { generateIslandRadii } from "./islandShape";
 
 /** Tile resolution per size; every size has 8 × 8 tiles 2 m apart (1, 2, 4 km). */
 export const WORLD_SIZES = { small: 64, medium: 128, large: 256 } as const;
@@ -142,9 +143,10 @@ export function randomWorldBrief(options: RandomWorldOptions): RandomWorld {
   const next = random(options.seed);
   const extent = worldExtent(options.size);
   const half = extent / 2;
-  const island = options.landform === "island" ? { center: [0, 0] as Point, radius: round(extent * .37), shoreWidth: 60, landHeight: 12 } : undefined;
+  const island = options.landform === "island" ? { center: [0, 0] as Point, radius: round(extent * .37), shoreWidth: 60, landHeight: 12,
+    radii: generateIslandRadii(round(extent * .37), extent, options.seed) } : undefined;
   const coastal = options.landform === "coast" ? { center: [0, 0] as Point, seaSide: options.seaSide ?? "west", shoreWidth: 60, landHeight: 12, beachWidth: 62.5 } : undefined;
-  const ocean = island || coastal ? { id: "ocean", surfaceElevation: 0, offshoreDepth: 40 } : undefined;
+  const ocean = island || coastal ? { id: "ocean", surfaceElevation: 0, offshoreDepth: 40, shoreProfile: { ...DEFAULT_OCEAN_SHORE_PROFILE } } : undefined;
   if (coastal) {
     const reference = islandOcean({ terrain: { coast: coastal }, ocean: ocean!, frame: { east: 0, north: 0, elevation: 0 }, seed: options.seed })!;
     const axis = coastal.seaSide === "west" ? [1, 0] : coastal.seaSide === "east" ? [-1, 0] : coastal.seaSide === "north" ? [0, 1] : [0, -1];

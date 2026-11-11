@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   camera.updateMatrixWorld();
   const view = createTerrainView(terrain, camera.position);
   scene.add(view.mesh);
-  const env = setupEnvironment(level, scene, renderer, camera);
+  const env = setupEnvironment(level, scene, renderer, camera, { fog: params.get("nofog") !== "1", csm: params.get("nocsm") !== "1" });
 
   const frustum = new THREE.Frustum();
   const projScreen = new THREE.Matrix4();

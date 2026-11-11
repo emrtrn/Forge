@@ -31,7 +31,7 @@ export interface LevelEnvironment {
   describe: Record<string, unknown>;
 }
 
-export function setupEnvironment(level: Record<string, unknown>, scene: THREE.Scene, renderer: THREE.WebGPURenderer, camera: THREE.PerspectiveCamera): LevelEnvironment {
+export function setupEnvironment(level: Record<string, unknown>, scene: THREE.Scene, renderer: THREE.WebGPURenderer, camera: THREE.PerspectiveCamera, options: { fog?: boolean; csm?: boolean } = {}): LevelEnvironment {
   const lights = (level.lights as LevelLight[] | undefined) ?? [];
   const sunLight = lights.find((l) => l.type === "directional");
   const settings = (level.worldSettings as Record<string, unknown> | undefined) ?? {};
@@ -57,7 +57,7 @@ export function setupEnvironment(level: Record<string, unknown>, scene: THREE.Sc
   sun.shadow.normalBias = 0.02;
   scene.add(sun, sun.target);
 
-  const cascaded = sunLight?.cascadedShadows === true;
+  const cascaded = sunLight?.cascadedShadows === true && options.csm !== false;
   const distance = sunCascadeDistance(HIGH.shadowDistanceScale);
   if (cascaded && sun.castShadow) {
     const csm = new CSMShadowNode(sun, {
@@ -71,7 +71,7 @@ export function setupEnvironment(level: Record<string, unknown>, scene: THREE.Sc
         breaks.push(1);
       },
     });
-    csm.camera = camera;
+    // CSMShadowNode takes the rendering camera in its own setup(); assigning it here skips _init().
     sun.shadow.shadowNode = csm;
   } else {
     const half = FOLLOW_SHADOW_HALF_EXTENT * HIGH.shadowDistanceScale;
@@ -97,7 +97,7 @@ export function setupEnvironment(level: Record<string, unknown>, scene: THREE.Sc
     scene.background = new THREE.Color(settingsColor("backgroundColor", "#a9c9df"));
     renderer.toneMapping = THREE.NoToneMapping;
   }
-  if (fog && (fog.mode ?? "exp") === "exp" && typeof fog.density === "number") {
+  if (options.fog !== false && fog && (fog.mode ?? "exp") === "exp" && typeof fog.density === "number") {
     scene.fog = new THREE.FogExp2(fog.color ?? "#ffffff", fog.density);
   }
 

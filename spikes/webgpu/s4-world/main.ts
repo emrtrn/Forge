@@ -4,7 +4,9 @@
 // (shared/content.ts), drawn in one of the S4 structures (shared/contentRender.ts),
 // through the S3 pipeline. Witness adds CPU: the whole rAF callback (main
 // thread) and the render submission (`renderer.render` / `pipeline.render`).
-// URL: level=<project path>, mode=forge|per-placement, config=<post-process>:
+// URL: level=<project path>, mode=forge|per-placement|instanced|batched|gpu-cull
+// (cullRule=<rule id>, default meadow-grass; noCull=<rule id> draws that rule
+// with no culling at all, the G7 reference), config=<post-process>:
 //   forge-high (default): Forge WebGL's authored set on `high` - GTAO if the
 //     level enables ao, bloom if it enables bloom, SMAA if antialias is smaa;
 //     nothing authored -> direct render (G1);
@@ -47,7 +49,10 @@ async function main(): Promise<void> {
 
   const content = await loadLevelContent(ts.assets, ts.levelPath, ts.level, terrain, camera.position);
   const built = performance.now();
-  const contentView = buildContentView(renderer, ts.level, content, mode);
+  const contentView = buildContentView(renderer, ts.level, content, mode, {
+    cullRule: params.get("cullRule") ?? (mode === "gpu-cull" ? "meadow-grass" : undefined),
+    noCullRule: params.get("noCull") ?? undefined,
+  });
   scene.add(contentView.root);
   const buildMs = performance.now() - built;
 
@@ -113,6 +118,7 @@ async function main(): Promise<void> {
     pipeline: pipeline ? pipeline.describe : { effects: [], direct: true },
     environment: env.describe, canvas: [canvas.width, canvas.height], drawTally,
     skipDebug: params.get("drawTally") === "1" ? contentView.skipDebug(camera) : undefined,
+    gpuVisible: await contentView.gpuVisible(camera),
   });
 }
 

@@ -130,7 +130,13 @@ real GPU, waits for `window.__spikeReport` and writes `<page>.json` + `.png` to
   `?mode=instanced` merges an asset's meshes per material and draws all its
   placements in one InstancedMesh per material, foliage cells gathered into
   256 m blocks per rule; `?mode=batched` also packs static assets that share a
-  material signature (and never detail-cull) into one BatchedMesh.
+  material signature (and never detail-cull) into one BatchedMesh;
+  `?mode=gpu-cull` is "instanced" with one rule (`cullRule`, default
+  `meadow-grass`) drawn GPU-driven (`shared/gpuCull.ts`: compute frustum +
+  distance cull into a storage buffer, atomic count into the indirect args, one
+  drawIndexedIndirect); `?noCull=<rule>` draws a rule as one InstancedMesh with
+  no culling (the G7 reference). The report carries the GPU's visible count next
+  to the same test on the CPU.
   `?config=forge-high` (default) is the level's authored post-process (GTAO /
   bloom / SMAA); the S3 rows are accepted too. The witness adds `cpuMainMs`
   (rAF callback) and `cpuRenderMs` (render submission). `?drawTally=1` reports

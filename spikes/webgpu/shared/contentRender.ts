@@ -33,11 +33,19 @@ import * as TSLTyped from "three/tsl";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { detailBatchCulled, detailCullDistance, detailCullWindow } from "@engine/world/detailCulling";
 import { resolveLevelWind } from "@engine/environment/wind";
+import { createGpuCulledFoliage, type GpuCulledFoliage } from "./gpuCull";
 import { HIGH_CONTENT, type FoliageCellBatch, type FoliageFarBatch, type LevelContent, type PlacementBatch } from "./content";
 
 const TSL = TSLTyped as any;
 
-export type ContentMode = "forge" | "per-placement" | "instanced" | "batched";
+export type ContentMode = "forge" | "per-placement" | "instanced" | "batched" | "gpu-cull";
+
+export interface ContentOptions {
+  /** Mode "gpu-cull": the rule drawn by compute culling + drawIndexedIndirect. */
+  cullRule?: string | undefined;
+  /** Modes "instanced" / "gpu-cull": the rule drawn as one InstancedMesh without any culling (G7 reference). */
+  noCullRule?: string | undefined;
+}
 
 /** An asset's model meshes merged per material (and attribute set), node transforms baked. */
 interface MergedPart { material: THREE.Material; geometry: THREE.BufferGeometry; signature: string }
@@ -79,12 +87,14 @@ export interface ContentView {
   root: THREE.Group;
   /** Per frame, before rendering. */
   update(camera: THREE.Camera, timeSeconds: number): void;
+  /** Mode "gpu-cull": the last cull's visible instance count (diagnostics). */
+  gpuVisible(camera: THREE.Camera): Promise<{ gpu: number; cpu: number } | null>;
   /** Static detail whole-skip decisions for the camera (diagnostics). */
   skipDebug(camera: THREE.Camera): Record<string, unknown>[];
   describe: Record<string, unknown>;
 }
 
-interface Shared {
+export interface Shared {
   /** View camera position: fade and sway measure from it, also in shadow passes. */
   viewOrigin: any;
   windTime: any;
@@ -120,7 +130,7 @@ function withOrigin(source: THREE.BufferGeometry, origin: THREE.InstancedBufferA
   return geometry;
 }
 
-interface Variant {
+export interface Variant {
   /** Dither fade window uniform (start, end), or null. */
   fade: any | null;
   /** Divide the fade distance by the instance scale (static detail culling). */
@@ -130,35 +140,17 @@ interface Variant {
   sway: { amplitude: number; height: number; frequency: number } | null;
 }
 
-class MaterialCache {
-  private readonly cache = new Map<string, THREE.Material>();
-  count = 0;
-  constructor(private readonly renderer: THREE.WebGPURenderer, private readonly shared: Shared) {}
-
-  get(source: THREE.Material, key: string, variant: Variant): THREE.Material {
-    if (!variant.fade && !variant.sway) return source;
-    const id = `${source.uuid}|${key}`;
-    let material = this.cache.get(id);
-    if (!material) {
-      material = this.build(source, variant);
-      this.cache.set(id, material);
-      this.count += 1;
-    }
-    return material;
-  }
-
-  private build(source: THREE.Material, variant: Variant): THREE.Material {
-    const library = (this.renderer as unknown as { library: { fromMaterial(m: THREE.Material): THREE.Material } }).library;
-    const material = library.fromMaterial(source) as any;
-    const { vec2, vec3, float, int, distance, clamp, max, smoothstep, sin, dot, select, attribute, positionLocal, modelWorldMatrix, modelScale, screenCoordinate, array } = TSL;
-    const s = this.shared;
-    const origin = variant.perInstance
-      ? attribute("forgeOrigin", "vec4")
-      : TSL.vec4(modelWorldMatrix.mul(TSL.vec4(0, 0, 0, 1)).xyz, max(max(modelScale.x, modelScale.y), modelScale.z));
+/**
+ * Wind sway (windSway.ts, world space) and the 4x4 dither fade on a node material,
+ * from the instance origin (xyz) and scale (w). `basePosition` is the world
+ * position the sway offsets (positionLocal for identity-placed batches).
+ */
+export function applyInstanceEffects(material: any, origin: any, variant: Variant, s: Shared, basePosition: any): void {
+  const { vec2, vec3, float, int, distance, clamp, max, smoothstep, sin, dot, select, screenCoordinate, array } = TSL;
     if (variant.sway) {
       const { amplitude, height, frequency } = variant.sway;
       // windSway.ts, in world space: the batches sit at identity, so positionLocal is world after instancing.
-      const p = positionLocal;
+      const p = basePosition;
       const o = origin.xyz;
       const swayFade = select(s.swayFadeRange.y.greaterThan(0), float(1).sub(smoothstep(s.swayFadeRange.x, s.swayFadeRange.y, distance(o, s.viewOrigin))), float(1));
       const mask0 = clamp(p.y.sub(o.y).div(max(origin.w.mul(height), 1e-4)), 0, 1);
@@ -181,6 +173,34 @@ class MaterialCache {
       material.maskNode = keep;
       material.maskShadowNode = keep;
     }
+}
+
+class MaterialCache {
+  private readonly cache = new Map<string, THREE.Material>();
+  count = 0;
+  constructor(private readonly renderer: THREE.WebGPURenderer, private readonly shared: Shared) {}
+
+  get(source: THREE.Material, key: string, variant: Variant): THREE.Material {
+    if (!variant.fade && !variant.sway) return source;
+    const id = `${source.uuid}|${key}`;
+    let material = this.cache.get(id);
+    if (!material) {
+      material = this.build(source, variant);
+      this.cache.set(id, material);
+      this.count += 1;
+    }
+    return material;
+  }
+
+  private build(source: THREE.Material, variant: Variant): THREE.Material {
+    const library = (this.renderer as unknown as { library: { fromMaterial(m: THREE.Material): THREE.Material } }).library;
+    const material = library.fromMaterial(source) as any;
+    const { max, attribute, positionLocal, modelWorldMatrix, modelScale } = TSL;
+    const s = this.shared;
+    const origin = variant.perInstance
+      ? attribute("forgeOrigin", "vec4")
+      : TSL.vec4(modelWorldMatrix.mul(TSL.vec4(0, 0, 0, 1)).xyz, max(max(modelScale.x, modelScale.y), modelScale.z));
+    applyInstanceEffects(material, origin, variant, s, positionLocal);
     return material as THREE.Material;
   }
 }
@@ -200,7 +220,7 @@ function materialsOf(mesh: THREE.Mesh): THREE.Material[] {
 
 const WHITE = new THREE.Color(1, 1, 1);
 
-export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<string, unknown>, content: LevelContent, mode: ContentMode): ContentView {
+export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<string, unknown>, content: LevelContent, mode: ContentMode, options: ContentOptions = {}): ContentView {
   const { uniform } = TSL;
   const shared: Shared = {
     viewOrigin: uniform(new THREE.Vector3()),
@@ -367,7 +387,8 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
       batchedMeshes += 1;
     }
   };
-  if (mode === "instanced" || mode === "batched") buildMergedStatics();
+  const merged = mode === "instanced" || mode === "batched" || mode === "gpu-cull";
+  if (merged) buildMergedStatics();
   else for (const batch of content.batches) buildStaticBatch(batch);
 
   // Foliage ring cells.
@@ -423,9 +444,55 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
   };
   // Modes "instanced" / "batched": ring cells gathered into 256 m blocks per rule x merged part.
   const FOLIAGE_BLOCK = 256;
+  let gpu: GpuCulledFoliage | null = null;
+  let noCull: Record<string, unknown> | null = null;
+  const gatherRule = (ruleId: string) => {
+    const cells = content.foliage.filter((c) => c.ruleId === ruleId);
+    const count = cells.reduce((n, c) => n + c.count, 0);
+    const matrices = new Float32Array(count * 16);
+    let at = 0;
+    for (const c of cells) { matrices.set(c.matrices, at); at += c.matrices.length; }
+    return { cells, count, matrices };
+  };
   const buildMergedFoliage = () => {
+    const special = new Set([mode === "gpu-cull" ? options.cullRule : undefined, options.noCullRule].filter((r): r is string => !!r));
+    if (mode === "gpu-cull" && options.cullRule) {
+      const { cells, count, matrices } = gatherRule(options.cullRule);
+      const type = cells[0]?.type;
+      const model = type ? content.models.get(type.meshAssetId) : undefined;
+      const parts = model ? mergedParts(model) : [];
+      if (!type || parts.length !== 1) throw new Error(`gpu-cull: rule ${options.cullRule} needs one merged part, has ${parts.length}`);
+      const end = type.cullEnd * scale;
+      const start = type.cullStart > 0 && type.cullStart < type.cullEnd ? type.cullStart * scale : end;
+      const window = type.cullEnd > 0 ? uniform(new THREE.Vector2(start, end)) : null;
+      const sway = type.sway && type.sway.amplitude > 0 ? type.sway : null;
+      gpu = createGpuCulledFoliage(renderer, {
+        geometry: parts[0]!.geometry, material: parts[0]!.material, matrices, count,
+        radius: content.radii.get(type.meshAssetId) ?? 1, cullEnd: type.cullEnd > 0 ? end : 0,
+        decorate: (material, origin) => applyInstanceEffects(material, origin, { fade: window, scaled: false, perInstance: true, sway }, shared, material.positionNode),
+      });
+      const group = new THREE.Group();
+      group.name = `foliage-gpu-${options.cullRule}`;
+      group.add(gpu.object);
+      root.add(group);
+      meshCount += 1;
+      instanceCount += count;
+    }
+    if (options.noCullRule) {
+      const { cells, count, matrices } = gatherRule(options.noCullRule);
+      if (cells.length) {
+        const before = root.children.length;
+        buildFoliageCell({ ruleId: cells[0]!.ruleId, type: cells[0]!.type, key: `${options.noCullRule}:all`, count, matrices }, true);
+        // No culling at all: no frustum test, no distance cull of the batch.
+        const group = root.children[before]!;
+        group.traverse((o) => { o.frustumCulled = false; });
+        foliageChunks.pop();
+        noCull = { rule: options.noCullRule, instances: count };
+      }
+    }
     const blocks = new Map<string, FoliageCellBatch[]>();
     for (const cell of content.foliage) {
+      if (special.has(cell.ruleId)) continue;
       const x = Math.floor(cell.matrices[12]! / FOLIAGE_BLOCK);
       const z = Math.floor(cell.matrices[14]! / FOLIAGE_BLOCK);
       const key = `${cell.ruleId}:${x}_${z}`;
@@ -440,7 +507,7 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
       buildFoliageCell({ ruleId: first.ruleId, type: first.type, key, count, matrices }, true);
     }
   };
-  if (mode === "instanced" || mode === "batched") buildMergedFoliage();
+  if (merged) buildMergedFoliage();
   else for (const cell of content.foliage) buildFoliageCell(cell);
 
   let farMeshes = 0;
@@ -497,6 +564,7 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
     root,
     update(camera, timeSeconds) {
       const p = camera.position;
+      gpu?.cull(camera as THREE.PerspectiveCamera);
       shared.viewOrigin.value.copy(p);
       shared.windTime.value = timeSeconds;
       for (const chunk of foliageChunks) {
@@ -507,6 +575,11 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
         entry.mesh.visible = !detailBatchCulled(entry.sphere.center.distanceTo(p), entry.sphere.radius, entry.cullDistance, entry.maxScale, scale);
       }
     },
+    gpuVisible: async (camera) => {
+      if (!gpu) return null;
+      const g = gpu as GpuCulledFoliage;
+      return { gpu: await g.readVisible(), cpu: g.expectedVisible(camera as THREE.PerspectiveCamera) };
+    },
     skipDebug(camera) {
       return wholeSkip.map((e) => ({ name: e.name, d: Math.round(e.sphere.center.distanceTo(camera.position)), r: Math.round(e.sphere.radius), cull: Math.round(e.cullDistance), maxScale: e.maxScale,
         culled: detailBatchCulled(e.sphere.center.distanceTo(camera.position), e.sphere.radius, e.cullDistance, e.maxScale, scale) }));
@@ -515,6 +588,7 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
       mode, meshes: meshCount, instances: instanceCount, patchedMaterials: materials.count,
       detailAssets: detailWindows.size, wholeSkipBatches: wholeSkip.length, foliageChunks: foliageChunks.length,
       farMeshes, farInstances, batchedMeshes,
+      gpuCull: gpu ? (gpu as GpuCulledFoliage).describe : null, noCull,
       staticInstancedMeshes: root.children.filter((c) => c.name.startsWith("static-")).reduce((n, g) => n + g.children.length, 0),
       staticInstanceSum: root.children.filter((c) => c.name.startsWith("static-")).reduce((n, g) => n + g.children.reduce((k, m) => k + ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count : 1), 0), 0),
       wind: { strength: wind.strength, gust: wind.gust, direction: wind.direction },

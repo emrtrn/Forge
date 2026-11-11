@@ -31,7 +31,7 @@ export interface LevelEnvironment {
   describe: Record<string, unknown>;
 }
 
-export function setupEnvironment(level: Record<string, unknown>, scene: THREE.Scene, renderer: THREE.WebGPURenderer, camera: THREE.PerspectiveCamera, options: { fog?: boolean; csm?: boolean } = {}): LevelEnvironment {
+export function setupEnvironment(level: Record<string, unknown>, scene: THREE.Scene, renderer: THREE.WebGPURenderer, _camera: THREE.PerspectiveCamera, options: { fog?: boolean; csm?: boolean } = {}): LevelEnvironment {
   const lights = (level.lights as LevelLight[] | undefined) ?? [];
   const sunLight = lights.find((l) => l.type === "directional");
   const settings = (level.worldSettings as Record<string, unknown> | undefined) ?? {};

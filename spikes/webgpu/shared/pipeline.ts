@@ -15,6 +15,7 @@ import { ssr } from "three/examples/jsm/tsl/display/SSRNode.js";
 import { ssgi } from "three/examples/jsm/tsl/display/SSGINode.js";
 import { traa } from "three/examples/jsm/tsl/display/TRAANode.js";
 import { bloom } from "three/examples/jsm/tsl/display/BloomNode.js";
+import { smaa } from "three/examples/jsm/tsl/display/SMAANode.js";
 
 // TSL's typings reject some valid uses; untyped like shared/terrain.ts.
 const TSL = TSLTyped as any;
@@ -32,6 +33,8 @@ export interface PipelineFlags {
   mrtFull?: boolean;
   /** GTAO / SSR / SSGI at half resolution (`resolutionScale` 0.5). */
   half?: boolean;
+  /** SMAA after bloom (Forge WebGL's authored `antialias: "smaa"`; S4 G1 equivalence). */
+  smaa?: boolean;
   /** SSR alone at half resolution (Balanced: SSR allowed at half resolution, user decision 2026-11-11). */
   ssrHalf?: boolean;
 }
@@ -143,6 +146,13 @@ export function createPipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scen
     disposables.push(bloomNode);
     node = node.add(bloomNode);
     effects.push("bloom");
+  }
+
+  if (flags.smaa) {
+    const smaaNode = smaa(node);
+    disposables.push(smaaNode);
+    node = smaaNode;
+    effects.push("smaa");
   }
 
   const pipeline = new THREE.RenderPipeline(renderer);

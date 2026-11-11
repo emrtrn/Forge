@@ -116,5 +116,20 @@ real GPU, waits for `window.__spikeReport` and writes `<page>.json` + `.png` to
   and draw calls per row, with `direct` again at the end as a drift check. The
   page raises `maxColorAttachmentBytesPerSample` to 64 (five MRT targets are
   40 bytes / sample, the WebGPU default is 32).
+- `s4-world`: the S2 scene plus the level's real content through the S3
+  pipeline. `shared/content.ts` loads it the way Forge's runtime does: level
+  instances (an asset listed with no placements still gets its empty batch),
+  World Partition cells in load range, GLBs with their `*.materials.json` slots
+  and `*.material.json` materials, Landscape foliage rings grown by Forge's
+  three-free rules over the tiles Forge keeps resident (2 x tile size), far
+  billboard blocks over the global map. `shared/contentRender.ts` draws it:
+  `?mode=forge` is Forge WebGL's structure (asset x mesh InstancedMeshes per
+  scope, cell batches frustum culled, small-asset dither fade and whole-batch
+  skip, foliage per ring cell x mesh with cull, fade and wind sway, billboard
+  blocks); `?mode=per-placement` draws every placement as its own Mesh.
+  `?config=forge-high` (default) is the level's authored post-process (GTAO /
+  bloom / SMAA); the S3 rows are accepted too. The witness adds `cpuMainMs`
+  (rAF callback) and `cpuRenderMs` (render submission). `?drawTally=1` reports
+  one frame's real draws by camera and content kind.
 
 Results go into the Forge-WebGPU plan, not here.

@@ -112,11 +112,14 @@ const round2 = (v: number): number => Math.round(v * 100) / 100;
  * queries (resolved every frame), draw calls and triangles of the last frame.
  * Published on the canvas every 500 ms as `data-forge-perf`.
  */
-export function startMeasuredLoop(spike: SpikeRenderer, frame: (dtMs: number) => void, quality = "spike"): () => void {
+export function startMeasuredLoop(spike: SpikeRenderer, frame: (dtMs: number) => number | void, quality = "spike"): () => void {
   const { renderer, proof } = spike;
   const canvas = renderer.domElement;
   const intervals: number[] = [];
   const gpu: number[] = [];
+  // CPU: the whole rAF callback (main thread) and, when the frame returns it, the render submission.
+  const cpuMain: number[] = [];
+  const cpuRender: number[] = [];
   let last: number | null = null;
   let nextPublish = 0;
   let pendingGpu = false;
@@ -132,7 +135,14 @@ export function startMeasuredLoop(spike: SpikeRenderer, frame: (dtMs: number) =>
       if (intervals.length > 600) intervals.shift();
     }
     last = now;
-    frame(dt);
+    const t0 = performance.now();
+    const renderMs = frame(dt);
+    cpuMain.push(performance.now() - t0);
+    if (cpuMain.length > 120) cpuMain.shift();
+    if (typeof renderMs === "number") {
+      cpuRender.push(renderMs);
+      if (cpuRender.length > 120) cpuRender.shift();
+    }
     drawCalls = renderer.info.render.drawCalls;
     triangles = renderer.info.render.triangles;
     if (proof.timestampQuery && !pendingGpu) {
@@ -153,6 +163,8 @@ export function startMeasuredLoop(spike: SpikeRenderer, frame: (dtMs: number) =>
         avgFrameMs: round2(avg),
         p95FrameMs: round2(quantile(intervals, 0.95)),
         gpuMs: gpu.length ? round2(gpu.reduce((a, b) => a + b, 0) / gpu.length) : null,
+        cpuMainMs: cpuMain.length ? round2(quantile(cpuMain, 0.5)) : null,
+        cpuRenderMs: cpuRender.length ? round2(quantile(cpuRender, 0.5)) : null,
         drawCalls,
         triangles,
         geometries: renderer.info.memory.geometries,

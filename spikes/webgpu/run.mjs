@@ -112,6 +112,7 @@ try {
           frameMeanMs: Number((15_000 / Math.max(1, sample.intervals.length)).toFixed(2)),
           frameP95Ms: q(sample.intervals, 0.95), gpuMedianMs: q(pick("gpuMs"), 0.5), gpuP95Ms: q(pick("gpuMs"), 0.95),
           drawCalls: q(pick("drawCalls"), 0.5), triangles: q(pick("triangles"), 0.5),
+          cpuMainMs: q(pick("cpuMainMs"), 0.5), cpuRenderMs: q(pick("cpuRenderMs"), 0.5),
           backend: last.backend ?? null, isWebGPUBackend: last.isWebGPUBackend ?? null,
         };
         if (run.isWebGPUBackend !== true) exitCode = 1;

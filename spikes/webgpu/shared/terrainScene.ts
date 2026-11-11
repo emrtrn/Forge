@@ -3,7 +3,7 @@
 // and fog, camera from the harness pose. Throwaway spike code.
 import * as THREE from "three/webgpu";
 import { applyCameraPose, consumeCameraPose, createSpikeRenderer, type BackendProof, type SpikeRenderer, type SpikeRendererOptions } from "./spike";
-import { createTerrainView, loadTerrain, openProjectAssets, type LoadedTerrain, type TerrainView } from "./terrain";
+import { createTerrainView, loadTerrain, openProjectAssets, type LoadedTerrain, type ProjectAssets, type TerrainView } from "./terrain";
 import { CAMERA_FAR, CAMERA_FOV, setupEnvironment, type LevelEnvironment } from "./environment";
 
 export interface TerrainSelection { nodes: number; slotNodes: number; standIns: number }
@@ -15,6 +15,9 @@ export interface TerrainScene {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
   level: Record<string, unknown>;
+  /** Project path of the level file. */
+  levelPath: string;
+  assets: ProjectAssets;
   terrain: LoadedTerrain;
   view: TerrainView;
   env: LevelEnvironment;
@@ -73,7 +76,7 @@ export async function buildTerrainScene(canvas: HTMLCanvasElement, params: URLSe
   env.update(camera);
 
   return {
-    spike, renderer, proof, scene, camera, level, terrain, view, env, startedAt: started, loadedMs,
+    spike, renderer, proof, scene, camera, level, levelPath, assets, terrain, view, env, startedAt: started, loadedMs,
     selection: () => selection,
     reselect,
     update() {

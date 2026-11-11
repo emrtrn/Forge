@@ -78,8 +78,8 @@ C:\Users\emret\Desktop\
 Her fork bu durumu miras alır; ne kadar temizse her oyun o kadar temiz başlar.
 
 1. Demo model temizliği + starter content standardını Forge `main`'de bitir ve commit'le.
-2. Kenney araçlarını commit'le (`tools/asset-library-index.mjs`, katalog, TSV,
-   `.gitignore` güncellemesi).
+2. ~~Kenney araçlarını commit'le~~ — 2026-11-11'den beri asset dizinleri ve
+   üreticileri GameDesign deposunda (`tools/`, `docs/kenney/`).
 3. Forge `main`'i GitHub'a push'la: `git push origin main`.
 
 ## Aşama 1 — Yeni oyun reposu oluştur
@@ -111,9 +111,8 @@ git push -u origin main
    (2026-07-04 kararı).
 2. **Asset'leri çek** — Kenney arşivinden (`C:/Users/emret/Documents/Kenney`)
    yalnızca gerekenleri `public/assets/...`'a kopyala. Her asset için kaynak paket
-   + CC0 lisans notunu `docs/ASSET_CREDITS.md`'ye ekle. Arama: Forge'daki
-   `tools/kenney/kenney-assets.tsv` veya GameDesign'daki
-   `docs/kenney/KENNEY_CATALOG.md`.
+   + CC0 lisans notunu `docs/ASSET_CREDITS.md`'ye ekle. Arama: GameDesign'daki
+   `docs/kenney/kenney-assets.tsv` ve `docs/kenney/KENNEY_CATALOG.md`.
 3. **Oyun kurallarını yaz** → `src/game/` (GameMode, GameState, kurallar, HUD
    binding). `engine/`, `editor/`, `builder/`'a oyun-özel kod ekleme.
 4. **Layout data** → `public/layouts/`, `public/project.3dgame.json`. Dev editör
@@ -197,8 +196,9 @@ git push origin main
 | `docs/ASSET_CREDITS.md` | **Oyun reposu** | O oyunda kullanılan asset'ler + lisans |
 
 Forge oyun tasarım fikri/GDD üretmez; yalnız platform (engine/editor/builder)
-geliştirir. `tools/kenney/kenney-assets.tsv` + `kenney-index.json` asset arama
-aracıdır (`tools/asset-library-index.mjs`), tasarım dokümanı değildir.
+geliştirir. Kenney / Quaternius asset dizinleri ve üreticileri 2026-11-11'de
+GameDesign deposuna taşındı (`docs/kenney/kenney-assets.tsv`,
+`docs/quaternius/quaternius-assets.tsv`, `tools/*-library-index.mjs`).
 
 ## Neden ayrı repo (dal değil)?
 

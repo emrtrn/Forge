@@ -11,9 +11,9 @@ import * as THREE from "three/webgpu";
 import RAPIER from "@dimforge/rapier3d-compat";
 import { terrainTileHeightfieldShape } from "@engine/physics/terrainCollider";
 import { parseTileKey, terrainTileWorldBounds } from "@engine/terrain/terrainTypes";
-import { applyCameraPose, consumeCameraPose, createSpikeRenderer, report, startMeasuredLoop } from "../shared/spike";
-import { createTerrainView, HEIGHT_READBACK_OFFSET, loadTerrain, openProjectAssets, type LoadedTerrain, type TerrainView } from "../shared/terrain";
-import { CAMERA_FAR, CAMERA_FOV, setupEnvironment } from "../shared/environment";
+import { report, startMeasuredLoop } from "../shared/spike";
+import { HEIGHT_READBACK_OFFSET, type LoadedTerrain, type TerrainView } from "../shared/terrain";
+import { buildTerrainScene } from "../shared/terrainScene";
 
 const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
@@ -21,48 +21,10 @@ const loading = document.querySelector<HTMLElement>(".forge-loading")!;
 
 async function main(): Promise<void> {
   const levelPath = params.get("level");
-  if (!levelPath) throw new Error("?level=<project path> is required");
-  const pose = consumeCameraPose();
-  const spike = await createSpikeRenderer(canvas);
-  const { renderer, proof } = spike;
-  if (!proof.isWebGPUBackend) throw new Error("not a WebGPU backend");
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(window.innerWidth, window.innerHeight, false);
-  renderer.shadowMap.enabled = true;
-
-  const started = performance.now();
-  const assets = await openProjectAssets();
-  const { level, terrain } = await loadTerrain(assets, levelPath);
-  const loadedMs = performance.now() - started;
-
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(CAMERA_FOV, window.innerWidth / window.innerHeight, 0.1, CAMERA_FAR);
-  if (pose) applyCameraPose(camera, pose);
-  else {
-    const def = terrain.def;
-    camera.position.set(def.origin[0] + 200, 150, def.origin[2] + 200);
-    camera.lookAt(def.origin[0] + 600, 0, def.origin[2] + 600);
-  }
-  camera.updateMatrixWorld();
-  const view = createTerrainView(terrain, camera.position);
-  scene.add(view.mesh);
-  const env = setupEnvironment(level, scene, renderer, camera, { fog: params.get("nofog") !== "1", csm: params.get("nocsm") !== "1" });
-
-  const frustum = new THREE.Frustum();
-  const projScreen = new THREE.Matrix4();
-  const lastSelect = new THREE.Vector3(Infinity, 0, 0);
-  let selection = { nodes: 0, slotNodes: 0, standIns: 0 };
-  const reselect = () => {
-    camera.updateMatrixWorld();
-    projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
-    frustum.setFromProjectionMatrix(projScreen, THREE.WebGPUCoordinateSystem);
-    selection = view.select(camera.position, frustum);
-    lastSelect.copy(camera.position);
-  };
-  reselect();
-  env.update(camera);
+  const ts = await buildTerrainScene(canvas, params);
+  const { spike, renderer, proof, scene, camera, terrain, view, env, loadedMs, reselect } = ts;
   await renderer.compileAsync(scene, camera);
-  const readyMs = performance.now() - started;
+  const readyMs = performance.now() - ts.startedAt;
 
   if (params.get("g8") === "1") {
     const g8 = await measureG8(renderer, terrain, view, camera, Number(params.get("region") ?? 256));
@@ -75,8 +37,7 @@ async function main(): Promise<void> {
 
   // Forge reselects only when the camera moved; the harness camera is static.
   startMeasuredLoop(spike, () => {
-    if (camera.position.distanceToSquared(lastSelect) > 0.01) reselect();
-    env.update(camera);
+    ts.update();
     renderer.render(scene, camera);
   }, "s2-high");
   await new Promise((r) => setTimeout(r, 500));
@@ -84,7 +45,7 @@ async function main(): Promise<void> {
   report("complete", {
     mode: "view", level: levelPath, loadMs: Math.round(loadedMs), readyMs: Math.round(readyMs),
     terrain: { tiles: terrain.tiles.size, tileQuads: terrain.def.tileQuads, spacing: terrain.def.spacing, resident: view.residentKeys.length, layers: terrain.layers.length },
-    selection, environment: env.describe, canvas: [canvas.width, canvas.height],
+    selection: ts.selection(), environment: env.describe, canvas: [canvas.width, canvas.height],
   });
 }
 

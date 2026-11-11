@@ -4,6 +4,11 @@ Forge is a reusable Three.js game platform template with a built-in editor
 mode at `?editor`. Keep engine/editor code generic; project-specific game rules
 belong in game runtime code or data.
 
+**Maintenance mode (since 2026-11-11):** this repo is Forge WebGL and takes bug
+fixes only; new engine work happens in Forge WebGPU
+(`C:\Users\emret\Desktop\Forge-WebGPU`). The tag `forge-webgl-final` marks the
+commit Forge WebGPU ports from. See `CLAUDE.md` "Maintenance mode".
+
 ## Validation
 
 - After editing TypeScript, run `npx tsc --noEmit`; the Vite dev server does not

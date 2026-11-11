@@ -8,6 +8,11 @@ runtime-only bundle in production. Forge is not tied to any single game: each
 concrete game supplies its own data, assets and rules. Existing games use a
 fork with upstream updates; Ridgebound uses the shared Forge source directly.
 
+> **Maintenance mode (since 2026-11-11).** This repo is Forge WebGL: it receives
+> bug fixes only. New engine work happens in Forge WebGPU
+> (`emrtrn/Forge-WebGPU`). The tag `forge-webgl-final` marks the commit Forge
+> WebGPU ports from. Existing games keep pulling fixes from upstream.
+
 ## Proven vertical
 
 The end-to-end path that is wired and tested today is a **single-player,

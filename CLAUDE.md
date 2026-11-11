@@ -12,6 +12,21 @@ forks own it there).
 The architecture is Unreal-inspired (viewport gizmos, outliner, details,
 content browser, undo/redo, snapping, Play mode) but web-first and lightweight.
 
+## Maintenance mode (since 2026-11-11)
+
+This repo is **Forge WebGL** and is in maintenance mode. New engine work happens
+in **Forge WebGPU** (`C:\Users\emret\Desktop\Forge-WebGPU`, GitHub
+`emrtrn/Forge-WebGPU`); its plan is `docs/planned/FORGE_WEBGPU_REBUILD_PLAN.md`
+there. The tag `forge-webgl-final` marks the commit Forge WebGPU ports from.
+
+- Only bug fixes land here, in every layer (`engine/render-three` included).
+  No new features, no WebGL visual-acceptance polish.
+- A fix to a module that Forge WebGPU has ported (its `docs/PORT_LOG.md` §2)
+  is also recorded there in §3 "port pending": date, Forge commit, module, what.
+- Model 1 game forks keep pulling fixes from upstream. Ridgebound stays on this
+  repo until it migrates (Forge WebGPU phase 10).
+- The repo keeps its name `Forge`; it is not a GitHub archive.
+
 Forge grew out of the earlier `3DGameDev` project (legacy name). The stable
 reference repo is `C:\Users\emret\Desktop\3DGameDev`; do not edit it from this
 workspace. Do not rewrite from scratch — preserve working behavior and move

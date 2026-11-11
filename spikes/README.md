@@ -80,6 +80,8 @@ reads both. Reference scenes and the harness live outside the repos in
 node spikes/webgpu/run.mjs s1-boot [--uncapped] [--dpr 1.3333] [--query "k=v"]
 node spikes/webgpu/run.mjs s2-terrain --scene island --pose P2 [--uncapped --measure --reps 3]
 node spikes/webgpu/run.mjs s2-terrain --scene derekavak --pose P1 --query "g8=1&region=512"
+node spikes/webgpu/run.mjs s3-pipeline --scene island --pose P2 --uncapped --query "sweep=1"
+node spikes/webgpu/run.mjs s3-pipeline --scene island --pose P2 --uncapped --measure --query "config=balanced"
 ```
 
 `--scene` / `--pose` take the level, project root and camera pose from
@@ -104,5 +106,14 @@ real GPU, waits for `window.__spikeReport` and writes `<page>.json` + `.png` to
   three-free terrain modules. `?g8=1` draws the terrain top-down into a float
   target with the main camera's LOD and compares every pixel with a ray onto
   Forge's Rapier heightfield (`terrainTileHeightfieldShape`), by distance band.
+- `s3-pipeline`: the S2 scene (`shared/terrainScene.ts`) through one
+  `RenderPipeline` (`shared/pipeline.ts`): MRT scene pass -> GTAO / SSGI / SSR
+  composite -> TRAA -> bloom -> output transform; MRT targets only for the
+  effects that read them. `?config=<name>` picks a row of `CONFIGS` (default
+  `balanced`) for the baseline window; `?sweep=1` runs every row in one page
+  load (`warm` / `window` seconds, default 4 / 10) and reports frame, p95, GPU
+  and draw calls per row, with `direct` again at the end as a drift check. The
+  page raises `maxColorAttachmentBytesPerSample` to 64 (five MRT targets are
+  40 bytes / sample, the WebGPU default is 32).
 
 Results go into the Forge-WebGPU plan, not here.

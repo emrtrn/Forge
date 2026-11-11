@@ -35,11 +35,26 @@ export interface CameraPose {
 const LIMIT_KEYS = [
   "maxTextureDimension2D", "maxTextureArrayLayers", "maxBindGroups", "maxStorageBufferBindingSize",
   "maxBufferSize", "maxComputeWorkgroupStorageSize", "maxComputeInvocationsPerWorkgroup", "maxColorAttachments",
+  "maxColorAttachmentBytesPerSample",
 ];
 
+export interface SpikeRendererOptions {
+  forceWebGL?: boolean;
+  /** Device limits to raise, each capped at what the adapter offers (three requests the WebGPU defaults otherwise). */
+  raiseLimits?: Record<string, number>;
+}
+
 /** Creates and initialises a WebGPURenderer; never falls back silently. */
-export async function createSpikeRenderer(canvas: HTMLCanvasElement, options: { forceWebGL?: boolean } = {}): Promise<SpikeRenderer> {
-  const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, trackTimestamp: true, forceWebGL: options.forceWebGL === true });
+export async function createSpikeRenderer(canvas: HTMLCanvasElement, options: SpikeRendererOptions = {}): Promise<SpikeRenderer> {
+  let requiredLimits: Record<string, number> | undefined;
+  if (options.raiseLimits && !options.forceWebGL) {
+    // WebGPU DOM types are not in the spikes' lib set.
+    const gpu = (navigator as unknown as { gpu?: { requestAdapter(): Promise<{ limits: unknown } | null> } }).gpu;
+    const adapter = await gpu?.requestAdapter();
+    const offered = adapter?.limits as Record<string, number> | undefined;
+    if (offered) requiredLimits = Object.fromEntries(Object.entries(options.raiseLimits).map(([k, v]) => [k, Math.min(v, Number(offered[k]))]));
+  }
+  const renderer = new THREE.WebGPURenderer({ canvas, antialias: false, trackTimestamp: true, forceWebGL: options.forceWebGL === true, ...(requiredLimits ? { requiredLimits } : {}) } as ConstructorParameters<typeof THREE.WebGPURenderer>[0]);
   await renderer.init();
   // The backend's device / adapter are not in the public typings.
   const backend = renderer.backend as unknown as {

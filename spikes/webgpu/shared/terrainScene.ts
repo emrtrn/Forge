@@ -2,7 +2,7 @@
 // the reference level's World Terrain (TSL CDLOD), Forge `high` sun shadow, sky
 // and fog, camera from the harness pose. Throwaway spike code.
 import * as THREE from "three/webgpu";
-import { applyCameraPose, consumeCameraPose, createSpikeRenderer, type BackendProof, type SpikeRenderer } from "./spike";
+import { applyCameraPose, consumeCameraPose, createSpikeRenderer, type BackendProof, type SpikeRenderer, type SpikeRendererOptions } from "./spike";
 import { createTerrainView, loadTerrain, openProjectAssets, type LoadedTerrain, type TerrainView } from "./terrain";
 import { CAMERA_FAR, CAMERA_FOV, setupEnvironment, type LevelEnvironment } from "./environment";
 
@@ -29,11 +29,11 @@ export interface TerrainScene {
   update(): void;
 }
 
-export async function buildTerrainScene(canvas: HTMLCanvasElement, params: URLSearchParams): Promise<TerrainScene> {
+export async function buildTerrainScene(canvas: HTMLCanvasElement, params: URLSearchParams, rendererOptions: SpikeRendererOptions = {}): Promise<TerrainScene> {
   const levelPath = params.get("level");
   if (!levelPath) throw new Error("?level=<project path> is required");
   const pose = consumeCameraPose();
-  const spike = await createSpikeRenderer(canvas);
+  const spike = await createSpikeRenderer(canvas, rendererOptions);
   const { renderer, proof } = spike;
   if (!proof.isWebGPUBackend) throw new Error("not a WebGPU backend");
   renderer.setPixelRatio(window.devicePixelRatio);

@@ -64,3 +64,29 @@ node spikes/far-view/run.mjs 5274 ultra,high,medium <outDir> [variants]
 Env knobs: `ROUNDS` (default 4), `LOAD` (untimed extra renders that keep GPU
 clocks up, default 2), `VIEW=dx,dz` (screenshot pose 30 m above the camera).
 Results: OPEN_WORLD_PLAN Faz 7, "7c2 kaskadlı gölge — S7 ölçümü ve öneri".
+
+## webgpu (Forge-WebGPU rebuild plan, Faz 1: GO / NO-GO spike)
+
+Validates WebGPU for the Forge WebGPU rebuild (separate repo `Forge-WebGPU`,
+`docs/planned/FORGE_WEBGPU_REBUILD_PLAN.md`, Faz 1, criteria G1-G9). Pages import
+three only through `three/webgpu` / `three/tsl` (+ examples/jsm addons) and Forge
+only from its three-free layers (`@engine/terrain`, `@engine/scene`,
+`@engine/physics`); nothing here touches `engine/render-three`. Each page writes
+the same `data-forge-perf` witness as the runtime, so the Phase 0 baseline harness
+reads both. Reference scenes and the harness live outside the repos in
+`C:\Users\emret\Desktop\Games\ForgeReference` (its README).
+
+```
+node spikes/webgpu/run.mjs s1-boot [--uncapped] [--dpr 1.3333] [--query "k=v"]
+```
+
+The runner starts its own Vite on 127.0.0.1:4174 (never 5173 / 5273) with
+`FORGE_PROJECT_ROOT` set to the reference project, opens headed Chrome on the
+real GPU, waits for `window.__spikeReport` and writes `<page>.json` + `.png` to
+`ForgeReference/baseline/spike/`. A run whose backend is not WebGPU fails.
+
+- `s1-boot`: renderer init, backend proof (`isWebGPUBackend`, core vs
+  compatibility), adapter, features, limits, timestamp queries, uncapped frame
+  rate. `?forceWebGL=1` runs the WebGL2 backend for comparison only.
+
+Results go into the Forge-WebGPU plan, not here.

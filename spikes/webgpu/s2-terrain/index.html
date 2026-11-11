@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>WebGPU spike S2 terrain</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #111; color: #ddd; font: 12px monospace; overflow: hidden; }
+      #game-canvas { display: block; width: 100vw; height: 100vh; }
+      #out { position: absolute; left: 8px; top: 8px; margin: 0; max-width: 46vw; max-height: 95vh; overflow: auto; white-space: pre-wrap; background: rgba(0, 0, 0, 0.55); padding: 6px; }
+      #out.quiet { display: none; }
+      .forge-loading { position: absolute; inset: 0; display: grid; place-items: center; background: #0b0f17; color: #fff; font: 16px sans-serif; }
+      .forge-loading[hidden] { display: none; }
+    </style>
+  </head>
+  <body>
+    <canvas id="game-canvas"></canvas>
+    <div class="forge-loading">Loading</div>
+    <pre id="out" class="quiet">running…</pre>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

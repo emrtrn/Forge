@@ -78,7 +78,16 @@ reads both. Reference scenes and the harness live outside the repos in
 
 ```
 node spikes/webgpu/run.mjs s1-boot [--uncapped] [--dpr 1.3333] [--query "k=v"]
+node spikes/webgpu/run.mjs s2-terrain --scene island --pose P2 [--uncapped --measure --reps 3]
+node spikes/webgpu/run.mjs s2-terrain --scene derekavak --pose P1 --query "g8=1&region=512"
 ```
+
+`--scene` / `--pose` take the level, project root and camera pose from
+`ForgeReference/baseline/poses.json` (the pose goes in through
+`localStorage["forge.play.cameraPose"]`, as with Forge's Play). `--measure` runs
+the baseline window per repetition: fresh context, 10 s warm-up, 15 s of frames;
+frame = window / frame count, p95 of rAF intervals, GPU = median of the
+timestamp-query witness.
 
 The runner starts its own Vite on 127.0.0.1:4174 (never 5173 / 5273) with
 `FORGE_PROJECT_ROOT` set to the reference project, opens headed Chrome on the
@@ -88,5 +97,12 @@ real GPU, waits for `window.__spikeReport` and writes `<page>.json` + `.png` to
 - `s1-boot`: renderer init, backend proof (`isWebGPUBackend`, core vs
   compatibility), adapter, features, limits, timestamp queries, uncapped frame
   rate. `?forceWebGL=1` runs the WebGL2 backend for comparison only.
+- `s2-terrain`: the reference level's World Terrain through a TSL port of
+  Forge's CDLOD material (tile slots / global map, collider diagonal, morph,
+  skirts, 8-layer splat, far tiling), Forge's `high` sun shadow (3 cascades for a
+  `cascadedShadows` sun, else the follow map), SkyMesh + fog. Data via Forge's
+  three-free terrain modules. `?g8=1` draws the terrain top-down into a float
+  target with the main camera's LOD and compares every pixel with a ray onto
+  Forge's Rapier heightfield (`terrainTileHeightfieldShape`), by distance band.
 
 Results go into the Forge-WebGPU plan, not here.

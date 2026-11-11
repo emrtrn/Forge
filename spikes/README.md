@@ -126,7 +126,11 @@ real GPU, waits for `window.__spikeReport` and writes `<page>.json` + `.png` to
   `?mode=forge` is Forge WebGL's structure (asset x mesh InstancedMeshes per
   scope, cell batches frustum culled, small-asset dither fade and whole-batch
   skip, foliage per ring cell x mesh with cull, fade and wind sway, billboard
-  blocks); `?mode=per-placement` draws every placement as its own Mesh.
+  blocks); `?mode=per-placement` draws every placement as its own Mesh;
+  `?mode=instanced` merges an asset's meshes per material and draws all its
+  placements in one InstancedMesh per material, foliage cells gathered into
+  256 m blocks per rule; `?mode=batched` also packs static assets that share a
+  material signature (and never detail-cull) into one BatchedMesh.
   `?config=forge-high` (default) is the level's authored post-process (GTAO /
   bloom / SMAA); the S3 rows are accepted too. The witness adds `cpuMainMs`
   (rAF callback) and `cpuRenderMs` (render submission). `?drawTally=1` reports

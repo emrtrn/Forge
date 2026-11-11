@@ -19,15 +19,61 @@
 //    texture (same draw structure and cost class, approximate look).
 // Mode "per-placement" (S4 (a')): every placement x model mesh its own Mesh;
 // foliage as in "forge". Worst case of the renderer's per-object cost.
+// Mode "instanced" (S4 (b)): an asset's model meshes merged per material (node
+// transforms baked), one InstancedMesh per asset x material holding every
+// placement of every scope, frustum culled on its bounds (detail fade per
+// instance, whole-skip on the merged bounds); foliage ring cells gathered into
+// 256 m blocks per rule x material, the block hidden past cullEnd x scale.
+// Mode "batched": as "instanced", but static assets that never detail-cull and
+// share a material signature go into one BatchedMesh per signature (one draw,
+// three's per-instance CPU frustum culling); detail-culled assets keep their
+// InstancedMesh (BatchedMesh has no per-instance attribute for the fade).
 import * as THREE from "three/webgpu";
 import * as TSLTyped from "three/tsl";
+import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import { detailBatchCulled, detailCullDistance, detailCullWindow } from "@engine/world/detailCulling";
 import { resolveLevelWind } from "@engine/environment/wind";
 import { HIGH_CONTENT, type FoliageCellBatch, type FoliageFarBatch, type LevelContent, type PlacementBatch } from "./content";
 
 const TSL = TSLTyped as any;
 
-export type ContentMode = "forge" | "per-placement";
+export type ContentMode = "forge" | "per-placement" | "instanced" | "batched";
+
+/** An asset's model meshes merged per material (and attribute set), node transforms baked. */
+interface MergedPart { material: THREE.Material; geometry: THREE.BufferGeometry; signature: string }
+
+function attributeSignature(geometry: THREE.BufferGeometry): string {
+  return `${geometry.index ? "i" : "n"}|${Object.entries(geometry.attributes).map(([n, a]) => `${n}:${a.itemSize}`).sort().join(",")}`;
+}
+
+function materialSignature(m: THREE.Material): string {
+  const x = m as THREE.MeshStandardMaterial;
+  const id = (t: THREE.Texture | null | undefined) => (t ? t.uuid : "-");
+  return [m.type, x.color?.getHexString(), id(x.map), id(x.alphaMap), id(x.normalMap), id(x.roughnessMap), id(x.metalnessMap), id(x.aoMap),
+    x.roughness, x.metalness, m.transparent, m.alphaTest, m.side, m.vertexColors, m.depthWrite].join("|");
+}
+
+const mergedCache = new WeakMap<THREE.Group, MergedPart[]>();
+function mergedParts(model: THREE.Group): MergedPart[] {
+  let parts = mergedCache.get(model);
+  if (parts) return parts;
+  const groups = new Map<string, { material: THREE.Material; geometries: THREE.BufferGeometry[] }>();
+  model.traverse((node) => {
+    const mesh = node as THREE.Mesh;
+    if (!mesh.isMesh || !mesh.geometry?.getAttribute("position") || Array.isArray(mesh.material)) return;
+    const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+    const key = `${mesh.material.uuid}|${attributeSignature(geometry)}`;
+    const entry = groups.get(key) ?? { material: mesh.material, geometries: [] };
+    entry.geometries.push(geometry);
+    groups.set(key, entry);
+  });
+  parts = [...groups.values()].map(({ material, geometries }) => {
+    const geometry = geometries.length === 1 ? geometries[0]! : mergeGeometries(geometries, false)!;
+    return { material, geometry, signature: `${materialSignature(material)}#${attributeSignature(geometry)}` };
+  });
+  mergedCache.set(model, parts);
+  return parts;
+}
 
 export interface ContentView {
   root: THREE.Group;
@@ -254,12 +300,80 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
     instanceCount += batch.items.length;
     root.add(group);
   };
-  for (const batch of content.batches) buildStaticBatch(batch);
+  // Modes "instanced" / "batched": every placement of an asset in one InstancedMesh per merged part.
+  let batchedMeshes = 0;
+  const buildMergedStatics = () => {
+    const byAsset = new Map<string, PlacementBatch["items"]>();
+    for (const batch of content.batches) byAsset.set(batch.assetId, [...(byAsset.get(batch.assetId) ?? []), ...batch.items]);
+    const batched = new Map<string, { material: THREE.Material; entries: { geometry: THREE.BufferGeometry; items: PlacementBatch["items"] }[] }>();
+    const m = new THREE.Matrix4();
+    for (const [assetId, items] of byAsset) {
+      const model = content.models.get(assetId);
+      if (!model || items.length === 0) continue;
+      const detail = detailOf(assetId);
+      const group = new THREE.Group();
+      group.name = `static-${assetId}-merged`;
+      for (const part of mergedParts(model)) {
+        if (mode === "batched" && !detail && items.every((it) => it.color === undefined)) {
+          const entry = batched.get(part.signature) ?? { material: part.material, entries: [] };
+          entry.entries.push({ geometry: part.geometry, items });
+          batched.set(part.signature, entry);
+          continue;
+        }
+        const count = items.length;
+        const origin = originAttribute(count, (i, out) => out.copy(items[i]!.matrix), (i) => items[i]!.scale);
+        const material = materials.get(part.material, `st:${assetId}`, { fade: detail?.uniform ?? null, scaled: true, perInstance: true, sway: null });
+        const instanced = new THREE.InstancedMesh(withOrigin(part.geometry, origin), material, count);
+        for (let i = 0; i < count; i += 1) instanced.setMatrixAt(i, m.copy(items[i]!.matrix));
+        if (items.some((it) => it.color !== undefined)) {
+          const base = (part.material as { color?: THREE.Color }).color ?? WHITE;
+          const c = new THREE.Color();
+          for (let i = 0; i < count; i += 1) {
+            const color = items[i]!.color;
+            if (color === undefined) { instanced.setColorAt(i, WHITE); continue; }
+            c.set(color);
+            c.setRGB(base.r > 0 ? c.r / base.r : c.r, base.g > 0 ? c.g / base.g : c.g, base.b > 0 ? c.b / base.b : c.b);
+            instanced.setColorAt(i, c);
+          }
+        }
+        instanced.castShadow = content.staticCastShadow;
+        instanced.receiveShadow = true;
+        instanced.computeBoundingSphere();
+        instanced.frustumCulled = true;
+        group.add(instanced);
+        meshCount += 1;
+        if (detail) wholeSkip.push({ mesh: instanced, sphere: instanced.boundingSphere!.clone(), cullDistance: detail.cullDistance, maxScale: Math.max(...items.map((it) => it.scale)), name: group.name });
+      }
+      instanceCount += items.length;
+      if (group.children.length) root.add(group);
+    }
+    for (const [signature, entry] of batched) {
+      const vertexCount = entry.entries.reduce((n, e) => n + e.geometry.getAttribute("position").count, 0);
+      const indexCount = entry.entries.reduce((n, e) => n + (e.geometry.index?.count ?? 0), 0);
+      const instances = entry.entries.reduce((n, e) => n + e.items.length, 0);
+      const batch = new THREE.BatchedMesh(instances, vertexCount, Math.max(indexCount, 1), entry.material);
+      for (const { geometry, items } of entry.entries) {
+        const geometryId = batch.addGeometry(geometry);
+        for (const item of items) batch.setMatrixAt(batch.addInstance(geometryId), item.matrix);
+      }
+      batch.castShadow = content.staticCastShadow;
+      batch.receiveShadow = true;
+      batch.name = `static-batched-${signature.slice(0, 24)}`;
+      const group = new THREE.Group();
+      group.name = "static-batched";
+      group.add(batch);
+      root.add(group);
+      meshCount += 1;
+      batchedMeshes += 1;
+    }
+  };
+  if (mode === "instanced" || mode === "batched") buildMergedStatics();
+  else for (const batch of content.batches) buildStaticBatch(batch);
 
   // Foliage ring cells.
   const foliageChunks: { group: THREE.Group; center: THREE.Vector3; radius: number; cullEnd: number }[] = [];
   const typeWindows = new Map<string, any>();
-  const buildFoliageCell = (cell: FoliageCellBatch) => {
+  const buildFoliageCell = (cell: FoliageCellBatch, merged = false) => {
     const model = content.models.get(cell.type.meshAssetId);
     if (!model) return;
     const window = cell.type.cullEnd > 0
@@ -276,13 +390,16 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
     group.name = `foliage-${cell.key}`;
     const instanceMatrix = new THREE.Matrix4();
     const meshRadius = content.radii.get(cell.type.meshAssetId) ?? 0;
-    for (const source of renderableMeshes(model)) {
-      const sourceMatrix = source.matrixWorld;
+    const sources: { geometry: THREE.BufferGeometry; materials: THREE.Material[]; matrix: THREE.Matrix4 }[] = merged
+      ? mergedParts(model).map((part) => ({ geometry: part.geometry, materials: [part.material], matrix: new THREE.Matrix4() }))
+      : renderableMeshes(model).map((mesh) => ({ geometry: mesh.geometry, materials: materialsOf(mesh), matrix: mesh.matrixWorld }));
+    for (const source of sources) {
+      const sourceMatrix = source.matrix;
       const origin = originAttribute(cell.count, (i, out) => out.fromArray(cell.matrices, i * 16).multiply(sourceMatrix), (i) => {
         const e = cell.matrices;
         return Math.hypot(e[i * 16 + 4]!, e[i * 16 + 5]!, e[i * 16 + 6]!);
       });
-      const mats = materialsOf(source).map((m) => materials.get(m, `fo:${cell.ruleId}`, { fade: window, scaled: false, perInstance: true, sway }));
+      const mats = source.materials.map((m) => materials.get(m, `fo:${cell.ruleId}`, { fade: window, scaled: false, perInstance: true, sway }));
       const instanced = new THREE.InstancedMesh(withOrigin(source.geometry, origin), mats.length === 1 ? mats[0]! : mats, cell.count);
       for (let i = 0; i < cell.count; i += 1) instanced.setMatrixAt(i, instanceMatrix.fromArray(cell.matrices, i * 16).multiply(sourceMatrix));
       instanced.castShadow = cell.type.castShadow;
@@ -304,7 +421,27 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
     instanceCount += cell.count;
     root.add(group);
   };
-  for (const cell of content.foliage) buildFoliageCell(cell);
+  // Modes "instanced" / "batched": ring cells gathered into 256 m blocks per rule x merged part.
+  const FOLIAGE_BLOCK = 256;
+  const buildMergedFoliage = () => {
+    const blocks = new Map<string, FoliageCellBatch[]>();
+    for (const cell of content.foliage) {
+      const x = Math.floor(cell.matrices[12]! / FOLIAGE_BLOCK);
+      const z = Math.floor(cell.matrices[14]! / FOLIAGE_BLOCK);
+      const key = `${cell.ruleId}:${x}_${z}`;
+      blocks.set(key, [...(blocks.get(key) ?? []), cell]);
+    }
+    for (const [key, cells] of blocks) {
+      const first = cells[0]!;
+      const count = cells.reduce((n, c) => n + c.count, 0);
+      const matrices = new Float32Array(count * 16);
+      let at = 0;
+      for (const c of cells) { matrices.set(c.matrices, at); at += c.matrices.length; }
+      buildFoliageCell({ ruleId: first.ruleId, type: first.type, key, count, matrices }, true);
+    }
+  };
+  if (mode === "instanced" || mode === "batched") buildMergedFoliage();
+  else for (const cell of content.foliage) buildFoliageCell(cell);
 
   let farMeshes = 0;
   let farInstances = 0;
@@ -377,7 +514,7 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
     describe: {
       mode, meshes: meshCount, instances: instanceCount, patchedMaterials: materials.count,
       detailAssets: detailWindows.size, wholeSkipBatches: wholeSkip.length, foliageChunks: foliageChunks.length,
-      farMeshes, farInstances,
+      farMeshes, farInstances, batchedMeshes,
       staticInstancedMeshes: root.children.filter((c) => c.name.startsWith("static-")).reduce((n, g) => n + g.children.length, 0),
       staticInstanceSum: root.children.filter((c) => c.name.startsWith("static-")).reduce((n, g) => n + g.children.reduce((k, m) => k + ((m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count : 1), 0), 0),
       wind: { strength: wind.strength, gust: wind.gust, direction: wind.direction },

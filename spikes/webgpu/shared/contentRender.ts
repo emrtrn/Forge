@@ -43,7 +43,7 @@ export type ContentMode = "forge" | "per-placement" | "instanced" | "batched" | 
 export interface ContentOptions {
   /** Mode "gpu-cull": the rule drawn by compute culling + drawIndexedIndirect. */
   cullRule?: string | undefined;
-  /** Modes "instanced" / "gpu-cull": the rule drawn as one InstancedMesh without any culling (G7 reference). */
+  /** Modes "instanced" / "gpu-cull": the rule drawn as one InstancedMesh without any culling (G7 reference); "*" = every rule (CPU floor diagnostic). */
   noCullRule?: string | undefined;
 }
 
@@ -455,7 +455,8 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
     return { cells, count, matrices };
   };
   const buildMergedFoliage = () => {
-    const special = new Set([mode === "gpu-cull" ? options.cullRule : undefined, options.noCullRule].filter((r): r is string => !!r));
+    const noCullRules = options.noCullRule === "*" ? [...new Set(content.foliage.map((c) => c.ruleId))] : options.noCullRule ? [options.noCullRule] : [];
+    const special = new Set([mode === "gpu-cull" ? options.cullRule : undefined, ...noCullRules].filter((r): r is string => !!r));
     if (mode === "gpu-cull" && options.cullRule) {
       const { cells, count, matrices } = gatherRule(options.cullRule);
       const type = cells[0]?.type;
@@ -478,17 +479,16 @@ export function buildContentView(renderer: THREE.WebGPURenderer, level: Record<s
       meshCount += 1;
       instanceCount += count;
     }
-    if (options.noCullRule) {
-      const { cells, count, matrices } = gatherRule(options.noCullRule);
-      if (cells.length) {
-        const before = root.children.length;
-        buildFoliageCell({ ruleId: cells[0]!.ruleId, type: cells[0]!.type, key: `${options.noCullRule}:all`, count, matrices }, true);
-        // No culling at all: no frustum test, no distance cull of the batch.
-        const group = root.children[before]!;
-        group.traverse((o) => { o.frustumCulled = false; });
-        foliageChunks.pop();
-        noCull = { rule: options.noCullRule, instances: count };
-      }
+    for (const rule of noCullRules) {
+      const { cells, count, matrices } = gatherRule(rule);
+      if (!cells.length) continue;
+      const before = root.children.length;
+      buildFoliageCell({ ruleId: cells[0]!.ruleId, type: cells[0]!.type, key: `${rule}:all`, count, matrices }, true);
+      // No culling at all: no frustum test, no distance cull of the batch.
+      const group = root.children[before]!;
+      group.traverse((o) => { o.frustumCulled = false; });
+      foliageChunks.pop();
+      noCull = { rules: noCullRules, instances: ((noCull?.instances as number | undefined) ?? 0) + count };
     }
     const blocks = new Map<string, FoliageCellBatch[]>();
     for (const cell of content.foliage) {

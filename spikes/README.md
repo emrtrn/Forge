@@ -109,7 +109,8 @@ real GPU, waits for `window.__spikeReport` and writes `<page>.json` + `.png` to
 - `s3-pipeline`: the S2 scene (`shared/terrainScene.ts`) through one
   `RenderPipeline` (`shared/pipeline.ts`): MRT scene pass -> GTAO / SSGI / SSR
   composite -> TRAA -> bloom -> output transform; MRT targets only for the
-  effects that read them. `?config=<name>` picks a row of `CONFIGS` (default
+  effects that read them; bloom only where the level authors it (as Forge's
+  profile gates: allow, never force on). `?config=<name>` picks a row of `CONFIGS` (default
   `balanced`) for the baseline window; `?sweep=1` runs every row in one page
   load (`warm` / `window` seconds, default 4 / 10) and reports frame, p95, GPU
   and draw calls per row, with `direct` again at the end as a drift check. The

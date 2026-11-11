@@ -18,22 +18,25 @@ const params = new URLSearchParams(location.search);
 const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
 const loading = document.querySelector<HTMLElement>(".forge-loading")!;
 
-function levelBloom(level: Record<string, unknown>): BloomSettings {
-  const b = (level.postProcess as { bloom?: { threshold?: number; intensity?: number; radius?: number } } | undefined)?.bloom;
-  return b ? { strength: b.intensity ?? DEFAULT_BLOOM.strength, radius: b.radius ?? DEFAULT_BLOOM.radius, threshold: b.threshold ?? DEFAULT_BLOOM.threshold } : DEFAULT_BLOOM;
+/** Bloom only where the level authors it (Forge: profile gates allow, never force on). */
+function levelBloom(level: Record<string, unknown>): BloomSettings | null {
+  const b = (level.postProcess as { bloom?: { enabled?: boolean; threshold?: number; intensity?: number; radius?: number } } | undefined)?.bloom;
+  if (!b || b.enabled !== true) return null;
+  return { strength: b.intensity ?? DEFAULT_BLOOM.strength, radius: b.radius ?? DEFAULT_BLOOM.radius, threshold: b.threshold ?? DEFAULT_BLOOM.threshold };
 }
 
 /** Renders one configuration; `null` flags = direct render. */
 class Renderer {
   private pipeline: SpikePipeline | null = null;
   name = "";
-  constructor(private ts: TerrainScene, private bloom: BloomSettings) {}
+  constructor(private ts: TerrainScene, private bloom: BloomSettings | null) {}
   use(name: string): Record<string, unknown> {
     if (!(name in CONFIGS)) throw new Error(`unknown config ${name}`);
     this.pipeline?.dispose();
     this.pipeline = null;
-    const flags = CONFIGS[name]!;
-    if (flags) this.pipeline = createPipeline(this.ts.renderer, this.ts.scene, this.ts.camera, flags, this.bloom);
+    const configured = CONFIGS[name]!;
+    const flags = configured && configured.bloom && !this.bloom ? { ...configured, bloom: false } : configured;
+    if (flags) this.pipeline = createPipeline(this.ts.renderer, this.ts.scene, this.ts.camera, flags, this.bloom ?? DEFAULT_BLOOM);
     this.name = name;
     return this.pipeline ? this.pipeline.describe : { effects: [], direct: true };
   }

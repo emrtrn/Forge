@@ -32,6 +32,8 @@ export interface PipelineFlags {
   mrtFull?: boolean;
   /** GTAO / SSR / SSGI at half resolution (`resolutionScale` 0.5). */
   half?: boolean;
+  /** SSR alone at half resolution (Balanced: SSR allowed at half resolution, user decision 2026-11-11). */
+  ssrHalf?: boolean;
 }
 
 export interface BloomSettings { strength: number; radius: number; threshold: number }
@@ -121,7 +123,7 @@ export function createPipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scen
     ssrNode.quality.value = s.quality;
     ssrNode.maxDistance.value = s.maxDistance;
     ssrNode.thickness.value = s.thickness;
-    ssrNode.resolutionScale = s.resolutionScale * scale;
+    ssrNode.resolutionScale = s.resolutionScale * (flags.ssrHalf ? 0.5 : scale);
     ssrNode.blurQuality = s.blurQuality;
     rgb = rgb.add(ssrNode.rgb);
     effects.push("ssr");
@@ -153,7 +155,7 @@ export function createPipeline(renderer: THREE.WebGPURenderer, scene: THREE.Scen
       pipeline.dispose();
       for (const d of disposables) d.dispose();
     },
-    describe: { effects, mrt: Object.keys(outputs), byteTargets, gtao: gtaoMode, resolutionScale: scale, bloom: flags.bloom ? bloomSettings : null },
+    describe: { effects, mrt: Object.keys(outputs), byteTargets, gtao: gtaoMode, resolutionScale: scale, ssrResolutionScale: flags.ssr ? EFFECT_SETTINGS.ssr.resolutionScale * (flags.ssrHalf ? 0.5 : scale) : null, bloom: flags.bloom ? bloomSettings : null },
   };
 }
 
@@ -173,6 +175,7 @@ export const CONFIGS: Record<string, PipelineFlags | null> = {
   bloom: { bloom: true },
   balanced: { traa: true, gtao: "composite", bloom: true },
   "balanced-ssr": { traa: true, gtao: "composite", ssr: true, bloom: true },
+  "balanced-ssr-half": { traa: true, gtao: "composite", ssr: true, ssrHalf: true, bloom: true },
   "balanced-ssgi": { traa: true, ssgi: true, bloom: true },
   cinematic: { traa: true, ssgi: true, ssr: true, bloom: true },
 };

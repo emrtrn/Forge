@@ -136,7 +136,10 @@ real GPU, waits for `window.__spikeReport` and writes `<page>.json` + `.png` to
   distance cull into a storage buffer, atomic count into the indirect args, one
   drawIndexedIndirect); `?noCull=<rule>` draws a rule as one InstancedMesh with
   no culling (the G7 reference). The report carries the GPU's visible count next
-  to the same test on the CPU.
+  to the same test on the CPU. `?planarY=<water level>` adds one planar
+  reflection (TSL `reflector()`) like Forge's lake reflection on `high`: 256 px
+  wide, refreshed at most every 32 ms (`planarRes`, `planarEveryMs`; 0 = every
+  frame), always on (Forge skips one whose water covers < 1 % of the screen).
   `?config=forge-high` (default) is the level's authored post-process (GTAO /
   bloom / SMAA); the S3 rows are accepted too. The witness adds `cpuMainMs`
   (rAF callback) and `cpuRenderMs` (render submission). `?drawTally=1` reports

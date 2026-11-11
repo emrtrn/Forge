@@ -11,6 +11,13 @@
 //     level enables ao, bloom if it enables bloom, SMAA if antialias is smaa;
 //     nothing authored -> direct render (G1);
 //   balanced / balanced-ssr-half / direct: the S3 rows (G2 / G3).
+// planarY=<water level>: one planar reflection (TSL `reflector()`) on a plane at
+//   that height, as Forge's lake reflection on `high` (`medium`: 256 px wide,
+//   refreshed at most every 32 ms; planarRes / planarEveryMs override, 0 = every
+//   frame). Forge skips a reflection whose water covers < 1 % of the screen;
+//   here it always renders (the cost when it is on).
+import * as THREE from "three/webgpu";
+import * as TSLTyped from "three/tsl";
 import { report, startMeasuredLoop } from "../shared/spike";
 import { buildTerrainScene } from "../shared/terrainScene";
 import { CONFIGS, createPipeline, DEFAULT_BLOOM, type BloomSettings, type PipelineFlags, type SpikePipeline } from "../shared/pipeline";
@@ -60,6 +67,39 @@ async function main(): Promise<void> {
   const bloom = authoredBloom(post);
   const flags = resolveFlags(config, post, bloom);
   const pipeline: SpikePipeline | null = flags ? createPipeline(renderer, scene, camera, flags, bloom ?? DEFAULT_BLOOM) : null;
+
+  // Planar reflection (S4 report row).
+  let planar: Record<string, unknown> | null = null;
+  const planarY = params.get("planarY");
+  if (planarY !== null) {
+    const TSL = TSLTyped as any;
+    const width = Number(params.get("planarRes") ?? 256);
+    const everyMs = Number(params.get("planarEveryMs") ?? 32);
+    const reflection = TSL.reflector({ resolutionScale: Math.min(1, width / canvas.width) });
+    reflection.target.rotateX(-Math.PI / 2);
+    reflection.target.position.set(camera.position.x, Number(planarY), camera.position.z);
+    scene.add(reflection.target);
+    const base = reflection.reflector as { updateBefore(frame: unknown): unknown };
+    const update = base.updateBefore.bind(base);
+    let last = -Infinity;
+    let renders = 0;
+    base.updateBefore = (frame: unknown) => {
+      const now = performance.now();
+      if (everyMs > 0 && now - last < everyMs) return undefined;
+      last = now;
+      renders += 1;
+      return update(frame);
+    };
+    const material = new THREE.MeshStandardNodeMaterial({ roughness: 0.05, metalness: 0 }) as any;
+    material.colorNode = TSL.vec3(0.02, 0.05, 0.06).add(reflection.rgb.mul(0.8));
+    const water = new THREE.Mesh(new THREE.PlaneGeometry(4000, 4000), material as THREE.Material);
+    water.rotation.x = -Math.PI / 2;
+    water.position.set(camera.position.x, Number(planarY), camera.position.z);
+    water.receiveShadow = true;
+    water.name = "planar-water";
+    scene.add(water);
+    planar = { y: Number(planarY), widthPx: width, everyMs, resolutionScale: Math.min(1, width / canvas.width), renders: () => renders };
+  }
 
   contentView.update(camera, 0);
   const compileStarted = performance.now();
@@ -119,6 +159,7 @@ async function main(): Promise<void> {
     environment: env.describe, canvas: [canvas.width, canvas.height], drawTally,
     skipDebug: params.get("drawTally") === "1" ? contentView.skipDebug(camera) : undefined,
     gpuVisible: await contentView.gpuVisible(camera),
+    planar: planar ? { ...planar, renders: (planar.renders as () => number)() } : null,
   });
 }
 
